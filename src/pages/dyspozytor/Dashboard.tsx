@@ -25,6 +25,25 @@ const SIDEBAR_ITEMS = [
   { id: 'flota', label: '🔧 Flota' },
 ];
 
+function capacityColor(pct: number) {
+  if (pct <= 40) return 'bg-green-500';
+  if (pct <= 70) return 'bg-yellow-500';
+  if (pct <= 95) return 'bg-orange-500';
+  return 'bg-red-500';
+}
+
+function CapacityBar({ used, total, unit }: { used: number; total: number; unit: string }) {
+  const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
+  return (
+    <div className="flex-1 min-w-0">
+      <div className="h-2 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${capacityColor(pct)}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-[10px] text-muted-foreground mt-0.5">{Math.round(used)} / {Math.round(total)} {unit}</p>
+    </div>
+  );
+}
+
 function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: string }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
@@ -37,6 +56,8 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
       {kursy.map(kurs => {
         const kPrz = przystanki.filter(p => p.kurs_id === kurs.id);
         const done = kPrz.filter(p => p.prz_status === 'dostarczone').length;
+        const usedKg = kPrz.reduce((s, p) => s + p.masa_kg, 0);
+        const usedM3 = kPrz.reduce((s, p) => s + p.objetosc_m3, 0);
         return (
           <Card key={kurs.id}>
             <CardHeader className="pb-2">
@@ -55,8 +76,16 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Kierowca: {kurs.kierowca_nazwa || '—'} · Przystanki: {done}/{kPrz.length}
+                Kierowca: {kurs.kierowca_nazwa || '—'} · Rozładunki: {done}/{kPrz.length}
               </p>
+              {kurs.ladownosc_kg > 0 && (
+                <div className="flex gap-4 mt-2">
+                  <CapacityBar used={usedKg} total={kurs.ladownosc_kg} unit="kg" />
+                  {kurs.objetosc_m3 != null && kurs.objetosc_m3 > 0 && (
+                    <CapacityBar used={usedM3} total={kurs.objetosc_m3} unit="m³" />
+                  )}
+                </div>
+              )}
             </CardHeader>
             {kPrz.length > 0 && (
               <CardContent className="pt-0">
