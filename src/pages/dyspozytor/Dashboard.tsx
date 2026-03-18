@@ -230,6 +230,33 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
         onClose={() => setEditZlId(null)}
         onSaved={refetch}
       />
+
+      <EdytujKursModal
+        open={!!editKurs}
+        onClose={() => setEditKurs(null)}
+        kurs={editKurs}
+        dzien={dzien}
+        oddzialId={oddzialId}
+        flota={flota}
+        kierowcy={kierowcy}
+        przystankiCount={editKurs ? przystanki.filter(p => p.kurs_id === editKurs.id).length : 0}
+        onSaved={refetch}
+        isBlocked={isBlocked}
+      />
+
+      <PrzepnijModal
+        open={!!przepnijPrz}
+        onClose={() => { setPrzepnijPrz(null); setPrzepnijKurs(null); }}
+        przystanek={przepnijPrz}
+        currentKurs={przepnijKurs}
+        allKursy={kursy}
+        allPrzystanki={przystanki}
+        oddzialId={oddzialId}
+        dzien={dzien}
+        flota={flota}
+        kierowcy={kierowcy}
+        onDone={refetch}
+      />
     </div>
   );
 }
