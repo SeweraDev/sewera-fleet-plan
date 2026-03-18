@@ -72,6 +72,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
         pojazd_typ: f?.typ || '',
         ladownosc_kg: f?.ladownosc_kg || 0,
         objetosc_m3: f?.objetosc_m3 ?? null,
+        max_palet: f?.max_palet ?? null,
       };
     });
     setKursy(mapped);
