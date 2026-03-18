@@ -255,7 +255,7 @@ export default function DyspozytorDashboard() {
   }, [profile, oddzialy, oddzialId]);
   const [showModal, setShowModal] = useState(false);
   const [preSelectedZlId, setPreSelectedZlId] = useState<string | null>(null);
-  const { flota } = useFlotaOddzialu(oddzialId);
+  const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
   const { isBlocked } = useBlokady(oddzialId, [dzien]);
