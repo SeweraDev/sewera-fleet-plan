@@ -18,6 +18,8 @@ import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
 import { useZleceniaBezKursu } from '@/hooks/useZleceniaBezKursu';
 import { useKursActions } from '@/hooks/useKursActions';
 import { useCreateKurs } from '@/hooks/useCreateKurs';
+import { useKierowcyStatusDnia } from '@/hooks/useKierowcyStatusDnia';
+import { Badge } from '@/components/ui/badge';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
