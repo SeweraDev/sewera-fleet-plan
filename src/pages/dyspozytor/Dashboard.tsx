@@ -88,7 +88,9 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
                   {kurs.objetosc_m3 != null && kurs.objetosc_m3 > 0 && (
                     <CapacityBar used={usedM3} total={kurs.objetosc_m3} unit="m³" />
                   )}
-                  <CapacityBar used={usedPal} total={maxPal} unit="pal" />
+                  {kurs.max_palet != null && kurs.max_palet > 0 && (
+                    <CapacityBar used={usedPal} total={kurs.max_palet} unit="pal" />
+                  )}
                 </div>
               )}
             </CardHeader>
