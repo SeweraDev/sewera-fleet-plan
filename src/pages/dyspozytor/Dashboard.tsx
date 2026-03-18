@@ -18,6 +18,8 @@ import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
 import { useZleceniaBezKursu } from '@/hooks/useZleceniaBezKursu';
 import { useKursActions } from '@/hooks/useKursActions';
 import { useCreateKurs } from '@/hooks/useCreateKurs';
+import { useKierowcyStatusDnia } from '@/hooks/useKierowcyStatusDnia';
+import { Badge } from '@/components/ui/badge';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
@@ -231,6 +233,83 @@ function NowyKursModal({
   );
 }
 
+function FlotaTab({ oddzialId, flota, oddzialy }: { oddzialId: number | null; flota: import('@/hooks/useFlotaOddzialu').Pojazd[]; oddzialy: { id: number; nazwa: string }[] }) {
+  const { kierowcy, loading } = useKierowcyStatusDnia(oddzialId);
+  const oddzialNazwa = oddzialy.find(o => o.id === oddzialId)?.nazwa || '';
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold text-foreground">🚛 Flota — {oddzialNazwa}</h2>
+        {flota.length === 0 ? (
+          <Card><CardContent className="p-6 text-center text-muted-foreground">Brak pojazdów</CardContent></Card>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nr rejestracyjny</TableHead>
+                <TableHead>Typ</TableHead>
+                <TableHead className="text-right">Ładowność (kg)</TableHead>
+                <TableHead className="text-right">Objętość (m³)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {flota.map(f => (
+                <TableRow key={f.id}>
+                  <TableCell className="font-mono">{f.nr_rej}</TableCell>
+                  <TableCell>{f.typ}</TableCell>
+                  <TableCell className="text-right">{f.ladownosc_kg}</TableCell>
+                  <TableCell className="text-right">{f.objetosc_m3}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold text-foreground">👤 Kierowcy — {oddzialNazwa}</h2>
+        {loading ? (
+          <p className="text-muted-foreground text-center py-4">Ładowanie kierowców...</p>
+        ) : kierowcy.length === 0 ? (
+          <Card><CardContent className="p-6 text-center text-muted-foreground">Brak kierowców</CardContent></Card>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Imię i nazwisko</TableHead>
+                <TableHead>Uprawnienia</TableHead>
+                <TableHead>Telefon</TableHead>
+                <TableHead>Status dziś</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {kierowcy.map(k => (
+                <TableRow key={k.id}>
+                  <TableCell className="font-medium">{k.imie_nazwisko}</TableCell>
+                  <TableCell>{k.uprawnienia || '—'}</TableCell>
+                  <TableCell>{k.tel || '—'}</TableCell>
+                  <TableCell>
+                    {k.kurs_status ? (
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        W kursie {k.kurs_numer || ''}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        Dostępny
+                      </Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DyspozytorDashboard() {
   const { profile } = useAuth();
   const [activeId, setActiveId] = useState('kursy');
@@ -325,33 +404,7 @@ export default function DyspozytorDashboard() {
                 </div>
               )}
               {activeId === 'flota' && (
-                <div className="space-y-2">
-                  <h2 className="text-lg font-semibold text-foreground">Flota oddziału</h2>
-                  {flota.length === 0 ? (
-                    <Card><CardContent className="p-6 text-center text-muted-foreground">Brak pojazdów</CardContent></Card>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nr rejestracyjny</TableHead>
-                          <TableHead>Typ</TableHead>
-                          <TableHead className="text-right">Ładowność (kg)</TableHead>
-                          <TableHead className="text-right">Objętość (m³)</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {flota.map(f => (
-                          <TableRow key={f.id}>
-                            <TableCell className="font-mono">{f.nr_rej}</TableCell>
-                            <TableCell>{f.typ}</TableCell>
-                            <TableCell className="text-right">{f.ladownosc_kg}</TableCell>
-                            <TableCell className="text-right">{f.objetosc_m3}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
+                <FlotaTab oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} />
               )}
             </>
           )}
