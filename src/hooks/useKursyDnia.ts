@@ -15,6 +15,7 @@ export interface KursDto {
   ladownosc_kg: number;
   objetosc_m3: number | null;
   max_palet: number | null;
+  kierowca_tel: string | null;
 }
 
 export interface PrzystanekDto {
