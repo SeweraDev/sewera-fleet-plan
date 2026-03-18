@@ -27,6 +27,7 @@ export interface PrzystanekDto {
   adres: string;
   masa_kg: number;
   objetosc_m3: number;
+  ilosc_palet: number;
 }
 
 export function useKursyDnia(oddzialId: number | null, dzien: string) {
