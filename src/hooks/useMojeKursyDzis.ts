@@ -11,6 +11,8 @@ export interface KursKierowcy {
   nr_rej: string;
   pojazd_typ: string;
   ladownosc_kg: number;
+  oddzial_id: number | null;
+  typ_pojazdu: string | null;
   przystanki: PrzystanekKierowcy[];
 }
 
