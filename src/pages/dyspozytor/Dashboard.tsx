@@ -379,7 +379,7 @@ export default function DyspozytorDashboard() {
                   onOpenModal={() => setShowModal(true)}
                 />
               )}
-              {activeId === 'zlecenia' && <ZleceniaTab oddzialId={oddzialId} />}
+              {activeId === 'historia' && <ZleceniaTab oddzialId={oddzialId} pastOnly />}
               {activeId === 'flota' && (
                 <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />
               )}
