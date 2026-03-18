@@ -1,14 +1,15 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '@/providers/AuthProvider';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { LoadingScreen } from '@/components/shared/LoadingScreen';
-import { ROLE_ROUTES } from '@/types/auth';
-import type { AppRole } from '@/types/auth';
+import { ROLE_ROUTES } from '@/types';
+import type { UserRole } from '@/types';
 
 interface ProtectedRouteProps {
-  allowedRoles: AppRole[];
+  allowedRoles: UserRole[];
+  children: React.ReactNode;
 }
 
-export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
   const { user, profile, loading } = useAuth();
 
   if (loading) return <LoadingScreen />;
@@ -20,5 +21,5 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <Navigate to={fallback} replace />;
   }
 
-  return <Outlet />;
+  return <>{children}</>;
 }

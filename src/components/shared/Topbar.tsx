@@ -1,6 +1,6 @@
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { useAuth } from '@/providers/AuthProvider';
-import { ROLE_LABELS } from '@/types/auth';
+import { useAuth } from '@/hooks/useAuth';
+import { ROLE_LABELS } from '@/types';
 import { Badge } from '@/components/ui/badge';
 
 export function Topbar() {

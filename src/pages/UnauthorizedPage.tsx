@@ -1,7 +1,7 @@
 import { ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/providers/AuthProvider';
-import { ROLE_ROUTES } from '@/types/auth';
+import { useAuth } from '@/hooks/useAuth';
+import { ROLE_ROUTES } from '@/types';
 import { useNavigate } from 'react-router-dom';
 
 export default function UnauthorizedPage() {

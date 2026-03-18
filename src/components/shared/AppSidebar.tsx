@@ -9,8 +9,8 @@ import {
   LogOut,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
-import { useAuth } from '@/providers/AuthProvider';
-import type { AppRole } from '@/types/auth';
+import { useAuth } from '@/hooks/useAuth';
+import type { UserRole } from '@/types';
 import {
   Sidebar,
   SidebarContent,
@@ -30,7 +30,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const NAV_BY_ROLE: Record<AppRole, NavItem[]> = {
+const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   admin: [
     { title: 'Użytkownicy', url: '/admin', icon: Users },
     { title: 'Ustawienia', url: '/admin/ustawienia', icon: Settings },
@@ -65,7 +65,6 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        {/* Logo area */}
         <div className="flex items-center gap-2 px-4 py-4">
           <Truck className="h-6 w-6 text-sidebar-primary shrink-0" />
           {!collapsed && (
