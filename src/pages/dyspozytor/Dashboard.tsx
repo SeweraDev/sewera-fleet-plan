@@ -298,7 +298,7 @@ export default function DyspozytorDashboard() {
   const [showModal, setShowModal] = useState(false);
   const [preSelectedZlId, setPreSelectedZlId] = useState<string | null>(null);
   const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
-  const { kursy, refetch } = useKursyDnia(oddzialId, dzien);
+  const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
   const { isBlocked } = useBlokady(oddzialId, [dzien]);
 
