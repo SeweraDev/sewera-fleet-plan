@@ -49,7 +49,7 @@ export default function KierowcaMojaTrasa() {
                         <span className="font-mono">{kurs.nr_rej}</span>
                         <StatusBadge status={kurs.status} />
                       </CardTitle>
-                      <span className="text-xs text-muted-foreground">{done}/{kurs.przystanki.length} przystanków</span>
+                      <span className="text-xs text-muted-foreground">{done}/{kurs.przystanki.length} rozładunków</span>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
