@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      dostepnosc_blokady: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          dzien: string
+          id: string
+          typ: string
+          zasob_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          dzien: string
+          id?: string
+          typ: string
+          zasob_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          dzien?: string
+          id?: string
+          typ?: string
+          zasob_id?: string
+        }
+        Relationships: []
+      }
       flota: {
         Row: {
           aktywny: boolean
