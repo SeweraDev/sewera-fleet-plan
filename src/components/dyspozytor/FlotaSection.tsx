@@ -447,6 +447,32 @@ function KalendarzTab({
           </Table>
         </div>
       </div>
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-foreground">🚚 Transport zewnętrzny</h3>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow><TableHead className="sticky left-0 bg-background z-10 min-w-[180px]">Pojazd</TableHead>{renderDayHeaders()}</TableRow></TableHeader>
+            <TableBody>
+              {flotaZewn.map(f => (
+                <TableRow key={f.id}>
+                  <TableCell className="sticky left-0 bg-background z-10 font-mono text-xs">
+                    {f.nr_rej}
+                    {f.firma && <span className="text-muted-foreground ml-1 text-[10px]">· {f.firma}</span>}
+                  </TableCell>
+                  {businessDays.map(d => {
+                    const blocked = isBlocked('zewnetrzny', f.id, d);
+                    return (
+                      <TableCell key={d} className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked ? 'bg-red-50 dark:bg-red-950/30' : ''}`}>
+                        <KursCell kurs={undefined} blocked={blocked} onToggle={() => onToggle('zewnetrzny', f.id, d)} />
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </div>
   );
 }
