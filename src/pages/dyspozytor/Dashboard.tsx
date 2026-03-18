@@ -452,7 +452,12 @@ export default function DyspozytorDashboard() {
                   isBlocked={isBlocked}
                 />
               )}
-              {activeId === 'historia' && <ZleceniaTab oddzialId={oddzialId} pastOnly />}
+              {activeId === 'zlecenia' && (
+                <ZleceniaTab
+                  oddzialId={oddzialId}
+                  onOpenKursModal={(zlId) => { setPreSelectedZlId(zlId); setShowModal(true); }}
+                />
+              )}
               {activeId === 'flota' && (
                 <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />
               )}
