@@ -1,19 +1,12 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import type { UserProfile, AppRole } from '@/types/auth';
 import { ROLE_ROUTES } from '@/types/auth';
-
-// Mock profiles for development (remove when Lovable Cloud is enabled)
-const MOCK_PROFILES: Record<string, UserProfile> = {
-  admin: { id: '1', full_name: 'Jan Kowalski', roles: ['admin'], branch: null },
-  zarzad: { id: '2', full_name: 'Anna Nowak', roles: ['zarzad'], branch: null },
-  dyspozytor: { id: '3', full_name: 'Piotr Wiśniewski', roles: ['dyspozytor'], branch: 'Warszawa' },
-  sprzedawca: { id: '4', full_name: 'Maria Zielińska', roles: ['sprzedawca'], branch: 'Kraków' },
-  kierowca: { id: '5', full_name: 'Tomasz Lewandowski', roles: ['kierowca'], branch: 'Warszawa' },
-};
+import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
-  user: { id: string; email: string } | null;
+  user: User | null;
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -22,29 +15,85 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+async function fetchProfile(userId: string): Promise<UserProfile | null> {
+  const { data: profileData, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (profileError || !profileData) return null;
+
+  const { data: rolesData } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId);
+
+  const roles = (rolesData || []).map((r) => r.role as AppRole);
+
+  return {
+    id: profileData.id,
+    full_name: profileData.full_name,
+    roles,
+    branch: profileData.branch,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const signIn = useCallback(async (email: string, _password: string) => {
-    // Mock: extract role from email prefix (e.g. admin@sewera.pl)
-    const role = email.split('@')[0] as AppRole;
-    const mockProfile = MOCK_PROFILES[role];
-    
-    if (!mockProfile) {
-      throw new Error('Nieprawidłowy email lub hasło');
-    }
+  useEffect(() => {
+    // Set up auth listener BEFORE getSession
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          setUser(session.user);
+          // Use setTimeout to avoid Supabase deadlock
+          setTimeout(async () => {
+            const p = await fetchProfile(session.user.id);
+            setProfile(p);
+            setLoading(false);
+          }, 0);
+        } else {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
+      }
+    );
 
-    setUser({ id: mockProfile.id, email });
-    setProfile(mockProfile);
-    
-    const redirectPath = ROLE_ROUTES[mockProfile.roles[0]];
-    navigate(redirectPath);
+    // Then check existing session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        const p = await fetchProfile(session.user.id);
+        setProfile(p);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
+
+    // Profile will be loaded by onAuthStateChange, but we need to navigate
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser) {
+      const p = await fetchProfile(authUser.id);
+      if (p && p.roles.length > 0) {
+        navigate(ROLE_ROUTES[p.roles[0]]);
+      }
+    }
   }, [navigate]);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     navigate('/login');
