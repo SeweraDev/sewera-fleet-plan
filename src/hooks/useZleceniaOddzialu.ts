@@ -24,7 +24,7 @@ export interface WzDto {
   uwagi: string | null;
 }
 
-export function useZleceniaOddzialu(oddzialId: number | null) {
+export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) {
   const [zlecenia, setZlecenia] = useState<ZlecenieOddzialuDto[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -32,11 +32,16 @@ export function useZleceniaOddzialu(oddzialId: number | null) {
     if (oddzialId == null) { setZlecenia([]); return; }
     setLoading(true);
 
-    const { data: zlData } = await supabase
+    const today = new Date().toISOString().split('T')[0];
+    let query = supabase
       .from('zlecenia')
       .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id')
       .eq('oddzial_id', oddzialId)
       .order('created_at', { ascending: false });
+
+    if (pastOnly) {
+      query = query.lt('dzien', today);
+    }
 
     // Get kurs numery
     const kursIds = (zlData || []).map(z => z.kurs_id).filter(Boolean) as string[];
