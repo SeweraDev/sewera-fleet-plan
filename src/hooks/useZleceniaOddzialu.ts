@@ -43,6 +43,8 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
       query = query.lt('dzien', today);
     }
 
+    const { data: zlData } = await query;
+
     // Get kurs numery
     const kursIds = (zlData || []).map(z => z.kurs_id).filter(Boolean) as string[];
     let kursMap = new Map<string, string>();
