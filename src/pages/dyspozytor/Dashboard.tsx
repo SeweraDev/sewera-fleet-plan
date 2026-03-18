@@ -385,6 +385,7 @@ export default function DyspozytorDashboard() {
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
   const { isBlocked } = useBlokady(oddzialId, [dzien]);
+  const { kierowcy } = useKierowcyOddzialu(oddzialId);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
