@@ -327,7 +327,7 @@ export default function DyspozytorDashboard() {
                 </div>
               )}
               {activeId === 'flota' && (
-                <FlotaTab oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} />
+                <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} />
               )}
             </>
           )}
