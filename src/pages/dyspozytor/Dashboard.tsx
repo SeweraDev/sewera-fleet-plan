@@ -20,6 +20,7 @@ import { useKursActions } from '@/hooks/useKursActions';
 import { useCreateKurs } from '@/hooks/useCreateKurs';
 import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
+import { useBlokady } from '@/hooks/useBlokady';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
@@ -133,12 +134,14 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
 }
 
 function NowyKursModal({ 
-  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId 
+  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId, isBlocked 
 }: { 
-  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null;
+  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean;
 }) {
-  const { kierowcy } = useKierowcyOddzialu(oddzialId);
-  const { flota } = useFlotaOddzialu(oddzialId);
+  const { kierowcy: allKierowcy } = useKierowcyOddzialu(oddzialId);
+  const { flota: allFlota } = useFlotaOddzialu(oddzialId);
+  const kierowcy = isBlocked ? allKierowcy.filter(k => !isBlocked('kierowca', k.id, dzien)) : allKierowcy;
+  const flota = isBlocked ? allFlota.filter(f => !isBlocked('pojazd', f.id, dzien)) : allFlota;
   const { zlecenia, refetch: refetchZl } = useZleceniaBezKursu(oddzialId);
   const { create, submitting, error } = useCreateKurs(() => { onCreated(); onClose(); });
 
@@ -251,6 +254,7 @@ export default function DyspozytorDashboard() {
   const { flota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
+  const { isBlocked } = useBlokady(oddzialId, [dzien]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -339,6 +343,7 @@ export default function DyspozytorDashboard() {
             dzien={dzien}
             onCreated={refetch}
             preSelectedZlecenieId={preSelectedZlId}
+            isBlocked={isBlocked}
           />
         </main>
       </div>

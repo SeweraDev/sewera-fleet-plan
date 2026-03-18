@@ -1,10 +1,10 @@
-import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useKierowcyStatusDnia, type KierowcaStatusDto } from '@/hooks/useKierowcyStatusDnia';
 import { useKalendarzFloty, type KursKalendarzDto } from '@/hooks/useKalendarzFloty';
+import { useBlokady } from '@/hooks/useBlokady';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 
 function formatDayHeader(dateStr: string) {
@@ -15,36 +15,67 @@ function formatDayHeader(dateStr: string) {
   return { day: days[d.getDay()], date: `${dd}.${mm}` };
 }
 
-function KursCell({ kurs }: { kurs: KursKalendarzDto | undefined }) {
-  if (!kurs) {
-    return <span className="text-muted-foreground">·</span>;
+function KursCell({
+  kurs,
+  blocked,
+  onToggle,
+}: {
+  kurs: KursKalendarzDto | undefined;
+  blocked: boolean;
+  onToggle: () => void;
+}) {
+  // Has a kurs — show status badge (not clickable for toggle)
+  if (kurs) {
+    switch (kurs.status) {
+      case 'zaplanowany':
+        return (
+          <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-[10px] px-1.5">
+            {kurs.numer || 'plan'}
+          </Badge>
+        );
+      case 'aktywny':
+        return (
+          <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-[10px] px-1.5">
+            w trasie
+          </Badge>
+        );
+      case 'zakończony':
+        return (
+          <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-[10px] px-1.5">
+            ✓
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="secondary" className="text-[10px] px-1.5">
+            {kurs.status}
+          </Badge>
+        );
+    }
   }
-  switch (kurs.status) {
-    case 'zaplanowany':
-      return (
-        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-[10px] px-1.5">
-          {kurs.numer || 'plan'}
-        </Badge>
-      );
-    case 'aktywny':
-      return (
-        <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-[10px] px-1.5">
-          w trasie
-        </Badge>
-      );
-    case 'zakończony':
-      return (
-        <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-[10px] px-1.5">
-          ✓
-        </Badge>
-      );
-    default:
-      return (
-        <Badge variant="secondary" className="text-[10px] px-1.5">
-          {kurs.status}
-        </Badge>
-      );
+
+  // No kurs — toggleable cell
+  if (blocked) {
+    return (
+      <button
+        onClick={onToggle}
+        className="w-full h-full flex items-center justify-center text-red-600 dark:text-red-400 hover:opacity-70 transition-opacity cursor-pointer"
+        title="Kliknij aby odblokować"
+      >
+        🔒
+      </button>
+    );
   }
+
+  return (
+    <button
+      onClick={onToggle}
+      className="w-full h-full flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors cursor-pointer"
+      title="Kliknij aby zablokować"
+    >
+      ·
+    </button>
+  );
 }
 
 function KalendarzTab({
@@ -53,18 +84,21 @@ function KalendarzTab({
   kursy,
   businessDays,
   loading,
+  isBlocked,
+  onToggle,
 }: {
   flota: Pojazd[];
   kierowcy: KierowcaStatusDto[];
   kursy: KursKalendarzDto[];
   businessDays: string[];
   loading: boolean;
+  isBlocked: (typ: string, zasobId: string, dzien: string) => boolean;
+  onToggle: (typ: string, zasobId: string, dzien: string) => void;
 }) {
   if (loading) {
     return <p className="text-muted-foreground text-center py-8">Ładowanie kalendarza...</p>;
   }
 
-  // Build lookup maps
   const flotaKursy = new Map<string, Map<string, KursKalendarzDto>>();
   const kierowcaKursy = new Map<string, Map<string, KursKalendarzDto>>();
 
@@ -81,6 +115,17 @@ function KalendarzTab({
 
   const today = new Date().toISOString().split('T')[0];
 
+  const renderDayHeaders = () =>
+    businessDays.map(d => {
+      const { day, date } = formatDayHeader(d);
+      return (
+        <TableHead key={d} className={`text-center min-w-[70px] ${d === today ? 'bg-accent/50' : ''}`}>
+          <div className="text-[10px] text-muted-foreground">{day}</div>
+          <div className="text-xs">{date}</div>
+        </TableHead>
+      );
+    });
+
   return (
     <div className="space-y-6">
       {/* Vehicles calendar */}
@@ -91,15 +136,7 @@ function KalendarzTab({
             <TableHeader>
               <TableRow>
                 <TableHead className="sticky left-0 bg-background z-10 min-w-[140px]">Pojazd</TableHead>
-                {businessDays.map(d => {
-                  const { day, date } = formatDayHeader(d);
-                  return (
-                    <TableHead key={d} className={`text-center min-w-[70px] ${d === today ? 'bg-accent/50' : ''}`}>
-                      <div className="text-[10px] text-muted-foreground">{day}</div>
-                      <div className="text-xs">{date}</div>
-                    </TableHead>
-                  );
-                })}
+                {renderDayHeaders()}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -111,9 +148,17 @@ function KalendarzTab({
                   </TableCell>
                   {businessDays.map(d => {
                     const kurs = flotaKursy.get(f.id)?.get(d);
+                    const blocked = isBlocked('pojazd', f.id, d);
                     return (
-                      <TableCell key={d} className={`text-center ${d === today ? 'bg-accent/30' : ''}`}>
-                        <KursCell kurs={kurs} />
+                      <TableCell
+                        key={d}
+                        className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked && !kurs ? 'bg-red-50 dark:bg-red-950/30' : ''}`}
+                      >
+                        <KursCell
+                          kurs={kurs}
+                          blocked={blocked}
+                          onToggle={() => onToggle('pojazd', f.id, d)}
+                        />
                       </TableCell>
                     );
                   })}
@@ -132,15 +177,7 @@ function KalendarzTab({
             <TableHeader>
               <TableRow>
                 <TableHead className="sticky left-0 bg-background z-10 min-w-[140px]">Kierowca</TableHead>
-                {businessDays.map(d => {
-                  const { day, date } = formatDayHeader(d);
-                  return (
-                    <TableHead key={d} className={`text-center min-w-[70px] ${d === today ? 'bg-accent/50' : ''}`}>
-                      <div className="text-[10px] text-muted-foreground">{day}</div>
-                      <div className="text-xs">{date}</div>
-                    </TableHead>
-                  );
-                })}
+                {renderDayHeaders()}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -151,9 +188,17 @@ function KalendarzTab({
                   </TableCell>
                   {businessDays.map(d => {
                     const kurs = kierowcaKursy.get(k.id)?.get(d);
+                    const blocked = isBlocked('kierowca', k.id, d);
                     return (
-                      <TableCell key={d} className={`text-center ${d === today ? 'bg-accent/30' : ''}`}>
-                        <KursCell kurs={kurs} />
+                      <TableCell
+                        key={d}
+                        className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked && !kurs ? 'bg-red-50 dark:bg-red-950/30' : ''}`}
+                      >
+                        <KursCell
+                          kurs={kurs}
+                          blocked={blocked}
+                          onToggle={() => onToggle('kierowca', k.id, d)}
+                        />
                       </TableCell>
                     );
                   })}
@@ -178,6 +223,7 @@ export function FlotaSection({
 }) {
   const { kierowcy, loading: loadingKierowcy } = useKierowcyStatusDnia(oddzialId);
   const { kursy, businessDays, loading: loadingKalendarz } = useKalendarzFloty(oddzialId);
+  const { isBlocked, toggleBlokada } = useBlokady(oddzialId, businessDays);
   const oddzialNazwa = oddzialy.find(o => o.id === oddzialId)?.nazwa || '';
 
   return (
@@ -267,6 +313,8 @@ export function FlotaSection({
           kursy={kursy}
           businessDays={businessDays}
           loading={loadingKalendarz || loadingKierowcy}
+          isBlocked={isBlocked}
+          onToggle={toggleBlokada}
         />
       </TabsContent>
     </Tabs>
