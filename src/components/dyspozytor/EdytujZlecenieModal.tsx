@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -14,6 +15,7 @@ const STATUSY = [
   { value: 'w_trasie', label: 'W trasie' },
   { value: 'dostarczona', label: 'Dostarczona' },
   { value: 'anulowana', label: 'Anulowana' },
+  { value: 'do_weryfikacji', label: 'Do weryfikacji' },
 ];
 
 const GODZINY = [
@@ -49,6 +51,8 @@ interface WzData {
   objetosc_m3: number;
   ilosc_palet: number;
   uwagi: string;
+  numer_wz: string;
+  nr_zamowienia: string;
 }
 
 export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Props) {
@@ -66,6 +70,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [nadawcaNazwa, setNadawcaNazwa] = useState('');
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     if (!open || !zlecenieId) return;
@@ -73,7 +78,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
     Promise.all([
       supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, nadawca_id').eq('id', zlecenieId).single(),
-      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi').eq('zlecenie_id', zlecenieId).limit(1).single(),
+      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia').eq('zlecenie_id', zlecenieId).limit(1).single(),
     ]).then(async ([zlRes, wzRes]) => {
       const zl = zlRes.data;
       const w = wzRes.data;
@@ -102,6 +107,17 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       setLoading(false);
     });
   }, [open, zlecenieId]);
+
+  const handleImportWz = useCallback((data: WZImportData[]) => {
+    if (data.length > 0) {
+      const d = data[0];
+      if (d.odbiorca) setOdbiorca(d.odbiorca);
+      if (d.adres) setAdres(d.adres);
+      if (d.tel) setTel(d.tel);
+      if (d.masa_kg) setMasaKg(String(d.masa_kg));
+      if (d.uwagi) setUwagi(d.uwagi);
+    }
+  }, []);
 
   const handleSave = async () => {
     if (!zlecenieId) return;
@@ -141,98 +157,114 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   };
 
   return (
-    <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-xl max-h-[85vh] overflow-auto">
-        <DialogHeader>
-          <DialogTitle>Edycja zlecenia {zlecenie?.numer || ''}</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={() => onClose()}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>Edycja zlecenia {zlecenie?.numer || ''}</DialogTitle>
+          </DialogHeader>
 
-        {loading ? (
-          <p className="text-center text-muted-foreground py-6">Ładowanie...</p>
-        ) : (
-          <div className="space-y-4">
-            {/* Read-only fields */}
-            <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/50">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase">Numer</p>
-                <p className="text-sm font-mono font-medium">{zlecenie?.numer}</p>
+          {loading ? (
+            <p className="text-center text-muted-foreground py-6">Ładowanie...</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Read-only fields */}
+              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/50">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Numer</p>
+                  <p className="text-sm font-mono font-medium">{zlecenie?.numer}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Nadawca</p>
+                  <p className="text-sm">{nadawcaNazwa}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase">Data złożenia</p>
+                  <p className="text-sm">{zlecenie?.dzien}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase">Nadawca</p>
-                <p className="text-sm">{nadawcaNazwa}</p>
+
+              {/* Import WZ button */}
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Dane WZ</Label>
+                <Button size="sm" variant="outline" onClick={() => setShowImport(true)}>
+                  📥 Importuj z WZ
+                </Button>
               </div>
+
+              {/* Editable fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Status zlecenia</Label>
+                  <Select value={status} onValueChange={setStatus}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {STATUSY.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Preferowana godzina</Label>
+                  <Select value={godzina} onValueChange={setGodzina}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {GODZINY.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase">Data złożenia</p>
-                <p className="text-sm">{zlecenie?.dzien}</p>
+                <Label>Odbiorca</Label>
+                <Input value={odbiorca} onChange={e => setOdbiorca(e.target.value)} />
+              </div>
+
+              <div>
+                <Label>Adres dostawy</Label>
+                <Input value={adres} onChange={e => setAdres(e.target.value)} />
+              </div>
+
+              <div>
+                <Label>Telefon</Label>
+                <Input value={tel} onChange={e => setTel(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label>Masa kg</Label>
+                  <Input type="number" value={masaKg} onChange={e => setMasaKg(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Objętość m³</Label>
+                  <Input type="number" value={objetoscM3} onChange={e => setObjetoscM3(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Ilość palet</Label>
+                  <Input type="number" value={iloscPalet} onChange={e => setIloscPalet(e.target.value)} />
+                </div>
+              </div>
+
+              <div>
+                <Label>Uwagi</Label>
+                <Textarea value={uwagi} onChange={e => setUwagi(e.target.value)} rows={3} />
               </div>
             </div>
+          )}
 
-            {/* Editable fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Status zlecenia</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STATUSY.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Preferowana godzina</Label>
-                <Select value={godzina} onValueChange={setGodzina}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {GODZINY.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>Anuluj</Button>
+            <Button onClick={handleSave} disabled={saving || loading}>
+              {saving ? 'Zapisywanie...' : 'Zapisz zmiany'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <div>
-              <Label>Odbiorca</Label>
-              <Input value={odbiorca} onChange={e => setOdbiorca(e.target.value)} />
-            </div>
-
-            <div>
-              <Label>Adres dostawy</Label>
-              <Input value={adres} onChange={e => setAdres(e.target.value)} />
-            </div>
-
-            <div>
-              <Label>Telefon</Label>
-              <Input value={tel} onChange={e => setTel(e.target.value)} />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label>Masa kg</Label>
-                <Input type="number" value={masaKg} onChange={e => setMasaKg(e.target.value)} />
-              </div>
-              <div>
-                <Label>Objętość m³</Label>
-                <Input type="number" value={objetoscM3} onChange={e => setObjetoscM3(e.target.value)} />
-              </div>
-              <div>
-                <Label>Ilość palet</Label>
-                <Input type="number" value={iloscPalet} onChange={e => setIloscPalet(e.target.value)} />
-              </div>
-            </div>
-
-            <div>
-              <Label>Uwagi</Label>
-              <Textarea value={uwagi} onChange={e => setUwagi(e.target.value)} rows={3} />
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Anuluj</Button>
-          <Button onClick={handleSave} disabled={saving || loading}>
-            {saving ? 'Zapisywanie...' : 'Zapisz zmiany'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <ModalImportWZ
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onImport={handleImportWz}
+      />
+    </>
   );
 }
