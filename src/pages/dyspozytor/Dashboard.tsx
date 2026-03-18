@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/providers/AuthProvider';
+import { useAuth } from '@/hooks/useAuth';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
