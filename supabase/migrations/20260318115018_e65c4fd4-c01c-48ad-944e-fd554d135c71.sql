@@ -1,0 +1,1 @@
+ALTER TABLE public.flota ADD COLUMN IF NOT EXISTS max_palet INT;

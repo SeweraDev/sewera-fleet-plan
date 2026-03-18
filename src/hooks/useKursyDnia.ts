@@ -14,6 +14,7 @@ export interface KursDto {
   pojazd_typ: string;
   ladownosc_kg: number;
   objetosc_m3: number | null;
+  max_palet: number | null;
 }
 
 export interface PrzystanekDto {
@@ -47,13 +48,13 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
 
     // Get flota info for vehicles
     const flotaIds = (kursyData || []).map(k => (k as any).flota_id).filter(Boolean);
-    let flotaMap = new Map<string, { nr_rej: string; typ: string; ladownosc_kg: number; objetosc_m3: number | null }>();
+    let flotaMap = new Map<string, { nr_rej: string; typ: string; ladownosc_kg: number; objetosc_m3: number | null; max_palet: number | null }>();
     if (flotaIds.length > 0) {
       const { data: flotaData } = await supabase
         .from('flota')
-        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3')
+        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet')
         .in('id', flotaIds);
-      (flotaData || []).forEach(f => flotaMap.set(f.id, { nr_rej: f.nr_rej, typ: f.typ, ladownosc_kg: Number(f.ladownosc_kg), objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null }));
+      (flotaData || []).forEach(f => flotaMap.set(f.id, { nr_rej: f.nr_rej, typ: f.typ, ladownosc_kg: Number(f.ladownosc_kg), objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null, max_palet: (f as any).max_palet != null ? Number((f as any).max_palet) : null }));
     }
 
     const mapped: KursDto[] = (kursyData || []).map(k => {
@@ -71,6 +72,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
         pojazd_typ: f?.typ || '',
         ladownosc_kg: f?.ladownosc_kg || 0,
         objetosc_m3: f?.objetosc_m3 ?? null,
+        max_palet: f?.max_palet ?? null,
       };
     });
     setKursy(mapped);
