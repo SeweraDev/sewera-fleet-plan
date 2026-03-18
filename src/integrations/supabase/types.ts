@@ -79,6 +79,47 @@ export type Database = {
         }
         Relationships: []
       }
+      kierowcy: {
+        Row: {
+          aktywny: boolean
+          created_at: string
+          id: string
+          imie_nazwisko: string
+          oddzial_id: number | null
+          tel: string | null
+          uprawnienia: string | null
+          user_id: string | null
+        }
+        Insert: {
+          aktywny?: boolean
+          created_at?: string
+          id?: string
+          imie_nazwisko: string
+          oddzial_id?: number | null
+          tel?: string | null
+          uprawnienia?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          aktywny?: boolean
+          created_at?: string
+          id?: string
+          imie_nazwisko?: string
+          oddzial_id?: number | null
+          tel?: string | null
+          uprawnienia?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kierowcy_oddzial_id_fkey"
+            columns: ["oddzial_id"]
+            isOneToOne: false
+            referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kurs_przystanki: {
         Row: {
           created_at: string
@@ -125,37 +166,56 @@ export type Database = {
         Row: {
           created_at: string
           dzien: string
+          flota_id: string | null
           godzina_start: string | null
           id: string
           kierowca_id: string | null
           kierowca_nazwa: string | null
           nr_rej_zewn: string | null
+          numer: string | null
           oddzial_id: number | null
           status: string
+          ts_powrot: string | null
+          ts_wyjazd: string | null
         }
         Insert: {
           created_at?: string
           dzien?: string
+          flota_id?: string | null
           godzina_start?: string | null
           id?: string
           kierowca_id?: string | null
           kierowca_nazwa?: string | null
           nr_rej_zewn?: string | null
+          numer?: string | null
           oddzial_id?: number | null
           status?: string
+          ts_powrot?: string | null
+          ts_wyjazd?: string | null
         }
         Update: {
           created_at?: string
           dzien?: string
+          flota_id?: string | null
           godzina_start?: string | null
           id?: string
           kierowca_id?: string | null
           kierowca_nazwa?: string | null
           nr_rej_zewn?: string | null
+          numer?: string | null
           oddzial_id?: number | null
           status?: string
+          ts_powrot?: string | null
+          ts_wyjazd?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "kursy_flota_id_fkey"
+            columns: ["flota_id"]
+            isOneToOne: false
+            referencedRelation: "flota"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "kursy_oddzial_id_fkey"
             columns: ["oddzial_id"]
@@ -167,16 +227,19 @@ export type Database = {
       }
       oddzialy: {
         Row: {
+          aktywny: boolean
           created_at: string
           id: number
           nazwa: string
         }
         Insert: {
+          aktywny?: boolean
           created_at?: string
           id?: number
           nazwa: string
         }
         Update: {
+          aktywny?: boolean
           created_at?: string
           id?: number
           nazwa?: string
@@ -228,6 +291,7 @@ export type Database = {
           dzien: string
           id: string
           kurs_id: string | null
+          nadawca_id: string | null
           numer: string
           oddzial_id: number | null
           preferowana_godzina: string | null
@@ -239,6 +303,7 @@ export type Database = {
           dzien?: string
           id?: string
           kurs_id?: string | null
+          nadawca_id?: string | null
           numer: string
           oddzial_id?: number | null
           preferowana_godzina?: string | null
@@ -250,6 +315,7 @@ export type Database = {
           dzien?: string
           id?: string
           kurs_id?: string | null
+          nadawca_id?: string | null
           numer?: string
           oddzial_id?: number | null
           preferowana_godzina?: string | null
@@ -268,27 +334,42 @@ export type Database = {
       }
       zlecenia_wz: {
         Row: {
+          adres: string | null
           created_at: string
           id: string
           masa_kg: number
+          nr_zamowienia: string | null
           numer_wz: string | null
           objetosc_m3: number
+          odbiorca: string | null
+          tel: string | null
+          uwagi: string | null
           zlecenie_id: string
         }
         Insert: {
+          adres?: string | null
           created_at?: string
           id?: string
           masa_kg?: number
+          nr_zamowienia?: string | null
           numer_wz?: string | null
           objetosc_m3?: number
+          odbiorca?: string | null
+          tel?: string | null
+          uwagi?: string | null
           zlecenie_id: string
         }
         Update: {
+          adres?: string | null
           created_at?: string
           id?: string
           masa_kg?: number
+          nr_zamowienia?: string | null
           numer_wz?: string | null
           objetosc_m3?: number
+          odbiorca?: string | null
+          tel?: string | null
+          uwagi?: string | null
           zlecenie_id?: string
         }
         Relationships: [
