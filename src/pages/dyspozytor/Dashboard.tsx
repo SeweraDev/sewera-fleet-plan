@@ -22,7 +22,12 @@ import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
 import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
+import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
+import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
 import { useBlokady } from '@/hooks/useBlokady';
+import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
+import type { Pojazd } from '@/hooks/useFlotaOddzialu';
+import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
@@ -58,11 +63,14 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'zakonczony', label: 'Zakończone' },
 ];
 
-function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void }) {
+function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [editZlId, setEditZlId] = useState<string | null>(null);
+  const [editKurs, setEditKurs] = useState<KursDto | null>(null);
+  const [przepnijPrz, setPrzepnijPrz] = useState<PrzystanekDto | null>(null);
+  const [przepnijKurs, setPrzepnijKurs] = useState<KursDto | null>(null);
 
   const filtered = statusFilter === 'all' ? kursy : kursy.filter(k => k.status === statusFilter);
   const counts = {
@@ -134,6 +142,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                     <StatusBadge status={kurs.status} />
                   </CardTitle>
                   <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>⚙️ Edytuj</Button>
                     {kurs.status === 'zaplanowany' && (
                       <Button size="sm" onClick={() => handleStart(kurs.id)} disabled={acting}>▶ Wyjazd</Button>
                     )}
@@ -198,6 +207,11 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                                 ✏️
                               </Button>
                             )}
+                            {p.zlecenie_id && (
+                              <Button size="sm" variant="ghost" onClick={() => { setPrzepnijPrz(p); setPrzepnijKurs(kurs); }}>
+                                🔀
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -215,6 +229,33 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
         open={!!editZlId}
         onClose={() => setEditZlId(null)}
         onSaved={refetch}
+      />
+
+      <EdytujKursModal
+        open={!!editKurs}
+        onClose={() => setEditKurs(null)}
+        kurs={editKurs}
+        dzien={dzien}
+        oddzialId={oddzialId}
+        flota={flota}
+        kierowcy={kierowcy}
+        przystankiCount={editKurs ? przystanki.filter(p => p.kurs_id === editKurs.id).length : 0}
+        onSaved={refetch}
+        isBlocked={isBlocked}
+      />
+
+      <PrzepnijModal
+        open={!!przepnijPrz}
+        onClose={() => { setPrzepnijPrz(null); setPrzepnijKurs(null); }}
+        przystanek={przepnijPrz}
+        currentKurs={przepnijKurs}
+        allKursy={kursy}
+        allPrzystanki={przystanki}
+        oddzialId={oddzialId}
+        dzien={dzien}
+        flota={flota}
+        kierowcy={kierowcy}
+        onDone={refetch}
       />
     </div>
   );
@@ -344,6 +385,7 @@ export default function DyspozytorDashboard() {
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
   const { isBlocked } = useBlokady(oddzialId, [dzien]);
+  const { kierowcy } = useKierowcyOddzialu(oddzialId);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -405,6 +447,9 @@ export default function DyspozytorDashboard() {
                   zlBezKursuCount={zlBezKursu.length}
                   doWeryfikacjiCount={zlBezKursu.filter(z => z.status === 'do_weryfikacji').length}
                   onOpenModal={() => setShowModal(true)}
+                  flota={flota}
+                  kierowcy={kierowcy}
+                  isBlocked={isBlocked}
                 />
               )}
               {activeId === 'historia' && <ZleceniaTab oddzialId={oddzialId} pastOnly />}
