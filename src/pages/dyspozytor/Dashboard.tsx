@@ -370,44 +370,16 @@ export default function DyspozytorDashboard() {
             <Card><CardContent className="p-8 text-center text-muted-foreground">Wybierz oddział aby wyświetlić dane</CardContent></Card>
           ) : (
             <>
-              {activeId === 'kursy' && <KursyTab oddzialId={oddzialId} dzien={dzien} dzienDo={rangeMode ? dzienDo : undefined} />}
-              {activeId === 'zlecenia' && (
-                <div className="space-y-2">
-                  <h2 className="text-lg font-semibold text-foreground">Zlecenia bez kursu</h2>
-                  {zlBezKursu.length === 0 ? (
-                    <Card><CardContent className="p-6 text-center text-muted-foreground">Brak zleceń bez kursu</CardContent></Card>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Numer</TableHead>
-                          <TableHead>Dzień</TableHead>
-                          <TableHead>Typ</TableHead>
-                          <TableHead>Godzina</TableHead>
-                          <TableHead className="text-right">Kg</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {zlBezKursu.map(z => (
-                          <TableRow key={z.id}>
-                            <TableCell className="font-mono text-sm">{z.numer}</TableCell>
-                            <TableCell>{z.dzien}</TableCell>
-                            <TableCell>{z.typ_pojazdu || '—'}</TableCell>
-                            <TableCell>{z.preferowana_godzina || '—'}</TableCell>
-                            <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => { setPreSelectedZlId(z.id); setShowModal(true); }}>
-                                + Utwórz kurs
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
+              {activeId === 'kursy' && (
+                <KursyTab
+                  oddzialId={oddzialId}
+                  dzien={dzien}
+                  dzienDo={rangeMode ? dzienDo : undefined}
+                  zlBezKursuCount={zlBezKursu.length}
+                  onOpenModal={() => setShowModal(true)}
+                />
               )}
+              {activeId === 'zlecenia' && <ZleceniaTab oddzialId={oddzialId} />}
               {activeId === 'flota' && (
                 <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />
               )}
