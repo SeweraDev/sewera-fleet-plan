@@ -134,12 +134,14 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
 }
 
 function NowyKursModal({ 
-  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId 
+  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId, isBlocked 
 }: { 
-  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null;
+  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean;
 }) {
-  const { kierowcy } = useKierowcyOddzialu(oddzialId);
-  const { flota } = useFlotaOddzialu(oddzialId);
+  const { kierowcy: allKierowcy } = useKierowcyOddzialu(oddzialId);
+  const { flota: allFlota } = useFlotaOddzialu(oddzialId);
+  const kierowcy = isBlocked ? allKierowcy.filter(k => !isBlocked('kierowca', k.id, dzien)) : allKierowcy;
+  const flota = isBlocked ? allFlota.filter(f => !isBlocked('pojazd', f.id, dzien)) : allFlota;
   const { zlecenia, refetch: refetchZl } = useZleceniaBezKursu(oddzialId);
   const { create, submitting, error } = useCreateKurs(() => { onCreated(); onClose(); });
 
