@@ -8,6 +8,7 @@ export interface ZlecenieBezKursuDto {
   preferowana_godzina: string | null;
   typ_pojazdu: string | null;
   suma_kg: number;
+  status: string;
 }
 
 export function useZleceniaBezKursu(oddzialId: number | null) {
