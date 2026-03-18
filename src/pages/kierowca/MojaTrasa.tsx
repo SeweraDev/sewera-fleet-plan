@@ -85,7 +85,7 @@ export default function KierowcaMojaTrasa() {
                             <p className="text-xs text-muted-foreground">{p.adres}</p>
                             {p.tel && <p className="text-xs text-muted-foreground">📞 {p.tel}</p>}
                             <p className="text-xs">{p.masa_kg} kg {p.nr_wz ? `· WZ: ${p.nr_wz}` : ''}</p>
-                            {p.uwagi && <p className="text-xs text-amber-600">⚠️ {p.uwagi}</p>}
+                            {p.uwagi && <p className="text-xs text-warning">⚠️ {p.uwagi}</p>}
                           </div>
                           {p.status === 'oczekuje' && kurs.status === 'aktywny' && (
                             <Button
