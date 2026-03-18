@@ -56,6 +56,7 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
       preferowana_godzina: z.preferowana_godzina,
       typ_pojazdu: z.typ_pojazdu,
       suma_kg: wzMap.get(z.id) || 0,
+      status: z.status,
     })));
     setLoading(false);
   }, [oddzialId]);
