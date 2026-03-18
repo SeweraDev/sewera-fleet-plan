@@ -113,6 +113,8 @@ export function useMojeKursyDzis() {
         nr_rej: f?.nr_rej || k.nr_rej_zewn || '',
         pojazd_typ: f?.typ || '',
         ladownosc_kg: f?.ladownosc_kg || 0,
+        oddzial_id: (k as any).oddzial_id,
+        typ_pojazdu: f?.typ || null,
         przystanki: kPrz.map(p => {
           const wz = wzMap.get(p.zlecenie_id || '');
           return {
