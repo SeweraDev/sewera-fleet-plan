@@ -4,7 +4,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/shared/ProtectedRoute";
-import { AppLayout } from "@/components/shared/AppLayout";
 import LoginPage from "@/pages/LoginPage";
 import UnauthorizedPage from "@/pages/UnauthorizedPage";
 import AdminUzytkownicy from "@/pages/admin/Uzytkownicy";
@@ -30,35 +29,35 @@ const App = () => (
           {/* Admin */}
           <Route path="/admin" element={
             <ProtectedRoute allowedRoles={['admin']}>
-              <AppLayout><AdminUzytkownicy /></AppLayout>
+              <AdminUzytkownicy />
             </ProtectedRoute>
           } />
 
           {/* Zarząd */}
           <Route path="/zarzad" element={
             <ProtectedRoute allowedRoles={['zarzad', 'admin']}>
-              <AppLayout><ZarzadDashboard /></AppLayout>
+              <ZarzadDashboard />
             </ProtectedRoute>
           } />
 
           {/* Dyspozytor */}
           <Route path="/dyspozytor" element={
             <ProtectedRoute allowedRoles={['dyspozytor', 'admin']}>
-              <AppLayout><DyspozytorDashboard /></AppLayout>
+              <DyspozytorDashboard />
             </ProtectedRoute>
           } />
 
           {/* Sprzedawca */}
           <Route path="/sprzedawca" element={
             <ProtectedRoute allowedRoles={['sprzedawca', 'admin']}>
-              <AppLayout><SprzedawcaDashboard /></AppLayout>
+              <SprzedawcaDashboard />
             </ProtectedRoute>
           } />
 
           {/* Kierowca */}
           <Route path="/kierowca" element={
             <ProtectedRoute allowedRoles={['kierowca']}>
-              <AppLayout><KierowcaMojaTrasa /></AppLayout>
+              <KierowcaMojaTrasa />
             </ProtectedRoute>
           } />
 
