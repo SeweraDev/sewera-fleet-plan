@@ -21,7 +21,7 @@ export type Database = {
           id: string
           ladownosc_kg: number
           nr_rej: string
-          objetosc_m3: number
+          objetosc_m3: number | null
           oddzial_id: number | null
           typ: string
         }
@@ -31,7 +31,7 @@ export type Database = {
           id?: string
           ladownosc_kg?: number
           nr_rej: string
-          objetosc_m3?: number
+          objetosc_m3?: number | null
           oddzial_id?: number | null
           typ?: string
         }
@@ -41,7 +41,7 @@ export type Database = {
           id?: string
           ladownosc_kg?: number
           nr_rej?: string
-          objetosc_m3?: number
+          objetosc_m3?: number | null
           oddzial_id?: number | null
           typ?: string
         }
