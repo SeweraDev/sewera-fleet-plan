@@ -329,10 +329,11 @@ export default function DyspozytorDashboard() {
 
           <NowyKursModal
             open={showModal}
-            onClose={() => setShowModal(false)}
+            onClose={() => { setShowModal(false); setPreSelectedZlId(null); }}
             oddzialId={oddzialId}
             dzien={dzien}
             onCreated={refetch}
+            preSelectedZlecenieId={preSelectedZlId}
           />
         </main>
       </div>
