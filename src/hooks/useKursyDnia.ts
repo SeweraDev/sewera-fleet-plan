@@ -48,7 +48,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
 
     // Get flota info for vehicles
     const flotaIds = (kursyData || []).map(k => (k as any).flota_id).filter(Boolean);
-    let flotaMap = new Map<string, { nr_rej: string; typ: string; ladownosc_kg: number; objetosc_m3: number | null }>();
+    let flotaMap = new Map<string, { nr_rej: string; typ: string; ladownosc_kg: number; objetosc_m3: number | null; max_palet: number | null }>();
     if (flotaIds.length > 0) {
       const { data: flotaData } = await supabase
         .from('flota')
