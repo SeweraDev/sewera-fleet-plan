@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface Pojazd {
@@ -6,37 +6,40 @@ export interface Pojazd {
   nr_rej: string;
   typ: string;
   ladownosc_kg: number;
-  objetosc_m3: number;
+  objetosc_m3: number | null;
+  max_palet: number | null;
+  oddzial_id: number | null;
+  aktywny: boolean;
 }
 
 export function useFlotaOddzialu(oddzialId: number | null) {
   const [flota, setFlota] = useState<Pojazd[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const refetch = useCallback(async () => {
     if (oddzialId == null) {
       setFlota([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const fetch = async () => {
-      const { data } = await supabase
-        .from('flota')
-        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3')
-        .eq('oddzial_id', oddzialId)
-        .eq('aktywny', true)
-        .order('typ')
-        .order('nr_rej');
-      setFlota((data || []).map(d => ({
-        ...d,
-        ladownosc_kg: Number(d.ladownosc_kg),
-        objetosc_m3: Number(d.objetosc_m3),
-      })));
-      setLoading(false);
-    };
-    fetch();
+    const { data } = await supabase
+      .from('flota')
+      .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet, oddzial_id, aktywny')
+      .eq('oddzial_id', oddzialId)
+      .eq('aktywny', true)
+      .order('typ')
+      .order('nr_rej');
+    setFlota((data || []).map(d => ({
+      ...d,
+      ladownosc_kg: Number(d.ladownosc_kg),
+      objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
+      max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
+    })));
+    setLoading(false);
   }, [oddzialId]);
 
-  return { flota, loading };
+  useEffect(() => { refetch(); }, [refetch]);
+
+  return { flota, loading, refetch };
 }
