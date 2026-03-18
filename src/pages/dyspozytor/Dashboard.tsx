@@ -25,7 +25,7 @@ import { useBlokady } from '@/hooks/useBlokady';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
-  { id: 'zlecenia', label: '📋 Zlecenia bez kursu' },
+  { id: 'zlecenia', label: '📋 Zlecenia' },
   { id: 'flota', label: '🔧 Flota' },
 ];
 
