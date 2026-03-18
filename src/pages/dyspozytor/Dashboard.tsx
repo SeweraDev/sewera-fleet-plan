@@ -57,7 +57,7 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'zakonczony', label: 'Zakończone' },
 ];
 
-function KursyTab({ oddzialId, dzien, dzienDo }: { oddzialId: number | null; dzien: string; dzienDo?: string }) {
+function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; onOpenModal: () => void }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
