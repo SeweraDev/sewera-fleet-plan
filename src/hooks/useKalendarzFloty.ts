@@ -9,15 +9,18 @@ export interface KursKalendarzDto {
   kierowca_id: string | null;
 }
 
-/** Returns next N business days (Mon–Fri) starting from today */
+/** Returns next N business days (Mon–Fri) starting from today, using local dates */
 export function getBusinessDays(count: number): string[] {
   const days: string[] = [];
   const d = new Date();
-  d.setHours(0, 0, 0, 0);
+  d.setHours(12, 0, 0, 0); // noon to avoid DST edge cases
   while (days.length < count) {
     const dow = d.getDay();
     if (dow >= 1 && dow <= 5) {
-      days.push(d.toISOString().split('T')[0]);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      days.push(`${yyyy}-${mm}-${dd}`);
     }
     d.setDate(d.getDate() + 1);
   }
