@@ -97,15 +97,16 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
 
         const { data: wzData } = await supabase
           .from('zlecenia_wz')
-          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3')
+          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet')
           .in('zlecenie_id', zlecenieIds);
         (wzData || []).forEach(w => {
-          const cur = wzMap.get(w.zlecenie_id) || { odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0 };
+          const cur = wzMap.get(w.zlecenie_id) || { odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0 };
           wzMap.set(w.zlecenie_id, {
             odbiorca: (w as any).odbiorca || cur.odbiorca,
             adres: (w as any).adres || cur.adres,
             masa_kg: cur.masa_kg + Number(w.masa_kg),
             objetosc_m3: cur.objetosc_m3 + Number(w.objetosc_m3),
+            ilosc_palet: cur.ilosc_palet + Number((w as any).ilosc_palet || 0),
           });
         });
       }
