@@ -23,9 +23,9 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
     const today = new Date().toISOString().split('T')[0];
     const { data: zlData } = await supabase
       .from('zlecenia')
-      .select('id, numer, dzien, preferowana_godzina, typ_pojazdu')
+      .select('id, numer, dzien, preferowana_godzina, typ_pojazdu, status')
       .eq('oddzial_id', oddzialId)
-      .eq('status', 'robocza')
+      .in('status', ['robocza', 'do_weryfikacji'])
       .gte('dzien', today);
 
     // Get those that already have kurs_przystanki
