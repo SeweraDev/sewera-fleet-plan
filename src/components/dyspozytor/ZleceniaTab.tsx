@@ -64,8 +64,8 @@ function WzDialog({ zlecenieId, numer, open, onClose }: { zlecenieId: string; nu
   );
 }
 
-export function ZleceniaTab({ oddzialId }: { oddzialId: number }) {
-  const { zlecenia, loading } = useZleceniaOddzialu(oddzialId);
+export function ZleceniaTab({ oddzialId, pastOnly = false }: { oddzialId: number; pastOnly?: boolean }) {
+  const { zlecenia, loading } = useZleceniaOddzialu(oddzialId, pastOnly);
   const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('all');
   const [selectedZl, setSelectedZl] = useState<{ id: string; numer: string } | null>(null);
 

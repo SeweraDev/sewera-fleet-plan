@@ -25,7 +25,7 @@ import { useBlokady } from '@/hooks/useBlokady';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
-  { id: 'zlecenia', label: '📋 Zlecenia' },
+  { id: 'historia', label: '📋 Historia zleceń' },
   { id: 'flota', label: '🔧 Flota' },
 ];
 
@@ -323,7 +323,7 @@ export default function DyspozytorDashboard() {
       <Topbar />
       <div className="flex flex-1">
         <PageSidebar
-          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.length } : s.id === 'zlecenia' ? { ...s, badge: zlBezKursu.length } : s)}
+          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.length } : s)}
           activeId={activeId}
           onSelect={setActiveId}
         />
@@ -379,7 +379,7 @@ export default function DyspozytorDashboard() {
                   onOpenModal={() => setShowModal(true)}
                 />
               )}
-              {activeId === 'zlecenia' && <ZleceniaTab oddzialId={oddzialId} />}
+              {activeId === 'historia' && <ZleceniaTab oddzialId={oddzialId} pastOnly />}
               {activeId === 'flota' && (
                 <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />
               )}
