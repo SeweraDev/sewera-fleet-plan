@@ -8,6 +8,7 @@ export interface ZlecenieBezKursuDto {
   preferowana_godzina: string | null;
   typ_pojazdu: string | null;
   suma_kg: number;
+  status: string;
 }
 
 export function useZleceniaBezKursu(oddzialId: number | null) {
@@ -22,9 +23,9 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
     const today = new Date().toISOString().split('T')[0];
     const { data: zlData } = await supabase
       .from('zlecenia')
-      .select('id, numer, dzien, preferowana_godzina, typ_pojazdu')
+      .select('id, numer, dzien, preferowana_godzina, typ_pojazdu, status')
       .eq('oddzial_id', oddzialId)
-      .eq('status', 'robocza')
+      .in('status', ['robocza', 'do_weryfikacji'])
       .gte('dzien', today);
 
     // Get those that already have kurs_przystanki
@@ -55,6 +56,7 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
       preferowana_godzina: z.preferowana_godzina,
       typ_pojazdu: z.typ_pojazdu,
       suma_kg: wzMap.get(z.id) || 0,
+      status: z.status,
     })));
     setLoading(false);
   }, [oddzialId]);

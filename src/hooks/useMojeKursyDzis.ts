@@ -11,6 +11,8 @@ export interface KursKierowcy {
   nr_rej: string;
   pojazd_typ: string;
   ladownosc_kg: number;
+  oddzial_id: number | null;
+  typ_pojazdu: string | null;
   przystanki: PrzystanekKierowcy[];
 }
 
@@ -52,7 +54,7 @@ export function useMojeKursyDzis() {
 
     const { data: kursyData } = await supabase
       .from('kursy')
-      .select('id, numer, status, ts_wyjazd, ts_powrot, nr_rej_zewn, flota_id')
+      .select('id, numer, status, ts_wyjazd, ts_powrot, nr_rej_zewn, flota_id, oddzial_id')
       .eq('kierowca_id', kierowcaId)
       .eq('dzien', today);
 
@@ -111,6 +113,8 @@ export function useMojeKursyDzis() {
         nr_rej: f?.nr_rej || k.nr_rej_zewn || '',
         pojazd_typ: f?.typ || '',
         ladownosc_kg: f?.ladownosc_kg || 0,
+        oddzial_id: (k as any).oddzial_id,
+        typ_pojazdu: f?.typ || null,
         przystanki: kPrz.map(p => {
           const wz = wzMap.get(p.zlecenie_id || '');
           return {

@@ -58,7 +58,7 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'zakonczony', label: 'Zakończone' },
 ];
 
-function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; onOpenModal: () => void }) {
+function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -81,6 +81,11 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: {
         <div className="flex items-center justify-between rounded-lg bg-accent/15 border border-accent/30 px-4 py-3">
           <span className="text-sm font-medium text-accent-foreground">
             ⚠️ {zlBezKursuCount} zleceń bez przypisanego kursu
+            {doWeryfikacjiCount > 0 && (
+              <span className="ml-2 text-orange-600 dark:text-orange-400">
+                (w tym 🚛 {doWeryfikacjiCount} domówień z trasy)
+              </span>
+            )}
           </span>
           <button
             onClick={onOpenModal}
@@ -390,6 +395,7 @@ export default function DyspozytorDashboard() {
                   dzien={dzien}
                   dzienDo={rangeMode ? dzienDo : undefined}
                   zlBezKursuCount={zlBezKursu.length}
+                  doWeryfikacjiCount={zlBezKursu.filter(z => z.status === 'do_weryfikacji').length}
                   onOpenModal={() => setShowModal(true)}
                 />
               )}
