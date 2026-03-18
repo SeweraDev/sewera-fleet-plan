@@ -395,6 +395,7 @@ export default function DyspozytorDashboard() {
                   dzien={dzien}
                   dzienDo={rangeMode ? dzienDo : undefined}
                   zlBezKursuCount={zlBezKursu.length}
+                  doWeryfikacjiCount={zlBezKursu.filter(z => z.status === 'do_weryfikacji').length}
                   onOpenModal={() => setShowModal(true)}
                 />
               )}
