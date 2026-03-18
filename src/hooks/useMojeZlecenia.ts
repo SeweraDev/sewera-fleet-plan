@@ -12,6 +12,7 @@ export interface MojeZlecenie {
   oddzial: string;
   liczba_wz: number;
   suma_kg: number;
+  suma_palet: number;
 }
 
 export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
