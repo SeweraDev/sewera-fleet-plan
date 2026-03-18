@@ -125,6 +125,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
           adres: wz?.adres || '',
           masa_kg: wz?.masa_kg || 0,
           objetosc_m3: wz?.objetosc_m3 || 0,
+          ilosc_palet: wz?.ilosc_palet || 0,
         };
       }));
     } else {
