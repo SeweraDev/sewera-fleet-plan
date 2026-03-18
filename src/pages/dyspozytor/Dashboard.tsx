@@ -174,10 +174,15 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: {
                           <TableCell className="text-xs">{p.adres}</TableCell>
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
                           <TableCell><StatusBadge status={p.prz_status} /></TableCell>
-                          <TableCell>
+                          <TableCell className="flex gap-1">
                             {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
                               <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id)} disabled={acting}>
                                 ✓ Dostarcz
+                              </Button>
+                            )}
+                            {p.zlecenie_id && (
+                              <Button size="sm" variant="ghost" onClick={() => setEditZlId(p.zlecenie_id)}>
+                                ✏️
                               </Button>
                             )}
                           </TableCell>
