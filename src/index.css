@@ -56,6 +56,13 @@
     --warning-foreground: 0 0% 100%;
     --info: 210 92% 55%;
     --info-foreground: 0 0% 100%;
+
+    /* Role badge colors */
+    --role-sprzedawca: 239 84% 67%;
+    --role-dyspozytor: 199 89% 48%;
+    --role-kierowca: 38 92% 50%;
+    --role-zarzad: 158 64% 52%;
+    --role-admin: 0 84% 60%;
   }
 }
 
