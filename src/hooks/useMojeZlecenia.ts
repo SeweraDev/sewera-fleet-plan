@@ -41,19 +41,19 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
 
     // Get WZ counts
     const ids = (zleceniaData || []).map(z => z.id);
-    let wzData: { zlecenie_id: string; masa_kg: number }[] = [];
+    let wzData: { zlecenie_id: string; masa_kg: number; ilosc_palet: number }[] = [];
     if (ids.length > 0) {
       const { data } = await supabase
         .from('zlecenia_wz')
-        .select('zlecenie_id, masa_kg')
+        .select('zlecenie_id, masa_kg, ilosc_palet')
         .in('zlecenie_id', ids);
-      wzData = data || [];
+      wzData = (data || []).map(d => ({ zlecenie_id: d.zlecenie_id, masa_kg: Number(d.masa_kg), ilosc_palet: Number((d as any).ilosc_palet || 0) }));
     }
 
-    const wzMap = new Map<string, { count: number; kg: number }>();
+    const wzMap = new Map<string, { count: number; kg: number; palet: number }>();
     wzData.forEach(wz => {
-      const cur = wzMap.get(wz.zlecenie_id) || { count: 0, kg: 0 };
-      wzMap.set(wz.zlecenie_id, { count: cur.count + 1, kg: cur.kg + Number(wz.masa_kg) });
+      const cur = wzMap.get(wz.zlecenie_id) || { count: 0, kg: 0, palet: 0 };
+      wzMap.set(wz.zlecenie_id, { count: cur.count + 1, kg: cur.kg + wz.masa_kg, palet: cur.palet + wz.ilosc_palet });
     });
 
     setZlecenia((zleceniaData || []).map(z => ({
