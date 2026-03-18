@@ -196,7 +196,7 @@ export function RaportyTab() {
                 paginatedZlecenia.map(z => (
                   <TableRow key={z.id}>
                     <TableCell className="text-sm font-medium">{z.numer}</TableCell>
-                    <TableCell><StatusBadge status={z.status} /></TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs">{z.status}</Badge></TableCell>
                     <TableCell className="text-sm">{z.dzien}</TableCell>
                     <TableCell className="text-sm">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell className="text-sm">{z.oddzial}</TableCell>
