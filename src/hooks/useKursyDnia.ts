@@ -68,6 +68,8 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
         kierowca_id: k.kierowca_id,
         nr_rej: f?.nr_rej || k.nr_rej_zewn || '',
         pojazd_typ: f?.typ || '',
+        ladownosc_kg: f?.ladownosc_kg || 0,
+        objetosc_m3: f?.objetosc_m3 ?? null,
       };
     });
     setKursy(mapped);
