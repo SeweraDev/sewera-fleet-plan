@@ -47,92 +47,132 @@ function CapacityBar({ used, total, unit }: { used: number; total: number; unit:
   );
 }
 
-function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: string }) {
-  const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien);
+type StatusFilter = 'all' | 'zaplanowany' | 'aktywny' | 'zakonczony';
+
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: 'Wszystkie' },
+  { key: 'zaplanowany', label: 'Zaplanowane' },
+  { key: 'aktywny', label: 'W trasie' },
+  { key: 'zakonczony', label: 'Zakończone' },
+];
+
+function KursyTab({ oddzialId, dzien, dzienDo }: { oddzialId: number | null; dzien: string; dzienDo?: string }) {
+  const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  const filtered = statusFilter === 'all' ? kursy : kursy.filter(k => k.status === statusFilter);
+  const counts = {
+    all: kursy.length,
+    zaplanowany: kursy.filter(k => k.status === 'zaplanowany').length,
+    aktywny: kursy.filter(k => k.status === 'aktywny').length,
+    zakonczony: kursy.filter(k => k.status === 'zakonczony').length,
+  };
 
   if (loading) return <p className="text-muted-foreground text-center py-8">Ładowanie kursów...</p>;
-  if (kursy.length === 0) return <Card><CardContent className="p-8 text-center text-muted-foreground">Brak kursów na wybrany dzień</CardContent></Card>;
 
   return (
     <div className="space-y-4">
-      {kursy.map(kurs => {
-        const kPrz = przystanki.filter(p => p.kurs_id === kurs.id);
-        const done = kPrz.filter(p => p.prz_status === 'dostarczone').length;
-        const usedKg = kPrz.reduce((s, p) => s + p.masa_kg, 0);
-        const usedM3 = kPrz.reduce((s, p) => s + p.objetosc_m3, 0);
-        const usedPal = kPrz.reduce((s, p) => s + p.ilosc_palet, 0);
-        return (
-          <Card key={kurs.id}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <span className="font-mono">{kurs.nr_rej || 'Brak pojazdu'}</span>
-                  <StatusBadge status={kurs.status} />
-                </CardTitle>
-                <div className="flex gap-1">
-                  {kurs.status === 'zaplanowany' && (
-                    <Button size="sm" onClick={() => handleStart(kurs.id)} disabled={acting}>▶ Wyjazd</Button>
-                  )}
-                  {kurs.status === 'aktywny' && (
-                    <Button size="sm" variant="secondary" onClick={() => handleStop(kurs.id)} disabled={acting}>⏹ Powrót</Button>
-                  )}
+      {/* Status filter pills */}
+      <div className="flex gap-2 flex-wrap">
+        {STATUS_FILTERS.map(f => (
+          <button
+            key={f.key}
+            onClick={() => setStatusFilter(f.key)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              statusFilter === f.key
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+          >
+            {f.label} ({counts[f.key]})
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card><CardContent className="p-8 text-center text-muted-foreground">
+          {kursy.length === 0 ? 'Brak kursów na wybrany dzień' : 'Brak kursów o wybranym statusie'}
+        </CardContent></Card>
+      ) : (
+        filtered.map(kurs => {
+          const kPrz = przystanki.filter(p => p.kurs_id === kurs.id);
+          const done = kPrz.filter(p => p.prz_status === 'dostarczone').length;
+          const usedKg = kPrz.reduce((s, p) => s + p.masa_kg, 0);
+          const usedM3 = kPrz.reduce((s, p) => s + p.objetosc_m3, 0);
+          const usedPal = kPrz.reduce((s, p) => s + p.ilosc_palet, 0);
+          return (
+            <Card key={kurs.id}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <span className="font-mono">{kurs.nr_rej || 'Brak pojazdu'}</span>
+                    <StatusBadge status={kurs.status} />
+                  </CardTitle>
+                  <div className="flex gap-1">
+                    {kurs.status === 'zaplanowany' && (
+                      <Button size="sm" onClick={() => handleStart(kurs.id)} disabled={acting}>▶ Wyjazd</Button>
+                    )}
+                    {kurs.status === 'aktywny' && (
+                      <Button size="sm" variant="secondary" onClick={() => handleStop(kurs.id)} disabled={acting}>⏹ Powrót</Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Kierowca: {kurs.kierowca_nazwa || '—'} · Rozładunki: {done}/{kPrz.length}
-              </p>
-              {kurs.ladownosc_kg > 0 && (
-                <div className="flex gap-4 mt-2">
-                  <CapacityBar used={usedKg} total={kurs.ladownosc_kg} unit="kg" />
-                  {kurs.objetosc_m3 != null && kurs.objetosc_m3 > 0 && (
-                    <CapacityBar used={usedM3} total={kurs.objetosc_m3} unit="m³" />
-                  )}
-                  {kurs.max_palet != null && kurs.max_palet > 0 && (
-                    <CapacityBar used={usedPal} total={kurs.max_palet} unit="pal" />
-                  )}
-                </div>
-              )}
-            </CardHeader>
-            {kPrz.length > 0 && (
-              <CardContent className="pt-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8">#</TableHead>
-                      <TableHead>Zlecenie</TableHead>
-                      <TableHead>Odbiorca</TableHead>
-                      <TableHead>Adres</TableHead>
-                      <TableHead className="text-right">Kg</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {kPrz.map(p => (
-                      <TableRow key={p.id}>
-                        <TableCell>{p.kolejnosc}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.zl_numer}</TableCell>
-                        <TableCell>{p.odbiorca}</TableCell>
-                        <TableCell className="text-xs">{p.adres}</TableCell>
-                        <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
-                        <TableCell><StatusBadge status={p.prz_status} /></TableCell>
-                        <TableCell>
-                          {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
-                            <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id)} disabled={acting}>
-                              ✓ Dostarcz
-                            </Button>
-                          )}
-                        </TableCell>
+                <p className="text-xs text-muted-foreground">
+                  Kierowca: {kurs.kierowca_nazwa || '—'} · Rozładunki: {done}/{kPrz.length}
+                </p>
+                {kurs.ladownosc_kg > 0 && (
+                  <div className="flex gap-4 mt-2">
+                    <CapacityBar used={usedKg} total={kurs.ladownosc_kg} unit="kg" />
+                    {kurs.objetosc_m3 != null && kurs.objetosc_m3 > 0 && (
+                      <CapacityBar used={usedM3} total={kurs.objetosc_m3} unit="m³" />
+                    )}
+                    {kurs.max_palet != null && kurs.max_palet > 0 && (
+                      <CapacityBar used={usedPal} total={kurs.max_palet} unit="pal" />
+                    )}
+                  </div>
+                )}
+              </CardHeader>
+              {kPrz.length > 0 && (
+                <CardContent className="pt-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8">#</TableHead>
+                        <TableHead>Zlecenie</TableHead>
+                        <TableHead>Odbiorca</TableHead>
+                        <TableHead>Adres</TableHead>
+                        <TableHead className="text-right">Kg</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            )}
-          </Card>
-        );
-      })}
+                    </TableHeader>
+                    <TableBody>
+                      {kPrz.map(p => (
+                        <TableRow key={p.id}>
+                          <TableCell>{p.kolejnosc}</TableCell>
+                          <TableCell className="font-mono text-xs">{p.zl_numer}</TableCell>
+                          <TableCell>{p.odbiorca}</TableCell>
+                          <TableCell className="text-xs">{p.adres}</TableCell>
+                          <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
+                          <TableCell><StatusBadge status={p.prz_status} /></TableCell>
+                          <TableCell>
+                            {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
+                              <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id)} disabled={acting}>
+                                ✓ Dostarcz
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              )}
+            </Card>
+          );
+        })
+      )}
     </div>
   );
 }
