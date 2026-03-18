@@ -54,7 +54,7 @@ export function useMojeKursyDzis() {
 
     const { data: kursyData } = await supabase
       .from('kursy')
-      .select('id, numer, status, ts_wyjazd, ts_powrot, nr_rej_zewn, flota_id')
+      .select('id, numer, status, ts_wyjazd, ts_powrot, nr_rej_zewn, flota_id, oddzial_id')
       .eq('kierowca_id', kierowcaId)
       .eq('dzien', today);
 
