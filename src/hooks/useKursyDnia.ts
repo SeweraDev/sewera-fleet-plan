@@ -86,7 +86,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
 
       const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
       let zlecMap = new Map<string, { numer: string }>();
-      let wzMap = new Map<string, { odbiorca: string; adres: string; masa_kg: number; objetosc_m3: number }>();
+      let wzMap = new Map<string, { odbiorca: string; adres: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number }>();
 
       if (zlecenieIds.length > 0) {
         const { data: zlData } = await supabase
