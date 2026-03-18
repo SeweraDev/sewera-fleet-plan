@@ -93,7 +93,9 @@ export type Database = {
           id: string
           kierowca: string | null
           ladownosc_kg: number | null
+          max_palet: number | null
           nr_rej: string
+          objetosc_m3: number | null
           oddzial_id: number | null
           tel: string | null
           typ: string
@@ -105,7 +107,9 @@ export type Database = {
           id?: string
           kierowca?: string | null
           ladownosc_kg?: number | null
+          max_palet?: number | null
           nr_rej: string
+          objetosc_m3?: number | null
           oddzial_id?: number | null
           tel?: string | null
           typ?: string
@@ -117,7 +121,9 @@ export type Database = {
           id?: string
           kierowca?: string | null
           ladownosc_kg?: number | null
+          max_palet?: number | null
           nr_rej?: string
+          objetosc_m3?: number | null
           oddzial_id?: number | null
           tel?: string | null
           typ?: string
