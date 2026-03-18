@@ -207,6 +207,11 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                                 ✏️
                               </Button>
                             )}
+                            {p.zlecenie_id && (
+                              <Button size="sm" variant="ghost" onClick={() => { setPrzepnijPrz(p); setPrzepnijKurs(kurs); }}>
+                                🔀
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
