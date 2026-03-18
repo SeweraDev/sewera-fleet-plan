@@ -14,6 +14,175 @@ export type Database = {
   }
   public: {
     Tables: {
+      flota: {
+        Row: {
+          aktywny: boolean
+          created_at: string
+          id: string
+          ladownosc_kg: number
+          nr_rej: string
+          objetosc_m3: number
+          oddzial_id: number | null
+          typ: string
+        }
+        Insert: {
+          aktywny?: boolean
+          created_at?: string
+          id?: string
+          ladownosc_kg?: number
+          nr_rej: string
+          objetosc_m3?: number
+          oddzial_id?: number | null
+          typ?: string
+        }
+        Update: {
+          aktywny?: boolean
+          created_at?: string
+          id?: string
+          ladownosc_kg?: number
+          nr_rej?: string
+          objetosc_m3?: number
+          oddzial_id?: number | null
+          typ?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flota_oddzial_id_fkey"
+            columns: ["oddzial_id"]
+            isOneToOne: false
+            referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flota_zewnetrzna: {
+        Row: {
+          created_at: string
+          firma: string
+          id: string
+          nr_rej: string
+          typ: string
+        }
+        Insert: {
+          created_at?: string
+          firma: string
+          id?: string
+          nr_rej: string
+          typ?: string
+        }
+        Update: {
+          created_at?: string
+          firma?: string
+          id?: string
+          nr_rej?: string
+          typ?: string
+        }
+        Relationships: []
+      }
+      kurs_przystanki: {
+        Row: {
+          created_at: string
+          id: string
+          kolejnosc: number
+          kurs_id: string
+          status: string
+          zlecenie_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kolejnosc?: number
+          kurs_id: string
+          status?: string
+          zlecenie_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kolejnosc?: number
+          kurs_id?: string
+          status?: string
+          zlecenie_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kurs_przystanki_kurs_id_fkey"
+            columns: ["kurs_id"]
+            isOneToOne: false
+            referencedRelation: "kursy"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kurs_przystanki_zlecenie_id_fkey"
+            columns: ["zlecenie_id"]
+            isOneToOne: false
+            referencedRelation: "zlecenia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kursy: {
+        Row: {
+          created_at: string
+          dzien: string
+          godzina_start: string | null
+          id: string
+          kierowca_id: string | null
+          kierowca_nazwa: string | null
+          nr_rej_zewn: string | null
+          oddzial_id: number | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          dzien?: string
+          godzina_start?: string | null
+          id?: string
+          kierowca_id?: string | null
+          kierowca_nazwa?: string | null
+          nr_rej_zewn?: string | null
+          oddzial_id?: number | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          dzien?: string
+          godzina_start?: string | null
+          id?: string
+          kierowca_id?: string | null
+          kierowca_nazwa?: string | null
+          nr_rej_zewn?: string | null
+          oddzial_id?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kursy_oddzial_id_fkey"
+            columns: ["oddzial_id"]
+            isOneToOne: false
+            referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      oddzialy: {
+        Row: {
+          created_at: string
+          id: number
+          nazwa: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          nazwa: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          nazwa?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           branch: string | null
@@ -52,6 +221,85 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      zlecenia: {
+        Row: {
+          created_at: string
+          dzien: string
+          id: string
+          kurs_id: string | null
+          numer: string
+          oddzial_id: number | null
+          preferowana_godzina: string | null
+          status: string
+          typ_pojazdu: string | null
+        }
+        Insert: {
+          created_at?: string
+          dzien?: string
+          id?: string
+          kurs_id?: string | null
+          numer: string
+          oddzial_id?: number | null
+          preferowana_godzina?: string | null
+          status?: string
+          typ_pojazdu?: string | null
+        }
+        Update: {
+          created_at?: string
+          dzien?: string
+          id?: string
+          kurs_id?: string | null
+          numer?: string
+          oddzial_id?: number | null
+          preferowana_godzina?: string | null
+          status?: string
+          typ_pojazdu?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zlecenia_oddzial_id_fkey"
+            columns: ["oddzial_id"]
+            isOneToOne: false
+            referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      zlecenia_wz: {
+        Row: {
+          created_at: string
+          id: string
+          masa_kg: number
+          numer_wz: string | null
+          objetosc_m3: number
+          zlecenie_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          masa_kg?: number
+          numer_wz?: string | null
+          objetosc_m3?: number
+          zlecenie_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          masa_kg?: number
+          numer_wz?: string | null
+          objetosc_m3?: number
+          zlecenie_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zlecenia_wz_zlecenie_id_fkey"
+            columns: ["zlecenie_id"]
+            isOneToOne: false
+            referencedRelation: "zlecenia"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
