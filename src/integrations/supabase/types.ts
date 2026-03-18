@@ -47,6 +47,7 @@ export type Database = {
           created_at: string
           id: string
           ladownosc_kg: number
+          max_palet: number | null
           nr_rej: string
           objetosc_m3: number | null
           oddzial_id: number | null
@@ -57,6 +58,7 @@ export type Database = {
           created_at?: string
           id?: string
           ladownosc_kg?: number
+          max_palet?: number | null
           nr_rej: string
           objetosc_m3?: number | null
           oddzial_id?: number | null
@@ -67,6 +69,7 @@ export type Database = {
           created_at?: string
           id?: string
           ladownosc_kg?: number
+          max_palet?: number | null
           nr_rej?: string
           objetosc_m3?: number | null
           oddzial_id?: number | null
