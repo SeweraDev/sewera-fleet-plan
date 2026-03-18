@@ -57,27 +57,50 @@ export type Database = {
       }
       flota_zewnetrzna: {
         Row: {
+          aktywny: boolean
           created_at: string
           firma: string
           id: string
+          kierowca: string | null
+          ladownosc_kg: number | null
           nr_rej: string
+          oddzial_id: number | null
+          tel: string | null
           typ: string
         }
         Insert: {
+          aktywny?: boolean
           created_at?: string
           firma: string
           id?: string
+          kierowca?: string | null
+          ladownosc_kg?: number | null
           nr_rej: string
+          oddzial_id?: number | null
+          tel?: string | null
           typ?: string
         }
         Update: {
+          aktywny?: boolean
           created_at?: string
           firma?: string
           id?: string
+          kierowca?: string | null
+          ladownosc_kg?: number | null
           nr_rej?: string
+          oddzial_id?: number | null
+          tel?: string | null
           typ?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "flota_zewnetrzna_oddzial_id_fkey"
+            columns: ["oddzial_id"]
+            isOneToOne: false
+            referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kierowcy: {
         Row: {
