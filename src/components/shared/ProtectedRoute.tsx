@@ -10,14 +10,15 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, roles, primaryRole, loading } = useAuth();
 
   if (loading) return <LoadingScreen />;
   if (!user || !profile) return <Navigate to="/login" replace />;
+  if (roles.length === 0) return <Navigate to="/login" replace />;
 
-  const hasRole = profile.roles.some((r) => allowedRoles.includes(r));
+  const hasRole = roles.some((r) => allowedRoles.includes(r as UserRole));
   if (!hasRole) {
-    const fallback = ROLE_ROUTES[profile.roles[0]] || '/login';
+    const fallback = ROLE_ROUTES[primaryRole as UserRole] || '/login';
     return <Navigate to={fallback} replace />;
   }
 
