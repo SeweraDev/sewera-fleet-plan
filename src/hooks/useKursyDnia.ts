@@ -12,6 +12,8 @@ export interface KursDto {
   kierowca_id: string | null;
   nr_rej: string;
   pojazd_typ: string;
+  ladownosc_kg: number;
+  objetosc_m3: number | null;
 }
 
 export interface PrzystanekDto {
