@@ -1,0 +1,1 @@
+ALTER TABLE public.zlecenia_wz ADD COLUMN IF NOT EXISTS ilosc_palet INT DEFAULT 0;

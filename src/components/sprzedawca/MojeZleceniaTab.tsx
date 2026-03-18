@@ -41,6 +41,7 @@ export function MojeZleceniaTab() {
               <TableHead>Typ</TableHead>
               <TableHead className="text-right">WZ</TableHead>
               <TableHead className="text-right">Kg</TableHead>
+              <TableHead className="text-right">Pal</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -53,6 +54,7 @@ export function MojeZleceniaTab() {
                 <TableCell>{z.typ_pojazdu || '—'}</TableCell>
                 <TableCell className="text-right">{z.liczba_wz}</TableCell>
                 <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
+                <TableCell className="text-right">{z.suma_palet > 0 ? `📦 ${z.suma_palet}` : '—'}</TableCell>
               </TableRow>
             ))}
           </TableBody>

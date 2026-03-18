@@ -27,6 +27,7 @@ export interface PrzystanekDto {
   adres: string;
   masa_kg: number;
   objetosc_m3: number;
+  ilosc_palet: number;
 }
 
 export function useKursyDnia(oddzialId: number | null, dzien: string) {
@@ -85,7 +86,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
 
       const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
       let zlecMap = new Map<string, { numer: string }>();
-      let wzMap = new Map<string, { odbiorca: string; adres: string; masa_kg: number; objetosc_m3: number }>();
+      let wzMap = new Map<string, { odbiorca: string; adres: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number }>();
 
       if (zlecenieIds.length > 0) {
         const { data: zlData } = await supabase
@@ -96,15 +97,16 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
 
         const { data: wzData } = await supabase
           .from('zlecenia_wz')
-          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3')
+          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet')
           .in('zlecenie_id', zlecenieIds);
         (wzData || []).forEach(w => {
-          const cur = wzMap.get(w.zlecenie_id) || { odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0 };
+          const cur = wzMap.get(w.zlecenie_id) || { odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0 };
           wzMap.set(w.zlecenie_id, {
             odbiorca: (w as any).odbiorca || cur.odbiorca,
             adres: (w as any).adres || cur.adres,
             masa_kg: cur.masa_kg + Number(w.masa_kg),
             objetosc_m3: cur.objetosc_m3 + Number(w.objetosc_m3),
+            ilosc_palet: cur.ilosc_palet + Number((w as any).ilosc_palet || 0),
           });
         });
       }
@@ -123,6 +125,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
           adres: wz?.adres || '',
           masa_kg: wz?.masa_kg || 0,
           objetosc_m3: wz?.objetosc_m3 || 0,
+          ilosc_palet: wz?.ilosc_palet || 0,
         };
       }));
     } else {

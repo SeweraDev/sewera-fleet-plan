@@ -387,6 +387,7 @@ export type Database = {
           adres: string | null
           created_at: string
           id: string
+          ilosc_palet: number | null
           masa_kg: number
           nr_zamowienia: string | null
           numer_wz: string | null
@@ -400,6 +401,7 @@ export type Database = {
           adres?: string | null
           created_at?: string
           id?: string
+          ilosc_palet?: number | null
           masa_kg?: number
           nr_zamowienia?: string | null
           numer_wz?: string | null
@@ -413,6 +415,7 @@ export type Database = {
           adres?: string | null
           created_at?: string
           id?: string
+          ilosc_palet?: number | null
           masa_kg?: number
           nr_zamowienia?: string | null
           numer_wz?: string | null

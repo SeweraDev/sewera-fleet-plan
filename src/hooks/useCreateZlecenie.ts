@@ -11,6 +11,7 @@ export interface WzInput {
   tel: string | null;
   masa_kg: number;
   objetosc_m3: number | null;
+  ilosc_palet: number;
   uwagi: string | null;
 }
 
@@ -32,7 +33,6 @@ export function useCreateZlecenie(onSuccess?: () => void) {
     setSubmitting(true);
     setError(null);
 
-    // Generate numer
     const numer = `ZL-${Date.now().toString(36).toUpperCase()}`;
 
     const { data: zlecenie, error: err1 } = await supabase
@@ -55,7 +55,6 @@ export function useCreateZlecenie(onSuccess?: () => void) {
       return;
     }
 
-    // Insert WZ
     if (input.wz_list.length > 0) {
       const wzRows = input.wz_list.map(wz => ({
         zlecenie_id: zlecenie.id,
@@ -65,6 +64,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
         tel: wz.tel,
         masa_kg: wz.masa_kg,
         objetosc_m3: wz.objetosc_m3 || 0,
+        ilosc_palet: wz.ilosc_palet || 0,
         uwagi: wz.uwagi,
         nr_zamowienia: wz.nr_zamowienia,
       }));

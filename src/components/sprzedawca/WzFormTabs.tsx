@@ -19,11 +19,9 @@ interface WzFormTabsProps {
 function parseWzText(text: string): Partial<WzInput> {
   const result: Partial<WzInput> = {};
 
-  // nr WZ
   const wzMatch = text.match(/(?:WZ[:\s]*)([\w\-\/]+)/i);
   if (wzMatch) result.numer_wz = wzMatch[1].trim();
 
-  // nr zamówienia
   const zamMatch = text.match(/(?:T7[\/:]\s*\S+|ZAM[:\s]*)([\w\-\/]+)/i);
   if (zamMatch) result.nr_zamowienia = zamMatch[1].trim();
   if (!zamMatch) {
@@ -31,25 +29,28 @@ function parseWzText(text: string): Partial<WzInput> {
     if (t7Match) result.nr_zamowienia = t7Match[1].trim();
   }
 
-  // masa
   const masaMatch = text.match(/([\d.,]+)\s*kg/i);
   if (masaMatch) result.masa_kg = parseFloat(masaMatch[1].replace(',', '.'));
 
-  // adres
   const adresMatch = text.match(/(?:ul\.|al\.|os\.)\s*(.+?)(?:\n|$)/i);
   if (adresMatch) result.adres = adresMatch[0].trim();
 
-  // odbiorca
   const odbMatch = text.match(/(?:Odbiorca|Nabywca)[:\s]+(.+?)(?:\n|$)/i);
   if (odbMatch) result.odbiorca = odbMatch[1].trim();
+
+  // palety
+  const paletMatch = text.match(/([\d]+)\s*(?:palet|pal|EUR)\b/i);
+  if (paletMatch) result.ilosc_palet = parseInt(paletMatch[1], 10);
 
   return result;
 }
 
+const EMPTY_WZ: WzInput = {
+  numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, uwagi: '',
+};
+
 function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
-  const addWz = () => setWzList([...wzList, {
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, uwagi: '',
-  }]);
+  const addWz = () => setWzList([...wzList, { ...EMPTY_WZ }]);
 
   const updateWz = (idx: number, field: keyof WzInput, value: string | number) => {
     const copy = [...wzList];
@@ -80,6 +81,7 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
             <div><Label className="text-xs">Telefon</Label><Input className="h-8 text-sm" value={wz.tel || ''} onChange={e => updateWz(idx, 'tel', e.target.value)} /></div>
             <div><Label className="text-xs">Masa (kg) *</Label><Input className="h-8 text-sm" type="number" value={wz.masa_kg || ''} onChange={e => updateWz(idx, 'masa_kg', Number(e.target.value))} /></div>
             <div><Label className="text-xs">Objętość (m³)</Label><Input className="h-8 text-sm" type="number" value={wz.objetosc_m3 || ''} onChange={e => updateWz(idx, 'objetosc_m3', Number(e.target.value))} /></div>
+            <div><Label className="text-xs">Palety (szt)</Label><Input className="h-8 text-sm" type="number" min={0} placeholder="0" value={wz.ilosc_palet || ''} onChange={e => updateWz(idx, 'ilosc_palet', Number(e.target.value))} /></div>
             <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={wz.uwagi || ''} onChange={e => updateWz(idx, 'uwagi', e.target.value)} /></div>
           </div>
         </Card>
@@ -99,16 +101,7 @@ function WzOcrTab() {
         className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
         onClick={() => fileRef.current?.click()}
       >
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={e => {
-            const f = e.target.files?.[0];
-            if (f) setFileName(f.name);
-          }}
-        />
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setFileName(f.name); }} />
         <p className="text-sm font-medium text-muted-foreground">📷 Wgraj zdjęcie WZ</p>
       </div>
       {fileName && (
@@ -135,9 +128,9 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
       tel: '',
       masa_kg: parsed.masa_kg || 0,
       objetosc_m3: 0,
+      ilosc_palet: parsed.ilosc_palet || 0,
       uwagi: '',
     };
-    // Replace first empty WZ or append
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -150,7 +143,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
     <div className="space-y-3">
       <Textarea
         className="min-h-[120px]"
-        placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres"
+        placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres, palety"
         value={text}
         onChange={e => setText(e.target.value)}
       />
@@ -171,17 +164,9 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
           <TabsTrigger value="reczne" className="flex-1 text-xs">✏️ Ręcznie</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="ocr">
-          <WzOcrTab />
-        </TabsContent>
-
-        <TabsContent value="paste">
-          <WzPasteTab wzList={wzList} setWzList={setWzList} />
-        </TabsContent>
-
-        <TabsContent value="reczne">
-          <WzManualForm wzList={wzList} setWzList={setWzList} />
-        </TabsContent>
+        <TabsContent value="ocr"><WzOcrTab /></TabsContent>
+        <TabsContent value="paste"><WzPasteTab wzList={wzList} setWzList={setWzList} /></TabsContent>
+        <TabsContent value="reczne"><WzManualForm wzList={wzList} setWzList={setWzList} /></TabsContent>
       </Tabs>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
