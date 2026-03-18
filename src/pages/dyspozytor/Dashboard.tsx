@@ -354,7 +354,7 @@ export default function DyspozytorDashboard() {
             <Card><CardContent className="p-8 text-center text-muted-foreground">Wybierz oddział aby wyświetlić dane</CardContent></Card>
           ) : (
             <>
-              {activeId === 'kursy' && <KursyTab oddzialId={oddzialId} dzien={dzien} />}
+              {activeId === 'kursy' && <KursyTab oddzialId={oddzialId} dzien={dzien} dzienDo={rangeMode ? dzienDo : undefined} />}
               {activeId === 'zlecenia' && (
                 <div className="space-y-2">
                   <h2 className="text-lg font-semibold text-foreground">Zlecenia bez kursu</h2>
