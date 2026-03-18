@@ -31,7 +31,7 @@ import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
-  { id: 'historia', label: '📋 Historia zleceń' },
+  { id: 'zlecenia', label: '📋 Zlecenia' },
   { id: 'flota', label: '🔧 Flota' },
 ];
 
