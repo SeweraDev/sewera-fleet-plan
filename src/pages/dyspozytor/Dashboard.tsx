@@ -335,7 +335,7 @@ export default function DyspozytorDashboard() {
                 </div>
               )}
               {activeId === 'flota' && (
-                <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} />
+                <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />
               )}
             </>
           )}
