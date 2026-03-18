@@ -102,9 +102,9 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
 }
 
 function NowyKursModal({ 
-  open, onClose, oddzialId, dzien, onCreated 
+  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId 
 }: { 
-  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void;
+  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null;
 }) {
   const { kierowcy } = useKierowcyOddzialu(oddzialId);
   const { flota } = useFlotaOddzialu(oddzialId);
@@ -114,6 +114,17 @@ function NowyKursModal({
   const [kierowcaId, setKierowcaId] = useState<string>('');
   const [flotaId, setFlotaId] = useState<string>('');
   const [selectedZl, setSelectedZl] = useState<Set<string>>(new Set());
+
+  // Pre-select zlecenie when modal opens with a specific one
+  useEffect(() => {
+    if (open && preSelectedZlecenieId) {
+      setSelectedZl(new Set([preSelectedZlecenieId]));
+    } else if (!open) {
+      setSelectedZl(new Set());
+      setKierowcaId('');
+      setFlotaId('');
+    }
+  }, [open, preSelectedZlecenieId]);
 
   const toggleZl = (id: string) => {
     const s = new Set(selectedZl);
@@ -205,6 +216,7 @@ export default function DyspozytorDashboard() {
     if (match) setOddzialId(match.id);
   }, [profile, oddzialy, oddzialId]);
   const [showModal, setShowModal] = useState(false);
+  const [preSelectedZlId, setPreSelectedZlId] = useState<string | null>(null);
   const { flota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
@@ -260,6 +272,7 @@ export default function DyspozytorDashboard() {
                           <TableHead>Typ</TableHead>
                           <TableHead>Godzina</TableHead>
                           <TableHead className="text-right">Kg</TableHead>
+                          <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -270,6 +283,11 @@ export default function DyspozytorDashboard() {
                             <TableCell>{z.typ_pojazdu || '—'}</TableCell>
                             <TableCell>{z.preferowana_godzina || '—'}</TableCell>
                             <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => { setPreSelectedZlId(z.id); setShowModal(true); }}>
+                                + Utwórz kurs
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -311,10 +329,11 @@ export default function DyspozytorDashboard() {
 
           <NowyKursModal
             open={showModal}
-            onClose={() => setShowModal(false)}
+            onClose={() => { setShowModal(false); setPreSelectedZlId(null); }}
             oddzialId={oddzialId}
             dzien={dzien}
             onCreated={refetch}
+            preSelectedZlecenieId={preSelectedZlId}
           />
         </main>
       </div>
