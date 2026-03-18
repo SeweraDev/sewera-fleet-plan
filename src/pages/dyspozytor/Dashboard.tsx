@@ -196,6 +196,13 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: {
           );
         })
       )}
+
+      <EdytujZlecenieModal
+        zlecenieId={editZlId}
+        open={!!editZlId}
+        onClose={() => setEditZlId(null)}
+        onSaved={refetch}
+      />
     </div>
   );
 }
