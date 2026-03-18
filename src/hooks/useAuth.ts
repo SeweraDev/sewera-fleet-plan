@@ -86,5 +86,8 @@ export function useAuth() {
     navigate('/login');
   }, [navigate]);
 
-  return { user, profile, loading, signIn, signOut };
+  const roles = profile?.roles ?? [];
+  const primaryRole = roles[0] ?? '';
+
+  return { user, profile, roles, primaryRole, loading, signIn, signOut };
 }

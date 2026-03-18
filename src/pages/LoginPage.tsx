@@ -77,6 +77,11 @@ export default function LoginPage() {
           {error && (
             <p className="text-sm text-destructive text-center">{error}</p>
           )}
+          {noRoles && (
+            <p className="text-sm text-destructive text-center">
+              Brak uprawnień — skontaktuj się z administratorem
+            </p>
+          )}
         </form>
       </div>
     </div>
