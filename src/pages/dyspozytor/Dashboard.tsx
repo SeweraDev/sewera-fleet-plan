@@ -21,6 +21,7 @@ import { useCreateKurs } from '@/hooks/useCreateKurs';
 import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
 import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
+import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { useBlokady } from '@/hooks/useBlokady';
 
 const SIDEBAR_ITEMS = [
@@ -61,6 +62,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [editZlId, setEditZlId] = useState<string | null>(null);
 
   const filtered = statusFilter === 'all' ? kursy : kursy.filter(k => k.status === statusFilter);
   const counts = {
@@ -172,10 +174,15 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: {
                           <TableCell className="text-xs">{p.adres}</TableCell>
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
                           <TableCell><StatusBadge status={p.prz_status} /></TableCell>
-                          <TableCell>
+                          <TableCell className="flex gap-1">
                             {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
                               <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id)} disabled={acting}>
                                 ✓ Dostarcz
+                              </Button>
+                            )}
+                            {p.zlecenie_id && (
+                              <Button size="sm" variant="ghost" onClick={() => setEditZlId(p.zlecenie_id)}>
+                                ✏️
                               </Button>
                             )}
                           </TableCell>
@@ -189,6 +196,13 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: {
           );
         })
       )}
+
+      <EdytujZlecenieModal
+        zlecenieId={editZlId}
+        open={!!editZlId}
+        onClose={() => setEditZlId(null)}
+        onSaved={refetch}
+      />
     </div>
   );
 }
