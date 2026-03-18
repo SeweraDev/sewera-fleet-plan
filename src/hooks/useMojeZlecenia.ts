@@ -66,6 +66,7 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
       oddzial: (z.oddzialy as any)?.nazwa || '',
       liczba_wz: wzMap.get(z.id)?.count || 0,
       suma_kg: wzMap.get(z.id)?.kg || 0,
+      suma_palet: wzMap.get(z.id)?.palet || 0,
     })));
     setLoading(false);
   }, [user, statusFilter]);

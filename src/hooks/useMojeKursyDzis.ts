@@ -123,6 +123,7 @@ export function useMojeKursyDzis() {
             masa_kg: wz?.masa_kg || 0,
             nr_wz: wz?.nr_wz || '',
             uwagi: wz?.uwagi || '',
+            ilosc_palet: wz?.ilosc_palet || 0,
           };
         }),
       };
