@@ -40,11 +40,18 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
     if (oddzialId == null) { setKursy([]); setPrzystanki([]); setLoading(false); return; }
     setLoading(true);
 
-    const { data: kursyData } = await supabase
+    let query = supabase
       .from('kursy')
       .select('id, numer, status, godzina_start, nr_rej_zewn, kierowca_nazwa, kierowca_id, ts_wyjazd, ts_powrot, flota_id')
-      .eq('oddzial_id', oddzialId)
-      .eq('dzien', dzien);
+      .eq('oddzial_id', oddzialId);
+
+    if (dzienDo && dzienDo !== dzien) {
+      query = query.gte('dzien', dzien).lte('dzien', dzienDo);
+    } else {
+      query = query.eq('dzien', dzien);
+    }
+
+    const { data: kursyData } = await query;
 
     // Get flota info for vehicles
     const flotaIds = (kursyData || []).map(k => (k as any).flota_id).filter(Boolean);
