@@ -14,6 +14,7 @@ import { useKierowcyStatusDnia, type KierowcaStatusDto } from '@/hooks/useKierow
 import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
 import { useKalendarzFloty, type KursKalendarzDto } from '@/hooks/useKalendarzFloty';
 import { useBlokady } from '@/hooks/useBlokady';
+import { useFlotaZewnetrzna, type PojazdZewnetrzny } from '@/hooks/useFlotaZewnetrzna';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
@@ -30,7 +31,7 @@ const TYPY_POJAZDOW = [
 
 const UPRAWNIENIA = ['B', 'C', 'C_HDS'];
 
-// ── Calendar helpers (unchanged) ──
+// ── Calendar helpers ──
 
 function formatDayHeader(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -78,7 +79,6 @@ function PojazdModal({
   const [aktywny, setAktywny] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Reset on open
   useState(() => {});
   if (open && pojazd && nr_rej === '' && !saving) {
     setNrRej(pojazd.nr_rej);
@@ -156,6 +156,120 @@ function PojazdModal({
           <div className="flex items-center gap-2">
             <Switch checked={aktywny} onCheckedChange={setAktywny} />
             <Label className="text-xs">Aktywny</Label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>Anuluj</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? 'Zapisywanie...' : 'Zapisz'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Zewnętrzny Modal ──
+
+function ZewnetrznyModal({
+  open, onClose, pojazd, oddzialId, oddzialy, onSaved,
+}: {
+  open: boolean; onClose: () => void; pojazd: PojazdZewnetrzny | null; oddzialId: number | null;
+  oddzialy: { id: number; nazwa: string }[]; onSaved: () => void;
+}) {
+  const isEdit = !!pojazd;
+  const [nr_rej, setNrRej] = useState('');
+  const [typ, setTyp] = useState('');
+  const [oddId, setOddId] = useState('');
+  const [ladownosc_kg, setLadownosc] = useState<number | ''>('');
+  const [max_palet, setMaxPalet] = useState<number | ''>('');
+  const [objetosc_m3, setObjetosc] = useState<number | ''>('');
+  const [firma, setFirma] = useState('');
+  const [kierowca, setKierowca] = useState('');
+  const [tel, setTel] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  if (open && pojazd && nr_rej === '' && !saving) {
+    setNrRej(pojazd.nr_rej);
+    setTyp(pojazd.typ);
+    setOddId(String(pojazd.oddzial_id || oddzialId || ''));
+    setLadownosc(pojazd.ladownosc_kg ?? '');
+    setMaxPalet(pojazd.max_palet ?? '');
+    setObjetosc(pojazd.objetosc_m3 ?? '');
+    setFirma(pojazd.firma || '');
+    setKierowca(pojazd.kierowca || '');
+    setTel(pojazd.tel || '');
+  }
+  if (open && !pojazd && nr_rej === '' && typ === '' && !saving) {
+    setOddId(String(oddzialId || ''));
+  }
+
+  const handleClose = () => {
+    setNrRej(''); setTyp(''); setOddId(''); setLadownosc(''); setMaxPalet(''); setObjetosc('');
+    setFirma(''); setKierowca(''); setTel('');
+    onClose();
+  };
+
+  const handleSave = async () => {
+    if (!nr_rej || !typ) { toast.error('Uzupełnij wymagane pola'); return; }
+    setSaving(true);
+    const row = {
+      nr_rej: nr_rej.toUpperCase(),
+      typ,
+      oddzial_id: oddId ? Number(oddId) : null,
+      ladownosc_kg: ladownosc_kg === '' ? null : Number(ladownosc_kg),
+      max_palet: max_palet === '' ? null : Number(max_palet),
+      objetosc_m3: objetosc_m3 === '' ? null : Number(objetosc_m3),
+      firma: firma || '',
+      kierowca: kierowca || null,
+      tel: tel || null,
+    };
+    let err;
+    if (isEdit) {
+      const { error } = await supabase.from('flota_zewnetrzna').update(row).eq('id', pojazd!.id);
+      err = error;
+    } else {
+      const { error } = await supabase.from('flota_zewnetrzna').insert({ ...row, aktywny: true });
+      err = error;
+    }
+    setSaving(false);
+    if (err) { toast.error(err.message); return; }
+    toast.success(isEdit ? 'Pojazd zewnętrzny zaktualizowany' : 'Pojazd zewnętrzny dodany');
+    handleClose();
+    onSaved();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={() => handleClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edytuj zewnętrznego' : 'Dodaj zewnętrznego'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs">Nr rejestracyjny *</Label><Input className="h-8 uppercase" value={nr_rej} onChange={e => setNrRej(e.target.value.toUpperCase())} /></div>
+            <div>
+              <Label className="text-xs">Typ pojazdu *</Label>
+              <Select value={typ} onValueChange={setTyp}>
+                <SelectTrigger className="h-8"><SelectValue placeholder="Wybierz typ" /></SelectTrigger>
+                <SelectContent>{TYPY_POJAZDOW.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label className="text-xs">Ładowność kg *</Label><Input className="h-8" type="number" value={ladownosc_kg} onChange={e => setLadownosc(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+            <div><Label className="text-xs">Max palet</Label><Input className="h-8" type="number" value={max_palet} onChange={e => setMaxPalet(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+            <div><Label className="text-xs">Objętość m³</Label><Input className="h-8" type="number" value={objetosc_m3} onChange={e => setObjetosc(e.target.value === '' ? '' : Number(e.target.value))} /></div>
+          </div>
+          <div><Label className="text-xs">Firma</Label><Input className="h-8" value={firma} onChange={e => setFirma(e.target.value)} /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs">Kierowca</Label><Input className="h-8" value={kierowca} onChange={e => setKierowca(e.target.value)} /></div>
+            <div><Label className="text-xs">Telefon kierowcy</Label><Input className="h-8" value={tel} onChange={e => setTel(e.target.value)} /></div>
+          </div>
+          <div>
+            <Label className="text-xs">Oddział</Label>
+            <Select value={oddId} onValueChange={setOddId}>
+              <SelectTrigger className="h-8"><SelectValue placeholder="Wybierz oddział" /></SelectTrigger>
+              <SelectContent>{oddzialy.map(o => <SelectItem key={o.id} value={String(o.id)}>{o.nazwa}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>
@@ -262,7 +376,7 @@ function KierowcaModal({
   );
 }
 
-// ── Calendar Tab (unchanged logic) ──
+// ── Calendar Tab ──
 
 function KalendarzTab({
   flota, kierowcy, kursy, businessDays, loading, isBlocked, onToggle,
@@ -351,12 +465,18 @@ export function FlotaSection({
   const { kierowcy: kierowcyCrud, refetch: refetchKierowcy } = useKierowcyOddzialu(oddzialId);
   const { kursy, businessDays, loading: loadingKalendarz } = useKalendarzFloty(oddzialId);
   const { isBlocked, toggleBlokada } = useBlokady(oddzialId, businessDays);
+  const { flota: flotaZewn, loading: loadingZewn, refetch: refetchZewn } = useFlotaZewnetrzna(oddzialId);
   const oddzialNazwa = oddzialy.find(o => o.id === oddzialId)?.nazwa || '';
 
   // Pojazd CRUD state
   const [pojazdModal, setPojazdModal] = useState(false);
   const [editPojazd, setEditPojazd] = useState<Pojazd | null>(null);
   const [deletePojazd, setDeletePojazd] = useState<Pojazd | null>(null);
+
+  // Zewnętrzny CRUD state
+  const [zewnModal, setZewnModal] = useState(false);
+  const [editZewn, setEditZewn] = useState<PojazdZewnetrzny | null>(null);
+  const [deleteZewn, setDeleteZewn] = useState<PojazdZewnetrzny | null>(null);
 
   // Kierowca CRUD state
   const [kierowcaModal, setKierowcaModal] = useState(false);
@@ -371,6 +491,15 @@ export function FlotaSection({
     onFlotaRefresh();
   };
 
+  const handleDeleteZewn = async () => {
+    if (!deleteZewn) return;
+    const { error } = await supabase.from('flota_zewnetrzna').delete().eq('id', deleteZewn.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Pojazd zewnętrzny usunięty');
+    setDeleteZewn(null);
+    refetchZewn();
+  };
+
   const handleDeleteKierowca = async () => {
     if (!deleteKierowca) return;
     await supabase.from('kierowcy').update({ aktywny: false }).eq('id', deleteKierowca.id);
@@ -383,16 +512,17 @@ export function FlotaSection({
     <>
       <Tabs defaultValue="pojazdy">
         <TabsList>
-          <TabsTrigger value="pojazdy">🚛 Pojazdy</TabsTrigger>
+          <TabsTrigger value="pojazdy">🚛 Pojazdy własne</TabsTrigger>
+          <TabsTrigger value="zewnetrzni">🚚 Zewnętrzni</TabsTrigger>
           <TabsTrigger value="kierowcy">👤 Kierowcy</TabsTrigger>
           <TabsTrigger value="kalendarz">📅 Kalendarz</TabsTrigger>
         </TabsList>
 
-        {/* ── Pojazdy Tab ── */}
+        {/* ── Pojazdy własne Tab ── */}
         <TabsContent value="pojazdy" className="mt-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">🚛 Flota — {oddzialNazwa}</h2>
+              <h2 className="text-lg font-semibold text-foreground">🚛 Flota własna — {oddzialNazwa}</h2>
               <Button size="sm" onClick={() => { setEditPojazd(null); setPojazdModal(true); }}>+ Dodaj pojazd</Button>
             </div>
             {flota.length === 0 ? (
@@ -427,6 +557,59 @@ export function FlotaSection({
                   ))}
                 </TableBody>
               </Table>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── Zewnętrzni Tab ── */}
+        <TabsContent value="zewnetrzni" className="mt-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">🚚 Zewnętrzni — {oddzialNazwa}</h2>
+              <Button size="sm" onClick={() => { setEditZewn(null); setZewnModal(true); }}>+ Dodaj zewnętrznego</Button>
+            </div>
+            {loadingZewn ? (
+              <p className="text-muted-foreground text-center py-4">Ładowanie...</p>
+            ) : flotaZewn.length === 0 ? (
+              <Card><CardContent className="p-6 text-center text-muted-foreground">Brak pojazdów zewnętrznych</CardContent></Card>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nr rej.</TableHead>
+                      <TableHead>Typ</TableHead>
+                      <TableHead className="text-right">Ładowność kg</TableHead>
+                      <TableHead className="text-right">Max palet</TableHead>
+                      <TableHead className="text-right">m³</TableHead>
+                      <TableHead>Firma</TableHead>
+                      <TableHead>Kierowca</TableHead>
+                      <TableHead>Telefon</TableHead>
+                      <TableHead className="w-24"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {flotaZewn.map(f => (
+                      <TableRow key={f.id}>
+                        <TableCell className="font-mono">{f.nr_rej}</TableCell>
+                        <TableCell>{f.typ}</TableCell>
+                        <TableCell className="text-right">{f.ladownosc_kg ?? '—'}</TableCell>
+                        <TableCell className="text-right">{f.max_palet ?? '—'}</TableCell>
+                        <TableCell className="text-right">{f.objetosc_m3 ?? '—'}</TableCell>
+                        <TableCell>{f.firma || '—'}</TableCell>
+                        <TableCell>{f.kierowca || '—'}</TableCell>
+                        <TableCell>{f.tel || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setEditZewn(f); setZewnModal(true); }}>✏️</Button>
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => setDeleteZewn(f)}>🗑</Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
         </TabsContent>
@@ -500,6 +683,11 @@ export function FlotaSection({
         pojazd={editPojazd} oddzialId={oddzialId} oddzialy={oddzialy}
         onSaved={onFlotaRefresh}
       />
+      <ZewnetrznyModal
+        open={zewnModal} onClose={() => { setZewnModal(false); setEditZewn(null); }}
+        pojazd={editZewn} oddzialId={oddzialId} oddzialy={oddzialy}
+        onSaved={refetchZewn}
+      />
       <KierowcaModal
         open={kierowcaModal} onClose={() => { setKierowcaModal(false); setEditKierowca(null); }}
         kierowca={editKierowca} oddzialId={oddzialId} oddzialy={oddzialy}
@@ -509,6 +697,11 @@ export function FlotaSection({
         open={!!deletePojazd} onOpenChange={() => setDeletePojazd(null)}
         title="Dezaktywuj pojazd" description={`Czy na pewno chcesz dezaktywować pojazd ${deletePojazd?.nr_rej}?`}
         onConfirm={handleDeletePojazd} confirmLabel="Dezaktywuj" destructive
+      />
+      <ConfirmDialog
+        open={!!deleteZewn} onOpenChange={() => setDeleteZewn(null)}
+        title="Usuń pojazd zewnętrzny" description={`Czy na pewno chcesz usunąć pojazd ${deleteZewn?.nr_rej} (${deleteZewn?.firma})?`}
+        onConfirm={handleDeleteZewn} confirmLabel="Usuń" destructive
       />
       <ConfirmDialog
         open={!!deleteKierowca} onOpenChange={() => setDeleteKierowca(null)}
