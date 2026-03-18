@@ -23,7 +23,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [dzien, setDzien] = useState('');
   const [godzina, setGodzina] = useState('');
   const [wzList, setWzList] = useState<WzInput[]>([{
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, uwagi: '',
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, uwagi: '',
   }]);
 
   const { oddzialy, loading: loadingOddzialy } = useOddzialy();
