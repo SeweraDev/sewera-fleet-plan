@@ -696,8 +696,8 @@ export function FlotaSection({
 
         <TabsContent value="kalendarz" className="mt-4">
           <KalendarzTab
-            flota={flota} kierowcy={kierowcyStatus} kursy={kursy}
-            businessDays={businessDays} loading={loadingKalendarz || loadingKierowcy}
+            flota={flota} kierowcy={kierowcyStatus} flotaZewn={flotaZewn} kursy={kursy}
+            businessDays={businessDays} loading={loadingKalendarz || loadingKierowcy || loadingZewn}
             isBlocked={isBlocked} onToggle={toggleBlokada}
           />
         </TabsContent>
