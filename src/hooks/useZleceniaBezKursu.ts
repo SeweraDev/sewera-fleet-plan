@@ -19,11 +19,13 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
     setLoading(true);
 
     // Get zlecenia robocze for this oddzial
+    const today = new Date().toISOString().split('T')[0];
     const { data: zlData } = await supabase
       .from('zlecenia')
       .select('id, numer, dzien, preferowana_godzina, typ_pojazdu')
       .eq('oddzial_id', oddzialId)
-      .eq('status', 'robocza');
+      .eq('status', 'robocza')
+      .gte('dzien', today);
 
     // Get those that already have kurs_przystanki
     const { data: przData } = await supabase

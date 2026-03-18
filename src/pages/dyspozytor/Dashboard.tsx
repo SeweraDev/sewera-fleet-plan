@@ -102,9 +102,9 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
 }
 
 function NowyKursModal({ 
-  open, onClose, oddzialId, dzien, onCreated 
+  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId 
 }: { 
-  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void;
+  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null;
 }) {
   const { kierowcy } = useKierowcyOddzialu(oddzialId);
   const { flota } = useFlotaOddzialu(oddzialId);
@@ -114,6 +114,17 @@ function NowyKursModal({
   const [kierowcaId, setKierowcaId] = useState<string>('');
   const [flotaId, setFlotaId] = useState<string>('');
   const [selectedZl, setSelectedZl] = useState<Set<string>>(new Set());
+
+  // Pre-select zlecenie when modal opens with a specific one
+  useEffect(() => {
+    if (open && preSelectedZlecenieId) {
+      setSelectedZl(new Set([preSelectedZlecenieId]));
+    } else if (!open) {
+      setSelectedZl(new Set());
+      setKierowcaId('');
+      setFlotaId('');
+    }
+  }, [open, preSelectedZlecenieId]);
 
   const toggleZl = (id: string) => {
     const s = new Set(selectedZl);
