@@ -129,7 +129,8 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <span className="font-mono">{kurs.nr_rej || 'Brak pojazdu'}</span>
+                    <Badge variant="outline" className="font-mono">{kurs.nr_rej || 'Brak pojazdu'}</Badge>
+                    {kurs.pojazd_typ && <span className="text-muted-foreground text-xs">· {kurs.pojazd_typ}</span>}
                     <StatusBadge status={kurs.status} />
                   </CardTitle>
                   <div className="flex gap-1">
@@ -142,7 +143,14 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Kierowca: {kurs.kierowca_nazwa || '—'} · Rozładunki: {done}/{kPrz.length}
+                  Kierowca: {kurs.kierowca_nazwa || '— (nieprzypisany)'}
+                  {kurs.kierowca_tel && (
+                    <> · 📞 <a href={`tel:${kurs.kierowca_tel}`} className="text-primary hover:underline">{kurs.kierowca_tel}</a></>
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Rozładunki: {done}/{kPrz.length} · ⚖️ {Math.round(usedKg)}/{Math.round(kurs.ladownosc_kg)} kg
+                  {kurs.max_palet != null && <> · 📦 {usedPal}/{kurs.max_palet} pal</>}
                 </p>
                 {kurs.ladownosc_kg > 0 && (
                   <div className="flex gap-4 mt-2">
