@@ -21,6 +21,7 @@ import { useCreateKurs } from '@/hooks/useCreateKurs';
 import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
 import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
+import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { useBlokady } from '@/hooks/useBlokady';
 
 const SIDEBAR_ITEMS = [
