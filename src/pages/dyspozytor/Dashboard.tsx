@@ -62,7 +62,6 @@ function KursyTab({ oddzialId, dzien }: { oddzialId: number | null; dzien: strin
         const usedKg = kPrz.reduce((s, p) => s + p.masa_kg, 0);
         const usedM3 = kPrz.reduce((s, p) => s + p.objetosc_m3, 0);
         const usedPal = kPrz.reduce((s, p) => s + p.ilosc_palet, 0);
-        const maxPal = 33;
         return (
           <Card key={kurs.id}>
             <CardHeader className="pb-2">
