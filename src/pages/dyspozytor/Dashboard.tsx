@@ -254,6 +254,7 @@ export default function DyspozytorDashboard() {
   const { flota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
+  const { isBlocked } = useBlokady(oddzialId, [dzien]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
