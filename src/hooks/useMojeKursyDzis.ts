@@ -24,6 +24,7 @@ export interface PrzystanekKierowcy {
   masa_kg: number;
   nr_wz: string;
   uwagi: string;
+  ilosc_palet: number;
 }
 
 export function useMojeKursyDzis() {
