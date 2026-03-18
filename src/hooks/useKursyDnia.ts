@@ -142,7 +142,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
     }
 
     setLoading(false);
-  }, [oddzialId, dzien]);
+  }, [oddzialId, dzien, dzienDo]);
 
   useEffect(() => {
     refetch();
