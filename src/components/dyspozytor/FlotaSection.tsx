@@ -379,9 +379,9 @@ function KierowcaModal({
 // ── Calendar Tab ──
 
 function KalendarzTab({
-  flota, kierowcy, kursy, businessDays, loading, isBlocked, onToggle,
+  flota, kierowcy, flotaZewn, kursy, businessDays, loading, isBlocked, onToggle,
 }: {
-  flota: Pojazd[]; kierowcy: KierowcaStatusDto[]; kursy: KursKalendarzDto[];
+  flota: Pojazd[]; kierowcy: KierowcaStatusDto[]; flotaZewn: PojazdZewnetrzny[]; kursy: KursKalendarzDto[];
   businessDays: string[]; loading: boolean;
   isBlocked: (typ: string, zasobId: string, dzien: string) => boolean;
   onToggle: (typ: string, zasobId: string, dzien: string) => void;
