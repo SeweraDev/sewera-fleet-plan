@@ -310,7 +310,7 @@ function FlotaTab({ oddzialId, flota, oddzialy }: { oddzialId: number | null; fl
   );
 }
 
-
+export default function DyspozytorDashboard() {
   const { profile } = useAuth();
   const [activeId, setActiveId] = useState('kursy');
   const { oddzialy } = useOddzialy();
