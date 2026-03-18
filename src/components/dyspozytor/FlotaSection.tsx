@@ -379,9 +379,9 @@ function KierowcaModal({
 // ── Calendar Tab ──
 
 function KalendarzTab({
-  flota, kierowcy, kursy, businessDays, loading, isBlocked, onToggle,
+  flota, kierowcy, flotaZewn, kursy, businessDays, loading, isBlocked, onToggle,
 }: {
-  flota: Pojazd[]; kierowcy: KierowcaStatusDto[]; kursy: KursKalendarzDto[];
+  flota: Pojazd[]; kierowcy: KierowcaStatusDto[]; flotaZewn: PojazdZewnetrzny[]; kursy: KursKalendarzDto[];
   businessDays: string[]; loading: boolean;
   isBlocked: (typ: string, zasobId: string, dzien: string) => boolean;
   onToggle: (typ: string, zasobId: string, dzien: string) => void;
@@ -440,6 +440,32 @@ function KalendarzTab({
                     const kurs = kierowcaKursy.get(k.id)?.get(d);
                     const blocked = isBlocked('kierowca', k.id, d);
                     return <TableCell key={d} className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked && !kurs ? 'bg-red-50 dark:bg-red-950/30' : ''}`}><KursCell kurs={kurs} blocked={blocked} onToggle={() => onToggle('kierowca', k.id, d)} /></TableCell>;
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-foreground">🚚 Transport zewnętrzny</h3>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow><TableHead className="sticky left-0 bg-background z-10 min-w-[180px]">Pojazd</TableHead>{renderDayHeaders()}</TableRow></TableHeader>
+            <TableBody>
+              {flotaZewn.map(f => (
+                <TableRow key={f.id}>
+                  <TableCell className="sticky left-0 bg-background z-10 font-mono text-xs">
+                    {f.nr_rej}
+                    {f.firma && <span className="text-muted-foreground ml-1 text-[10px]">· {f.firma}</span>}
+                  </TableCell>
+                  {businessDays.map(d => {
+                    const blocked = isBlocked('zewnetrzny', f.id, d);
+                    return (
+                      <TableCell key={d} className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked ? 'bg-red-50 dark:bg-red-950/30' : ''}`}>
+                        <KursCell kurs={undefined} blocked={blocked} onToggle={() => onToggle('zewnetrzny', f.id, d)} />
+                      </TableCell>
+                    );
                   })}
                 </TableRow>
               ))}
@@ -670,8 +696,8 @@ export function FlotaSection({
 
         <TabsContent value="kalendarz" className="mt-4">
           <KalendarzTab
-            flota={flota} kierowcy={kierowcyStatus} kursy={kursy}
-            businessDays={businessDays} loading={loadingKalendarz || loadingKierowcy}
+            flota={flota} kierowcy={kierowcyStatus} flotaZewn={flotaZewn} kursy={kursy}
+            businessDays={businessDays} loading={loadingKalendarz || loadingKierowcy || loadingZewn}
             isBlocked={isBlocked} onToggle={toggleBlokada}
           />
         </TabsContent>
