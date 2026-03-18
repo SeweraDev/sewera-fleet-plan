@@ -324,8 +324,24 @@ export default function DyspozytorDashboard() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Dzień</Label>
+              <Label className="text-xs text-muted-foreground">{rangeMode ? 'Od' : 'Dzień'}</Label>
               <Input type="date" value={dzien} onChange={e => setDzien(e.target.value)} className="w-40" />
+            </div>
+            {rangeMode && (
+              <div>
+                <Label className="text-xs text-muted-foreground">Do</Label>
+                <Input type="date" value={dzienDo} onChange={e => setDzienDo(e.target.value)} className="w-40" />
+              </div>
+            )}
+            <div className="flex items-end">
+              <Button
+                size="sm"
+                variant={rangeMode ? 'default' : 'outline'}
+                onClick={() => setRangeMode(!rangeMode)}
+                className="whitespace-nowrap"
+              >
+                📅 Zakres
+              </Button>
             </div>
             {activeId === 'kursy' && (
               <Button className="ml-auto mt-4" onClick={() => setShowModal(true)} disabled={!oddzialId}>
