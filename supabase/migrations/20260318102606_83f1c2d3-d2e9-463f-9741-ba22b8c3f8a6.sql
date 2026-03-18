@@ -1,0 +1,1 @@
+ALTER TABLE public.flota ALTER COLUMN objetosc_m3 DROP NOT NULL;
