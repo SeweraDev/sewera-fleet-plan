@@ -62,6 +62,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [editZlId, setEditZlId] = useState<string | null>(null);
 
   const filtered = statusFilter === 'all' ? kursy : kursy.filter(k => k.status === statusFilter);
   const counts = {
