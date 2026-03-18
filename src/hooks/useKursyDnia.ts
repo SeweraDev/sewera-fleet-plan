@@ -14,6 +14,7 @@ export interface KursDto {
   pojazd_typ: string;
   ladownosc_kg: number;
   objetosc_m3: number | null;
+  max_palet: number | null;
 }
 
 export interface PrzystanekDto {
