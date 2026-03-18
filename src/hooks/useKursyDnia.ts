@@ -52,9 +52,9 @@ export function useKursyDnia(oddzialId: number | null, dzien: string) {
     if (flotaIds.length > 0) {
       const { data: flotaData } = await supabase
         .from('flota')
-        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3')
+        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet')
         .in('id', flotaIds);
-      (flotaData || []).forEach(f => flotaMap.set(f.id, { nr_rej: f.nr_rej, typ: f.typ, ladownosc_kg: Number(f.ladownosc_kg), objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null }));
+      (flotaData || []).forEach(f => flotaMap.set(f.id, { nr_rej: f.nr_rej, typ: f.typ, ladownosc_kg: Number(f.ladownosc_kg), objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null, max_palet: (f as any).max_palet != null ? Number((f as any).max_palet) : null }));
     }
 
     const mapped: KursDto[] = (kursyData || []).map(k => {
