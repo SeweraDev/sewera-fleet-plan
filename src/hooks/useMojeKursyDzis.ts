@@ -80,11 +80,11 @@ export function useMojeKursyDzis() {
 
     // Get WZ data
     const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
-    let wzMap = new Map<string, { odbiorca: string; adres: string; tel: string; masa_kg: number; nr_wz: string; uwagi: string }>();
+    let wzMap = new Map<string, { odbiorca: string; adres: string; tel: string; masa_kg: number; nr_wz: string; uwagi: string; ilosc_palet: number }>();
     if (zlecenieIds.length > 0) {
       const { data: wzData } = await supabase
         .from('zlecenia_wz')
-        .select('zlecenie_id, odbiorca, adres, tel, masa_kg, numer_wz, uwagi')
+        .select('zlecenie_id, odbiorca, adres, tel, masa_kg, numer_wz, uwagi, ilosc_palet')
         .in('zlecenie_id', zlecenieIds);
       (wzData || []).forEach(w => {
         wzMap.set(w.zlecenie_id, {
@@ -94,6 +94,7 @@ export function useMojeKursyDzis() {
           masa_kg: Number(w.masa_kg),
           nr_wz: w.numer_wz || '',
           uwagi: (w as any).uwagi || '',
+          ilosc_palet: Number((w as any).ilosc_palet || 0),
         });
       });
     }
