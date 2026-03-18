@@ -5,20 +5,26 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, roles, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [noRoles, setNoRoles] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNoRoles(false);
     setLoading(true);
     try {
       await signIn(email, password);
     } catch (err: any) {
-      setError(err.message || 'Błąd logowania');
+      if (err.message === 'NO_ROLES') {
+        setNoRoles(true);
+      } else {
+        setError('Nieprawidłowy email lub hasło');
+      }
     } finally {
       setLoading(false);
     }
@@ -70,6 +76,11 @@ export default function LoginPage() {
 
           {error && (
             <p className="text-sm text-destructive text-center">{error}</p>
+          )}
+          {noRoles && (
+            <p className="text-sm text-destructive text-center">
+              Brak uprawnień — skontaktuj się z administratorem
+            </p>
           )}
         </form>
       </div>

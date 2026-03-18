@@ -73,9 +73,11 @@ export function useAuth() {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser) {
       const p = await fetchProfile(authUser.id);
-      if (p && p.roles.length > 0) {
-        navigate(ROLE_ROUTES[p.roles[0]]);
+      if (!p || p.roles.length === 0) {
+        await supabase.auth.signOut();
+        throw new Error('NO_ROLES');
       }
+      navigate(ROLE_ROUTES[p.roles[0]]);
     }
   }, [navigate]);
 
@@ -86,5 +88,8 @@ export function useAuth() {
     navigate('/login');
   }, [navigate]);
 
-  return { user, profile, loading, signIn, signOut };
+  const roles = profile?.roles ?? [];
+  const primaryRole = roles[0] ?? '';
+
+  return { user, profile, roles, primaryRole, loading, signIn, signOut };
 }
