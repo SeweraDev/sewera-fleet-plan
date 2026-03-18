@@ -20,11 +20,12 @@ import { useKursActions } from '@/hooks/useKursActions';
 import { useCreateKurs } from '@/hooks/useCreateKurs';
 import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
+import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
 import { useBlokady } from '@/hooks/useBlokady';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
-  { id: 'zlecenia', label: '📋 Zlecenia bez kursu' },
+  { id: 'zlecenia', label: '📋 Zlecenia' },
   { id: 'flota', label: '🔧 Flota' },
 ];
 
@@ -56,7 +57,7 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'zakonczony', label: 'Zakończone' },
 ];
 
-function KursyTab({ oddzialId, dzien, dzienDo }: { oddzialId: number | null; dzien: string; dzienDo?: string }) {
+function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, onOpenModal }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; onOpenModal: () => void }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -73,6 +74,21 @@ function KursyTab({ oddzialId, dzien, dzienDo }: { oddzialId: number | null; dzi
 
   return (
     <div className="space-y-4">
+      {/* Orange banner for unassigned orders */}
+      {zlBezKursuCount > 0 && (
+        <div className="flex items-center justify-between rounded-lg bg-accent/15 border border-accent/30 px-4 py-3">
+          <span className="text-sm font-medium text-accent-foreground">
+            ⚠️ {zlBezKursuCount} zleceń bez przypisanego kursu
+          </span>
+          <button
+            onClick={onOpenModal}
+            className="text-sm font-semibold text-accent hover:underline"
+          >
+            Przypisz →
+          </button>
+        </div>
+      )}
+
       {/* Status filter pills */}
       <div className="flex gap-2 flex-wrap">
         {STATUS_FILTERS.map(f => (
@@ -354,44 +370,16 @@ export default function DyspozytorDashboard() {
             <Card><CardContent className="p-8 text-center text-muted-foreground">Wybierz oddział aby wyświetlić dane</CardContent></Card>
           ) : (
             <>
-              {activeId === 'kursy' && <KursyTab oddzialId={oddzialId} dzien={dzien} dzienDo={rangeMode ? dzienDo : undefined} />}
-              {activeId === 'zlecenia' && (
-                <div className="space-y-2">
-                  <h2 className="text-lg font-semibold text-foreground">Zlecenia bez kursu</h2>
-                  {zlBezKursu.length === 0 ? (
-                    <Card><CardContent className="p-6 text-center text-muted-foreground">Brak zleceń bez kursu</CardContent></Card>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Numer</TableHead>
-                          <TableHead>Dzień</TableHead>
-                          <TableHead>Typ</TableHead>
-                          <TableHead>Godzina</TableHead>
-                          <TableHead className="text-right">Kg</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {zlBezKursu.map(z => (
-                          <TableRow key={z.id}>
-                            <TableCell className="font-mono text-sm">{z.numer}</TableCell>
-                            <TableCell>{z.dzien}</TableCell>
-                            <TableCell>{z.typ_pojazdu || '—'}</TableCell>
-                            <TableCell>{z.preferowana_godzina || '—'}</TableCell>
-                            <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => { setPreSelectedZlId(z.id); setShowModal(true); }}>
-                                + Utwórz kurs
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
+              {activeId === 'kursy' && (
+                <KursyTab
+                  oddzialId={oddzialId}
+                  dzien={dzien}
+                  dzienDo={rangeMode ? dzienDo : undefined}
+                  zlBezKursuCount={zlBezKursu.length}
+                  onOpenModal={() => setShowModal(true)}
+                />
               )}
+              {activeId === 'zlecenia' && <ZleceniaTab oddzialId={oddzialId} />}
               {activeId === 'flota' && (
                 <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />
               )}
