@@ -192,10 +192,18 @@ function NowyKursModal({
 }
 
 export default function DyspozytorDashboard() {
+  const { profile } = useAuth();
   const [activeId, setActiveId] = useState('kursy');
   const { oddzialy } = useOddzialy();
   const [oddzialId, setOddzialId] = useState<number | null>(null);
   const [dzien, setDzien] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Auto-set branch from profile once oddzialy load
+  useEffect(() => {
+    if (oddzialId !== null || !profile?.branch || oddzialy.length === 0) return;
+    const match = oddzialy.find(o => o.nazwa === profile.branch);
+    if (match) setOddzialId(match.id);
+  }, [profile, oddzialy, oddzialId]);
   const [showModal, setShowModal] = useState(false);
   const { flota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien);
