@@ -41,6 +41,7 @@ export function MojeZleceniaTab() {
               <TableHead>Typ</TableHead>
               <TableHead className="text-right">WZ</TableHead>
               <TableHead className="text-right">Kg</TableHead>
+              <TableHead className="text-right">Pal</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
