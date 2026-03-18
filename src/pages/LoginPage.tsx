@@ -67,7 +67,7 @@ export default function LoginPage() {
               {loading ? 'Logowanie...' : 'Zaloguj się'}
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-4">
-              Demo: użyj admin@sewera.pl, dyspozytor@sewera.pl, sprzedawca@sewera.pl, kierowca@sewera.pl lub zarzad@sewera.pl
+              Użyj swojego konta firmowego, np. admin@sewera.pl
             </p>
           </form>
         </CardContent>
