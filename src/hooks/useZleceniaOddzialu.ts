@@ -80,7 +80,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
       suma_kg: wzMap.get(z.id) || 0,
     })));
     setLoading(false);
-  }, [oddzialId]);
+  }, [oddzialId, pastOnly]);
 
   useEffect(() => { refetch(); }, [refetch]);
 
