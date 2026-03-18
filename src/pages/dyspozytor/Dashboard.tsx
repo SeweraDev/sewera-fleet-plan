@@ -216,6 +216,7 @@ export default function DyspozytorDashboard() {
     if (match) setOddzialId(match.id);
   }, [profile, oddzialy, oddzialId]);
   const [showModal, setShowModal] = useState(false);
+  const [preSelectedZlId, setPreSelectedZlId] = useState<string | null>(null);
   const { flota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
