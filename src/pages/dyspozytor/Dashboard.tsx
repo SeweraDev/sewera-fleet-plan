@@ -447,6 +447,9 @@ export default function DyspozytorDashboard() {
                   zlBezKursuCount={zlBezKursu.length}
                   doWeryfikacjiCount={zlBezKursu.filter(z => z.status === 'do_weryfikacji').length}
                   onOpenModal={() => setShowModal(true)}
+                  flota={flota}
+                  kierowcy={kierowcy}
+                  isBlocked={isBlocked}
                 />
               )}
               {activeId === 'historia' && <ZleceniaTab oddzialId={oddzialId} pastOnly />}
