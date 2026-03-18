@@ -327,33 +327,7 @@ export default function DyspozytorDashboard() {
                 </div>
               )}
               {activeId === 'flota' && (
-                <div className="space-y-2">
-                  <h2 className="text-lg font-semibold text-foreground">Flota oddziału</h2>
-                  {flota.length === 0 ? (
-                    <Card><CardContent className="p-6 text-center text-muted-foreground">Brak pojazdów</CardContent></Card>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nr rejestracyjny</TableHead>
-                          <TableHead>Typ</TableHead>
-                          <TableHead className="text-right">Ładowność (kg)</TableHead>
-                          <TableHead className="text-right">Objętość (m³)</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {flota.map(f => (
-                          <TableRow key={f.id}>
-                            <TableCell className="font-mono">{f.nr_rej}</TableCell>
-                            <TableCell>{f.typ}</TableCell>
-                            <TableCell className="text-right">{f.ladownosc_kg}</TableCell>
-                            <TableCell className="text-right">{f.objetosc_m3}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
+                <FlotaTab oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} />
               )}
             </>
           )}
