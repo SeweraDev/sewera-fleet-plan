@@ -272,6 +272,7 @@ export default function DyspozytorDashboard() {
                           <TableHead>Typ</TableHead>
                           <TableHead>Godzina</TableHead>
                           <TableHead className="text-right">Kg</TableHead>
+                          <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -282,6 +283,11 @@ export default function DyspozytorDashboard() {
                             <TableCell>{z.typ_pojazdu || '—'}</TableCell>
                             <TableCell>{z.preferowana_godzina || '—'}</TableCell>
                             <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => { setPreSelectedZlId(z.id); setShowModal(true); }}>
+                                + Utwórz kurs
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
