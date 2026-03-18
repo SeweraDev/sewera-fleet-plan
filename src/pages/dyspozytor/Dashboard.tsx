@@ -142,6 +142,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                     <StatusBadge status={kurs.status} />
                   </CardTitle>
                   <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>⚙️ Edytuj</Button>
                     {kurs.status === 'zaplanowany' && (
                       <Button size="sm" onClick={() => handleStart(kurs.id)} disabled={acting}>▶ Wyjazd</Button>
                     )}
