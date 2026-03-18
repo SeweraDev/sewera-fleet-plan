@@ -343,6 +343,7 @@ export default function DyspozytorDashboard() {
             dzien={dzien}
             onCreated={refetch}
             preSelectedZlecenieId={preSelectedZlId}
+            isBlocked={isBlocked}
           />
         </main>
       </div>
