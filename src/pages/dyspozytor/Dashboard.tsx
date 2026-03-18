@@ -22,7 +22,12 @@ import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
 import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
+import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
+import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
 import { useBlokady } from '@/hooks/useBlokady';
+import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
+import type { Pojazd } from '@/hooks/useFlotaOddzialu';
+import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
