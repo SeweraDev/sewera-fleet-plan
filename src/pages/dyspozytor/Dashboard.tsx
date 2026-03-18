@@ -286,6 +286,8 @@ export default function DyspozytorDashboard() {
   const { oddzialy } = useOddzialy();
   const [oddzialId, setOddzialId] = useState<number | null>(null);
   const [dzien, setDzien] = useState(() => new Date().toISOString().split('T')[0]);
+  const [rangeMode, setRangeMode] = useState(false);
+  const [dzienDo, setDzienDo] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Auto-set branch from profile once oddzialy load
   useEffect(() => {
