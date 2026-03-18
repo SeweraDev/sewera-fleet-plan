@@ -31,7 +31,7 @@ export interface PrzystanekDto {
   ilosc_palet: number;
 }
 
-export function useKursyDnia(oddzialId: number | null, dzien: string) {
+export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: string) {
   const [kursy, setKursy] = useState<KursDto[]>([]);
   const [przystanki, setPrzystanki] = useState<PrzystanekDto[]>([]);
   const [loading, setLoading] = useState(true);
