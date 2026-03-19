@@ -449,7 +449,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     if (odbM) {
       r.odbiorca = odbM[1].trim();
     } else {
-      const firmaM = text.match(/^(.+(?:SP(?:ÓŁKA|\.)?\s*(?:Z\s*O\.?\s*O\.?|AKCYJNA|JAWNA|KOMANDYTOWA|PARTNERSKA|CYWILNA)|S\.?\s*A\.?|SP\.\s*J\.|SP\.\s*K\.|S\.?\s*C\.?).*)$/im);
+      const firmaM = text.match(/^(.+(?:SP(?:ÓŁKA|\.)?\s*(?:Z\s*(?:O\.?\s*O\.?|OGRANICZON\S+\s+ODPOWIEDZIALNO\S+)|AKCYJNA|JAWNA|KOMANDYTOWA|PARTNERSKA|CYWILNA)|S\.?\s*A\.?|SP\.\s*J\.|SP\.\s*K\.|S\.?\s*C\.?).*)$/im);
       if (firmaM) r.odbiorca = firmaM[1].trim();
     }
 
