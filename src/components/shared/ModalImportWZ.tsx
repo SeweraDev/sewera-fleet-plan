@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Card } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface WZImportData {
@@ -16,27 +16,126 @@ export interface WZImportData {
   adres: string | null;
   tel: string | null;
   masa_kg: number | null;
+  ilosc_palet: number | null;
+  objetosc_m3: number | null;
   uwagi: string | null;
+}
+
+interface Pozycja {
+  lp: number;
+  kod_towaru: string;
+  kod_producenta: string;
+  kod_ean: string;
+  nazwa_towaru: string;
+  nazwa_dodatkowa: string;
+  ilosc: number;
+  jm: string;
+}
+
+interface ParsedPdfResult {
+  nr_wz: string | null;
+  nr_zamowienia: string | null;
+  odbiorca_nazwa: string | null;
+  odbiorca_adres_siedziby: string | null;
+  adres_dostawy: string | null;
+  nazwa_budowy: string | null;
+  osoba_kontaktowa: string | null;
+  tel: string | null;
+  tel2: string | null;
+  masa_kg: number | null;
+  ilosc_palet: number | null;
+  objetosc_m3: number | null;
+  uwagi: string | null;
+  uwagi_krotkie: string | null;
+  data_wz: string | null;
+  pozycje: Pozycja[];
+  pewnosc: number;
+  error?: string;
 }
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onImport: (wzData: WZImportData[]) => void;
-  hideXls?: boolean; // hide XLS tab for mobile/kierowca
+  hideXls?: boolean;
+}
+
+/* ─── Confidence Badge ─── */
+function ConfidenceBadge({ pewnosc, totalFields }: { pewnosc: number; totalFields: number }) {
+  const fieldsFound = Math.round((pewnosc / 100) * 16);
+  if (pewnosc >= 80) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-sm font-medium">
+        ✅ Odczytano {fieldsFound}/16 pól
+      </div>
+    );
+  }
+  if (pewnosc >= 50) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 text-sm font-medium">
+        ⚠️ Odczytano częściowo — sprawdź pola
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-sm font-medium">
+      ❌ Słaby odczyt — uzupełnij ręcznie
+    </div>
+  );
+}
+
+/* ─── Pozycje Towarowe Preview ─── */
+function PozycjePreview({ pozycje }: { pozycje: Pozycja[] }) {
+  const [open, setOpen] = useState(false);
+  if (!pozycje.length) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground text-xs hover:text-foreground">
+          {open ? '▼' : '▶'} 📦 Pozycje z WZ ({pozycje.length} pozycji)
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="max-h-40 overflow-auto border rounded-md mt-1">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1 text-left">Kod</th>
+                <th className="px-2 py-1 text-left">Nazwa</th>
+                <th className="px-2 py-1 text-right">Ilość</th>
+                <th className="px-2 py-1 text-left">JM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pozycje.map((p, i) => (
+                <tr key={i} className="border-t border-muted/50">
+                  <td className="px-2 py-1 font-mono text-muted-foreground">{p.kod_towaru}</td>
+                  <td className="px-2 py-1">{p.nazwa_towaru}</td>
+                  <td className="px-2 py-1 text-right">{p.ilosc}</td>
+                  <td className="px-2 py-1 text-muted-foreground">{p.jm}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 /* ─── PDF Tab ─── */
 function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => void; onSwitchManual: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
-  const [result, setResult] = useState<(WZImportData & { pewnosc: number }) | null>(null);
+  const [result, setResult] = useState<ParsedPdfResult | null>(null);
+  const [formData, setFormData] = useState<WZImportData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     const name = file.name.toLowerCase();
     if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')) {
-      setError('Rozpoznawanie tekstu ze zdjęć wymaga ręcznego uzupełnienia. Dane z obrazu nie mogą być automatycznie odczytane.');
+      setError('Rozpoznawanie tekstu ze zdjęć wymaga ręcznego uzupełnienia.');
       setTimeout(onSwitchManual, 2000);
       return;
     }
@@ -52,22 +151,21 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
     setParsing(true);
     setError(null);
     setResult(null);
+    setFormData(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const fd = new FormData();
+    fd.append('file', file);
 
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: formData,
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+        body: fd,
       }
     );
-    const json = await res.json();
+    const json: ParsedPdfResult = await res.json();
     setParsing(false);
 
     if (json.error) {
@@ -75,15 +173,25 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       return;
     }
 
-    setResult({
+    setResult(json);
+
+    // Map to form fields per spec
+    let adres = json.adres_dostawy || '';
+    let uwagi = json.uwagi_krotkie || '';
+    if (json.nazwa_budowy && !adres.includes(json.nazwa_budowy)) {
+      uwagi = uwagi ? `${json.nazwa_budowy}; ${uwagi}` : json.nazwa_budowy;
+    }
+
+    setFormData({
       numer_wz: json.nr_wz,
       nr_zamowienia: json.nr_zamowienia,
-      odbiorca: json.odbiorca,
-      adres: json.adres_dostawy,
+      odbiorca: json.odbiorca_nazwa,
+      adres,
       tel: json.tel,
       masa_kg: json.masa_kg,
-      uwagi: json.uwagi,
-      pewnosc: json.pewnosc,
+      ilosc_palet: json.ilosc_palet,
+      objetosc_m3: json.objetosc_m3,
+      uwagi: uwagi || null,
     });
   }, [onSwitchManual]);
 
@@ -93,17 +201,17 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
     if (f) handleFile(f);
   }, [handleFile]);
 
-  const fields: { key: keyof WZImportData; label: string }[] = [
+  const fields: { key: keyof WZImportData; label: string; type?: string }[] = [
     { key: 'numer_wz', label: 'Nr WZ' },
     { key: 'nr_zamowienia', label: 'Nr zamówienia' },
     { key: 'odbiorca', label: 'Odbiorca' },
     { key: 'adres', label: 'Adres dostawy' },
     { key: 'tel', label: 'Telefon' },
-    { key: 'masa_kg', label: 'Masa kg' },
+    { key: 'masa_kg', label: 'Masa kg', type: 'number' },
+    { key: 'ilosc_palet', label: 'Ilość palet', type: 'number' },
+    { key: 'objetosc_m3', label: 'Objętość m³', type: 'number' },
     { key: 'uwagi', label: 'Uwagi' },
   ];
-
-  const foundCount = result ? fields.filter(f => result[f.key] != null && result[f.key] !== '').length : 0;
 
   return (
     <div className="space-y-3">
@@ -133,25 +241,26 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {result && (
+      {result && formData && (
         <div className="space-y-3">
-          <p className="text-sm font-medium">Odczytano {foundCount}/7 pól</p>
+          <ConfidenceBadge pewnosc={result.pewnosc} totalFields={16} />
+
           <div className="space-y-2">
             {fields.map(f => {
-              const val = result[f.key];
-              const found = val != null && val !== '';
+              const val = formData[f.key];
+              const found = val != null && val !== '' && val !== 0;
               return (
                 <div key={f.key} className="flex items-center gap-2">
                   <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
                   <Label className="text-xs w-28 shrink-0">{f.label}</Label>
                   <Input
                     className="h-8 text-sm flex-1"
-                    type={f.key === 'masa_kg' ? 'number' : 'text'}
+                    type={f.type || 'text'}
                     value={val?.toString() ?? ''}
                     onChange={e => {
-                      setResult(prev => prev ? {
+                      setFormData(prev => prev ? {
                         ...prev,
-                        [f.key]: f.key === 'masa_kg' ? Number(e.target.value) : e.target.value,
+                        [f.key]: f.type === 'number' ? (e.target.value ? Number(e.target.value) : null) : e.target.value,
                       } : prev);
                     }}
                   />
@@ -159,7 +268,20 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
               );
             })}
           </div>
-          <Button onClick={() => onParsed(result)} className="w-full">✅ Użyj tych danych</Button>
+
+          {/* Extra info from parser */}
+          {(result.osoba_kontaktowa || result.tel2 || result.nazwa_budowy) && (
+            <div className="text-xs text-muted-foreground space-y-0.5 p-2 bg-muted/30 rounded">
+              {result.osoba_kontaktowa && <p>👤 Kontakt: {result.osoba_kontaktowa}</p>}
+              {result.tel2 && <p>📞 Tel. dodatkowy: {result.tel2}</p>}
+              {result.nazwa_budowy && <p>🏗️ Budowa: {result.nazwa_budowy}</p>}
+              {result.data_wz && <p>📅 Data WZ: {result.data_wz}</p>}
+            </div>
+          )}
+
+          <PozycjePreview pozycje={result.pozycje || []} />
+
+          <Button onClick={() => onParsed(formData)} className="w-full">✅ Użyj tych danych</Button>
         </div>
       )}
     </div>
@@ -183,8 +305,8 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
     setError(null);
     setRows([]);
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const fd = new FormData();
+    fd.append('file', file);
 
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(
@@ -192,7 +314,7 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${session?.access_token}` },
-        body: formData,
+        body: fd,
       }
     );
     const json = await res.json();
@@ -210,6 +332,8 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
       adres: w.adres_dostawy,
       tel: w.tel,
       masa_kg: w.masa_kg,
+      ilosc_palet: null,
+      objetosc_m3: null,
       uwagi: w.uwagi,
     }));
     setRows(mapped);
@@ -289,7 +413,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     if (!text.trim()) return;
     const r: WZImportData = {
       numer_wz: null, nr_zamowienia: null, odbiorca: null,
-      adres: null, tel: null, masa_kg: null, uwagi: null,
+      adres: null, tel: null, masa_kg: null, ilosc_palet: null, objetosc_m3: null, uwagi: null,
     };
 
     const wzM = text.match(/WZ\s+[A-Z]{2}\/[\d\/]+/);
@@ -307,11 +431,16 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     const telM = text.match(/Tel\.?:?\s*([\d\s]{9,})/i);
     if (telM) r.tel = telM[1].trim();
 
-    // Last kg match
     const kgMatches = [...text.matchAll(/([\d.,]+)\s*kg/gi)];
     if (kgMatches.length > 0) {
       r.masa_kg = parseFloat(kgMatches[kgMatches.length - 1][1].replace(',', '.'));
     }
+
+    const palM = text.match(/(\d+)\s*[Pp]alet/i);
+    if (palM) r.ilosc_palet = parseInt(palM[1]);
+
+    const objM = text.match(/([\d.,]+)\s*m[³3]/i);
+    if (objM) r.objetosc_m3 = parseFloat(objM[1].replace(',', '.'));
 
     setResult(r);
   };
@@ -335,6 +464,8 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
             ['Adres', result.adres],
             ['Telefon', result.tel],
             ['Masa kg', result.masa_kg?.toString()],
+            ['Ilość palet', result.ilosc_palet?.toString()],
+            ['Objętość m³', result.objetosc_m3?.toString()],
           ] as [string, string | undefined | null][]).map(([label, val]) => (
             <div key={label} className="flex items-center gap-2 text-sm">
               <span className="w-4">{val ? '✓' : '⚠️'}</span>
@@ -352,10 +483,10 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 /* ─── Manual Tab ─── */
 function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [form, setForm] = useState<WZImportData>({
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, uwagi: '',
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, ilosc_palet: null, objetosc_m3: null, uwagi: '',
   });
 
-  const update = (field: keyof WZImportData, val: string | number) =>
+  const update = (field: keyof WZImportData, val: string | number | null) =>
     setForm(prev => ({ ...prev, [field]: val }));
 
   return (
@@ -367,6 +498,8 @@ function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
         <div><Label className="text-xs">Adres *</Label><Input className="h-8 text-sm" value={form.adres ?? ''} onChange={e => update('adres', e.target.value)} /></div>
         <div><Label className="text-xs">Telefon</Label><Input className="h-8 text-sm" value={form.tel ?? ''} onChange={e => update('tel', e.target.value)} /></div>
         <div><Label className="text-xs">Masa kg *</Label><Input className="h-8 text-sm" type="number" value={form.masa_kg ?? ''} onChange={e => update('masa_kg', Number(e.target.value))} /></div>
+        <div><Label className="text-xs">Ilość palet</Label><Input className="h-8 text-sm" type="number" value={form.ilosc_palet ?? ''} onChange={e => update('ilosc_palet', e.target.value ? Number(e.target.value) : null)} /></div>
+        <div><Label className="text-xs">Objętość m³</Label><Input className="h-8 text-sm" type="number" value={form.objetosc_m3 ?? ''} onChange={e => update('objetosc_m3', e.target.value ? Number(e.target.value) : null)} /></div>
         <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={form.uwagi ?? ''} onChange={e => update('uwagi', e.target.value)} /></div>
       </div>
       <Button onClick={() => onParsed(form)} disabled={!form.odbiorca && !form.adres} className="w-full">
