@@ -98,12 +98,12 @@ Po ukończeniu zadania Lovable dopisuje:
   Dropdown z listą powiadomień.
   Realtime na tabeli powiadomienia.
 
-- [ ] **S3C-004** — UI deadline w SprzedawcaPage
+- [x] **S3C-004** — UI deadline w SprzedawcaPage ✅ 2026-03-19
   W karcie zlecenia: 🟡 "Dodaj WZ do [data] 16:00"
   Po przekroczeniu: 🔴 "Przekroczony deadline — oczekuje na decyzję"
   Po dodaniu WZ: 🟢 "✓ WZ dodane"
 
-- [ ] **S3C-005** — UI flag u dyspozytora (DyspozytoPage)
+- [x] **S3C-005** — UI flag u dyspozytora (DyspozytoPage) ✅ 2026-03-19
   W zakładce Zlecenia: badge "⏰ Przekroczony deadline WZ"
   Przyciski: "❌ Anuluj dostawę" / "✅ Przedłuż termin"
 

@@ -57,23 +57,6 @@ to jest placeholder bez prawdziwej Edge Function.
 
 ---
 
-### BUG-004 — Brak powiadomień bell w Topbarze
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3
-**Gdzie:** Topbar — wszystkie strony
-**Opis:** Ikona 🔔 z powiadomieniami nie istnieje.
-Tabela powiadomienia jest w bazie ale bez UI.
-**Fix:** Implementacja S3C-003
-
----
-
-### BUG-005 — Brak informacji o deadline WZ w karcie zlecenia
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3
-**Gdzie:** SprzedawcaPage — Moje zlecenia
-**Opis:** Sprzedawca nie widzi deadline WZ ani czy WZ zostało dodane.
-**Fix:** Implementacja S3C-004
-
----
-
 ### BUG-006 — Weryfikacja zajętości nie sprawdza masy/m³/palet
 **Status:** 🔴 Aktywny — zaplanowany Sprint 3D
 **Gdzie:** SprzedawcaPage — formularz zlecenia krok 2-4
@@ -84,15 +67,6 @@ brak ostrzeżenia gdy ładunek przekracza pojemność auta.
 
 ---
 
-### BUG-007 — Cron check-deadline-wz nie istnieje
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3
-**Gdzie:** Lovable Edge Functions
-**Opis:** Automatyczne flagowanie zleceń bez WZ nie działa.
-Tabela ma kolumny ale nikt ich nie aktualizuje.
-**Fix:** Implementacja S3C-002
-
----
-
 ## 🟡 W TRAKCIE
 
 *(brak)*
@@ -100,6 +74,18 @@ Tabela ma kolumny ale nikt ich nie aktualizuje.
 ---
 
 ## ✅ NAPRAWIONE
+
+### BUG-F08 — Brak powiadomień bell w Topbarze (BUG-004)
+**Naprawiony:** Sprint 3C — 2026-03-19
+**Fix:** NotificationBell + usePowiadomienia + Realtime
+
+### BUG-F09 — Brak informacji o deadline WZ (BUG-005)
+**Naprawiony:** Sprint 3C — 2026-03-19
+**Fix:** DeadlineBadge w MojeZleceniaTab (🟢/🟡/🔴)
+
+### BUG-F10 — Cron check-deadline-wz nie istnieje (BUG-007)
+**Naprawiony:** Sprint 3C — 2026-03-19
+**Fix:** Edge Function check-deadline-wz + pg_cron co godzinę
 
 ### BUG-F01 — Auth hardcoded zamiast Supabase
 **Naprawiony:** Sprint 1.5
