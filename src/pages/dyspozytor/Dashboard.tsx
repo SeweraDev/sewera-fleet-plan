@@ -480,6 +480,16 @@ export default function DyspozytorDashboard() {
             preSelectedZlecenieId={preSelectedZlId}
             isBlocked={isBlocked}
           />
+
+          <ImportExcelModal
+            open={showExcelImport}
+            onClose={() => setShowExcelImport(false)}
+            oddzialId={oddzialId}
+            dzien={dzien}
+            flota={flota}
+            kierowcy={kierowcy}
+            onImported={refetch}
+          />
         </main>
       </div>
     </div>
