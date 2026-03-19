@@ -98,6 +98,47 @@
 
 ---
 
+## SPRINT 3A — Import WZ (PDF + komponenty)
+✅ Edge Function `parse-wz-pdf` — parser PDF dokumentów WZ (Ekonom/Proman)
+✅ Edge Function `parse-excel-plan` — parser planu kursów z Excela
+✅ Komponent `ModalImportWZ` — 4 zakładki: PDF / XLS / Wklej tekst / Ręcznie
+✅ Integracja importu w SprzedawcaPage (krok 3 formularza)
+✅ Integracja importu w DyspozytoPage (edycja zlecenia)
+✅ Domówienie kierowcy → status do_weryfikacji → dyspozytor zatwierdza
+
+---
+
+## SPRINT 3B — Import Excel (plan kursów)
+✅ Modal importu planu Excela z podglądem kursów i walidacją
+✅ Lista wyboru typów A-I jako alternatywa w formularzu zlecenia
+✅ Import WZ z Excela — sprzedawca wybiera swój wiersz
+
+---
+
+## SPRINT 3C — Deadline WZ + Powiadomienia
+✅ Migracja: deadline_wz, ma_wz, flaga_brak_wz + triggery
+✅ Edge Function `check-deadline-wz` (cron co godzinę)
+✅ Tabela powiadomienia + NotificationBell w Topbarze z Realtime
+✅ UI deadline w SprzedawcaPage (🟢/🟡/🔴)
+✅ UI flaga u dyspozytora (⏰ + przyciski Anuluj/Przedłuż)
+
+---
+
+## SPRINT 3D — Weryfikacja zajętości
+✅ Hook useSprawdzDostepnosc — sprawdza kg/m³/palety online
+✅ DostepnoscStep — krok 4 formularza z ostrzeżeniami
+✅ Status do_weryfikacji gdy przeładowanie
+
+---
+
+## POPRAWKI PO SPRINCIE 3
+✅ Edge Function parse-wz-pdf: Buffer → Uint8Array (Deno compatibility)
+✅ Parser tekstu WZ: obsługa nr zamówienia R7/ oprócz T7/
+✅ Parser tekstu WZ: odbiorca bez wymaganego prefixu "Odbiorca:"
+✅ Parser tekstu WZ: masa "Waga netto razem: X" bez wymaganego "kg"
+
+---
+
 ## MIGRACJE WYKONANE (chronologicznie)
 
 1. Sprint 0 SQL — baza główna
@@ -118,6 +159,101 @@
 
 ---
 
+## AKTUALNA STRUKTURA PLIKÓW
+
+```
+src/
+  pages/
+    LoginPage.tsx
+    Index.tsx
+    NotFound.tsx
+    UnauthorizedPage.tsx
+    sprzedawca/Dashboard.tsx
+    dyspozytor/Dashboard.tsx
+    kierowca/MojaTrasa.tsx
+    zarzad/Dashboard.tsx
+    admin/Uzytkownicy.tsx
+  components/
+    NavLink.tsx
+    shared/
+      AppLayout.tsx
+      AppSidebar.tsx
+      ConfirmDialog.tsx
+      LoadingScreen.tsx
+      ModalImportWZ.tsx
+      NotificationBell.tsx
+      PageSidebar.tsx
+      ProtectedRoute.tsx
+      RootRedirect.tsx
+      StatusBadge.tsx
+      Topbar.tsx
+    sprzedawca/
+      CzasDostawyStep.tsx
+      DostepnoscStep.tsx
+      MojeZleceniaTab.tsx
+      TypPojazduStep.tsx
+      WzFormTabs.tsx
+    dyspozytor/
+      EdytujKursModal.tsx
+      EdytujZlecenieModal.tsx
+      FlotaSection.tsx
+      ImportExcelModal.tsx
+      PrzepnijModal.tsx
+      ZleceniaTab.tsx
+    zarzad/
+      KosztyTab.tsx
+      KpiTab.tsx
+      RaportyTab.tsx
+  hooks/
+    useAuth.ts
+    useBlokady.ts
+    useCreateKurs.ts
+    useCreateZlecenie.ts
+    useFlotaOddzialu.ts
+    useFlotaZewnetrzna.ts
+    useKalendarzFloty.ts
+    useKierowcyOddzialu.ts
+    useKierowcyStatusDnia.ts
+    useKursActions.ts
+    useKursyDnia.ts
+    useMojeKursyDzis.ts
+    useMojeZlecenia.ts
+    useOddzialy.ts
+    usePowiadomienia.ts
+    useSprawdzDostepnosc.ts
+    useZarzadKPI.ts
+    useZleceniaBezKursu.ts
+    useZleceniaOddzialu.ts
+  providers/
+    AuthProvider.tsx
+  integrations/
+    supabase/client.ts
+    supabase/types.ts
+  types/
+    auth.ts
+    index.ts
+  lib/
+    supabase.ts
+    utils.ts
+
+supabase/
+  functions/
+    check-deadline-wz/index.ts
+    parse-excel-plan/index.ts
+    parse-wz-pdf/index.ts
+    parse-wz-xls/index.ts
+    seed-users/index.ts
+  config.toml
+
+docs/
+  TASKS.md
+  BUGS.md
+  HISTORY_TASKS.md
+  SPRINT_3B_import_excel.md
+```
+
+---
+
 ## PROBLEMY NAPOTKANE I ROZWIĄZANIA
 
 | Problem | Rozwiązanie |
@@ -131,3 +267,7 @@
 | Odbiorca w WZ = sprzedawca (błąd UX) | Poprawiono etykiety pól |
 | Palety hardcoded 33 zamiast z bazy | max_palet z tabeli flota |
 | Kalendarz pokazywał weekendy | Fix funkcji generującej dni (DOW 1-5) |
+| Buffer is not defined (Deno) | Uint8Array zamiast Buffer.from() |
+| Parser WZ nie łapał R7/ | Regex [A-Z]\d/ zamiast T7/ |
+| Parser WZ nie łapał odbiorcy | Fallback na nazwy firm (SP. Z O.O. itd.) |
+| Parser WZ nie łapał masy | Fallback na "Waga netto razem: X" |

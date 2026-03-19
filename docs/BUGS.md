@@ -40,33 +40,6 @@ Masa: 25 kg (błąd) zamiast 375 kg
 
 ---
 
-### BUG-002 — Import WZ z PDF nie działa (mock)
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3
-**Gdzie:** SprzedawcaPage / DyspozytoPage — zakładka 📷 PDF
-**Opis:** Przycisk "Wgraj zdjęcie WZ" nie parsuje danych —
-to jest placeholder bez prawdziwej Edge Function.
-**Fix:** Implementacja S3-001 (Edge Function parse-wz-pdf)
-
----
-
-### BUG-003 — Import XLS nie działa (mock)
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3B
-**Gdzie:** SprzedawcaPage / DyspozytoPage — zakładka 📊 XLS
-**Opis:** Zakładka XLS nie wywołuje Edge Function.
-**Fix:** Implementacja S3-002 (Edge Function parse-excel-plan)
-
----
-
-### BUG-006 — Weryfikacja zajętości nie sprawdza masy/m³/palet
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3D
-**Gdzie:** SprzedawcaPage — formularz zlecenia krok 2-4
-**Opis:** Dostępność auta sprawdzana tylko orientacyjnie
-(bez znajomości masy bo WZ w kroku 5). Po wpisaniu WZ
-brak ostrzeżenia gdy ładunek przekracza pojemność auta.
-**Fix:** Implementacja S3D-001
-
----
-
 ## 🟡 W TRAKCIE
 
 *(brak)*
@@ -74,6 +47,22 @@ brak ostrzeżenia gdy ładunek przekracza pojemność auta.
 ---
 
 ## ✅ NAPRAWIONE
+
+### BUG-F11 — Edge Function parse-wz-pdf: Buffer is not defined
+**Naprawiony:** 2026-03-19
+**Fix:** Zamieniono `Buffer.from(buffer)` na `new Uint8Array(buffer)` (Deno nie ma Node Buffer)
+
+### BUG-F12 — Parser tekstu WZ nie rozpoznaje nr zamówienia R7/
+**Naprawiony:** 2026-03-19
+**Fix:** Regex zamieniony z `T7/` na `[A-Z]\d/` — obsługuje R7/, T7/ i inne
+
+### BUG-F13 — Parser tekstu WZ nie rozpoznaje odbiorcy bez prefixu
+**Naprawiony:** 2026-03-19
+**Fix:** Dodano fallback rozpoznający nazwy firm (SPÓŁKA Z O.O., S.A., SP.K. itd.)
+
+### BUG-F14 — Parser tekstu WZ nie łapie masy bez "kg"
+**Naprawiony:** 2026-03-19
+**Fix:** Dodano fallback regex `wag[aę] netto razem: X` bez wymaganego suffixu "kg"
 
 ### BUG-F08 — Brak powiadomień bell w Topbarze (BUG-004)
 **Naprawiony:** Sprint 3C — 2026-03-19
