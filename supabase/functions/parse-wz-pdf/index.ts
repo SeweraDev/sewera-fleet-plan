@@ -268,7 +268,7 @@ serve(async (req) => {
       }
 
       const buffer = await file.arrayBuffer();
-      const parsed = await pdf(Buffer.from(buffer));
+      const parsed = await pdf(new Uint8Array(buffer));
       text = parsed.text || "";
 
       if (!text || text.trim().length < 10) {
