@@ -440,11 +440,18 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     const wzM = text.match(/WZ\s+[A-Z]{2}\/[\d\/]+/);
     if (wzM) r.numer_wz = wzM[0].replace(/^WZ\s+/, '');
 
-    const zamM = text.match(/T7\/[A-Z]{2}\/[\d\/]+/i);
+    // Nr zamówienia — obsługuje T7/, R7/ i inne prefixy X7/
+    const zamM = text.match(/[A-Z]\d\/[A-Z]{2}\/[\d\/]+/i);
     if (zamM) r.nr_zamowienia = zamM[0];
 
+    // Odbiorca — najpierw szukaj prefixu, potem nazwy firmy
     const odbM = text.match(/Odbiorca[:\s]+(.+?)(?:\n|$)/i);
-    if (odbM) r.odbiorca = odbM[1].trim();
+    if (odbM) {
+      r.odbiorca = odbM[1].trim();
+    } else {
+      const firmaM = text.match(/^(.+(?:SP(?:ÓŁKA|\.)?\s*(?:Z\s*O\.?\s*O\.?|AKCYJNA|JAWNA|KOMANDYTOWA|PARTNERSKA|CYWILNA)|S\.?\s*A\.?|SP\.\s*J\.|SP\.\s*K\.|S\.?\s*C\.?).*)$/im);
+      if (firmaM) r.odbiorca = firmaM[1].trim();
+    }
 
     const adrM = text.match(/ul\.\s*.+\d{2}-\d{3}\s*\w+/i);
     if (adrM) r.adres = adrM[0].trim();
@@ -452,9 +459,13 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     const telM = text.match(/Tel\.?:?\s*([\d\s]{9,})/i);
     if (telM) r.tel = telM[1].trim();
 
+    // Masa — łap "X kg" oraz "Waga netto razem: X" (bez suffixu kg)
     const kgMatches = [...text.matchAll(/([\d.,]+)\s*kg/gi)];
     if (kgMatches.length > 0) {
       r.masa_kg = parseFloat(kgMatches[kgMatches.length - 1][1].replace(',', '.'));
+    } else {
+      const wagaM = text.match(/wag[aę]\s*(?:netto\s*)?(?:razem)?[:\s]*([\d.,]+)/i);
+      if (wagaM) r.masa_kg = parseFloat(wagaM[1].replace(',', '.'));
     }
 
     const palM = text.match(/(\d+)\s*[Pp]alet/i);
