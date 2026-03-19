@@ -20,6 +20,7 @@ import { useKursActions } from '@/hooks/useKursActions';
 import { useCreateKurs } from '@/hooks/useCreateKurs';
 import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
+import { ImportExcelModal } from '@/components/dyspozytor/ImportExcelModal';
 import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
@@ -380,6 +381,7 @@ export default function DyspozytorDashboard() {
     if (match) setOddzialId(match.id);
   }, [profile, oddzialy, oddzialId]);
   const [showModal, setShowModal] = useState(false);
+  const [showExcelImport, setShowExcelImport] = useState(false);
   const [preSelectedZlId, setPreSelectedZlId] = useState<string | null>(null);
   const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
@@ -429,9 +431,14 @@ export default function DyspozytorDashboard() {
               </Button>
             </div>
             {activeId === 'kursy' && (
-              <Button className="ml-auto mt-4" onClick={() => setShowModal(true)} disabled={!oddzialId}>
-                + Nowy kurs
-              </Button>
+              <div className="ml-auto mt-4 flex gap-2">
+                <Button variant="outline" onClick={() => setShowExcelImport(true)} disabled={!oddzialId}>
+                  📊 Importuj plan
+                </Button>
+                <Button onClick={() => setShowModal(true)} disabled={!oddzialId}>
+                  + Nowy kurs
+                </Button>
+              </div>
             )}
           </div>
 
@@ -472,6 +479,16 @@ export default function DyspozytorDashboard() {
             onCreated={refetch}
             preSelectedZlecenieId={preSelectedZlId}
             isBlocked={isBlocked}
+          />
+
+          <ImportExcelModal
+            open={showExcelImport}
+            onClose={() => setShowExcelImport(false)}
+            oddzialId={oddzialId}
+            dzien={dzien}
+            flota={flota}
+            kierowcy={kierowcy}
+            onImported={refetch}
           />
         </main>
       </div>

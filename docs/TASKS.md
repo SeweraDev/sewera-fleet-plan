@@ -24,15 +24,14 @@ Po ukończeniu zadania Lovable dopisuje:
 
 ### BLOK A: Import PDF (Edge Functions)
 
-- [ ] **S3-001** — Edge Function `parse-wz-pdf`
+- [x] **S3-001** — Edge Function `parse-wz-pdf` ✅ 2026-03-19
   Parser PDF dokumentów WZ z systemu Ekonom/Proman.
   Pola: nr_wz, nr_zamowienia, odbiorca_nazwa, adres_dostawy,
   osoba_kontaktowa, tel, masa_kg, ilosc_palet, objetosc_m3,
   uwagi, pozycje_towarowe[], data_wz, pewnosc.
-  Palety: wykryj pozycję "PALETA" lub wzorzec "paleta=N szt" w opisie.
   Biblioteka: pdf-parse (npm)
 
-- [ ] **S3-002** — Edge Function `parse-excel-plan`
+- [x] **S3-002** — Edge Function `parse-excel-plan` ✅ 2026-03-19
   Parser planu kursów z Excela (eksport z ERP).
   Szuka po nazwach nagłówków (case insensitive).
   Grupuje wiersze po KURS + KIEROWCA.
@@ -40,16 +39,16 @@ Po ukończeniu zadania Lovable dopisuje:
   E→Winda MAX, F/G→HDS 11,7t, H/I→HDS 8,9t. Typ A → pomiń.
   Biblioteka: xlsx (SheetJS, npm)
 
-- [ ] **S3-003** — Komponent `ModalImportWZ` (shared)
+- [x] **S3-003** — Komponent `ModalImportWZ` (shared) ✅ 2026-03-19
   4 zakładki: 📄 PDF / 📊 XLS / 📋 Wklej tekst / ✏️ Ręcznie
   Używany przez: SprzedawcaPage, DyspozytoPage, KierowcaPage
   Props: isOpen, onClose, onImport(wzData[])
 
-- [ ] **S3-004** — Integracja importu w SprzedawcaPage
+- [x] **S3-004** — Integracja importu w SprzedawcaPage ✅ 2026-03-19
   Przycisk "📥 Importuj WZ" otwiera ModalImportWZ.
   Wiele WZ z XLS → wiele kart WZ w zleceniu.
 
-- [ ] **S3-005** — Integracja importu w DyspozytoPage
+- [x] **S3-005** — Integracja importu w DyspozytoPage ✅ 2026-03-19
   Przycisk "📥 Importuj z WZ" w modalu edycji zlecenia.
 
 - [ ] **S3-006** — Domówienie kierowcy (KierowcaPage)
@@ -63,7 +62,7 @@ Po ukończeniu zadania Lovable dopisuje:
 
 ### BLOK B: Import Excel — plan kursów (dyspozytor)
 
-- [ ] **S3B-001** — Modal importu planu Excela (DyspozytoPage)
+- [x] **S3B-001** — Modal importu planu Excela (DyspozytoPage) ✅ 2026-03-19
   Przycisk "📊 Importuj plan" obok "+ Nowy kurs".
   KROK 1: drag & drop XLS/XLSX → Edge Function parse-excel-plan
   KROK 2: podgląd kursów z walidacją kierowcy/auta
@@ -71,11 +70,11 @@ Po ukończeniu zadania Lovable dopisuje:
   Nierozpoznany kierowca/auto → dropdown wyboru przed zatwierdzeniem
   Pole "Dzień importu" (date picker) — Excel nie zawiera daty!
 
-- [ ] **S3B-002** — Lista A-I w formularzu zlecenia (SprzedawcaPage)
+- [x] **S3B-002** — Lista A-I w formularzu zlecenia (SprzedawcaPage) ✅ 2026-03-19
   W kroku 2 dodaj zakładki: "📋 Wybierz typ (B-I)" | "🚛 Wybierz pojazd"
   Tabela z kodami B-I i opisami → kliknięcie ustawia typ_pojazdu
 
-- [ ] **S3B-003** — Import WZ z Excela (SprzedawcaPage)
+- [x] **S3B-003** — Import WZ z Excela (SprzedawcaPage) ✅ 2026-03-19
   W zakładce XLS w ModalImportWZ: sprzedawca wybiera swój wiersz
   z planu kursów. Wypełnia formularz WZ.
 
@@ -89,12 +88,12 @@ Po ukończeniu zadania Lovable dopisuje:
   Trigger set_deadline_wz przy INSERT
   Trigger update_ma_wz przy INSERT do zlecenia_wz
 
-- [ ] **S3C-002** — Edge Function `check-deadline-wz` (cron co godzinę)
+- [x] **S3C-002** — Edge Function `check-deadline-wz` (cron co godzinę) ✅ 2026-03-19
   Flaguje zlecenia gdzie: ma_wz=false AND deadline_wz < NOW()
   UPDATE zlecenia SET flaga_brak_wz=true
   INSERT do powiadomienia dla nadawcy
 
-- [ ] **S3C-003** — Tabela powiadomienia + UI bell w Topbarze
+- [x] **S3C-003** — Tabela powiadomienia + UI bell w Topbarze ✅ 2026-03-19
   Ikona 🔔 z badge nieprzeczytanych.
   Dropdown z listą powiadomień.
   Realtime na tabeli powiadomienia.
