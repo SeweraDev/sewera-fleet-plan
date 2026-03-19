@@ -13,6 +13,9 @@ export interface MojeZlecenie {
   liczba_wz: number;
   suma_kg: number;
   suma_palet: number;
+  deadline_wz: string | null;
+  ma_wz: boolean;
+  flaga_brak_wz: boolean;
 }
 
 export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
