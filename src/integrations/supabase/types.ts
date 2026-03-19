@@ -347,9 +347,12 @@ export type Database = {
       zlecenia: {
         Row: {
           created_at: string
+          deadline_wz: string | null
           dzien: string
+          flaga_brak_wz: boolean
           id: string
           kurs_id: string | null
+          ma_wz: boolean
           nadawca_id: string | null
           numer: string
           oddzial_id: number | null
@@ -359,9 +362,12 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deadline_wz?: string | null
           dzien?: string
+          flaga_brak_wz?: boolean
           id?: string
           kurs_id?: string | null
+          ma_wz?: boolean
           nadawca_id?: string | null
           numer: string
           oddzial_id?: number | null
@@ -371,9 +377,12 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deadline_wz?: string | null
           dzien?: string
+          flaga_brak_wz?: boolean
           id?: string
           kurs_id?: string | null
+          ma_wz?: boolean
           nadawca_id?: string | null
           numer?: string
           oddzial_id?: number | null
@@ -456,6 +465,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      oblicz_deadline_wz: { Args: { dzien_dostawy: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "zarzad" | "dyspozytor" | "sprzedawca" | "kierowca"
