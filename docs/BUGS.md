@@ -57,23 +57,6 @@ to jest placeholder bez prawdziwej Edge Function.
 
 ---
 
-### BUG-004 — Brak powiadomień bell w Topbarze
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3
-**Gdzie:** Topbar — wszystkie strony
-**Opis:** Ikona 🔔 z powiadomieniami nie istnieje.
-Tabela powiadomienia jest w bazie ale bez UI.
-**Fix:** Implementacja S3C-003
-
----
-
-### BUG-005 — Brak informacji o deadline WZ w karcie zlecenia
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3
-**Gdzie:** SprzedawcaPage — Moje zlecenia
-**Opis:** Sprzedawca nie widzi deadline WZ ani czy WZ zostało dodane.
-**Fix:** Implementacja S3C-004
-
----
-
 ### BUG-006 — Weryfikacja zajętości nie sprawdza masy/m³/palet
 **Status:** 🔴 Aktywny — zaplanowany Sprint 3D
 **Gdzie:** SprzedawcaPage — formularz zlecenia krok 2-4
@@ -81,15 +64,6 @@ Tabela powiadomienia jest w bazie ale bez UI.
 (bez znajomości masy bo WZ w kroku 5). Po wpisaniu WZ
 brak ostrzeżenia gdy ładunek przekracza pojemność auta.
 **Fix:** Implementacja S3D-001
-
----
-
-### BUG-007 — Cron check-deadline-wz nie istnieje
-**Status:** 🔴 Aktywny — zaplanowany Sprint 3
-**Gdzie:** Lovable Edge Functions
-**Opis:** Automatyczne flagowanie zleceń bez WZ nie działa.
-Tabela ma kolumny ale nikt ich nie aktualizuje.
-**Fix:** Implementacja S3C-002
 
 ---
 
