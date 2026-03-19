@@ -381,6 +381,7 @@ export default function DyspozytorDashboard() {
     if (match) setOddzialId(match.id);
   }, [profile, oddzialy, oddzialId]);
   const [showModal, setShowModal] = useState(false);
+  const [showExcelImport, setShowExcelImport] = useState(false);
   const [preSelectedZlId, setPreSelectedZlId] = useState<string | null>(null);
   const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
