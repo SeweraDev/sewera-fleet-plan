@@ -71,6 +71,9 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
       liczba_wz: wzMap.get(z.id)?.count || 0,
       suma_kg: wzMap.get(z.id)?.kg || 0,
       suma_palet: wzMap.get(z.id)?.palet || 0,
+      deadline_wz: (z as any).deadline_wz || null,
+      ma_wz: !!(z as any).ma_wz,
+      flaga_brak_wz: !!(z as any).flaga_brak_wz,
     })));
     setLoading(false);
   }, [user, statusFilter]);

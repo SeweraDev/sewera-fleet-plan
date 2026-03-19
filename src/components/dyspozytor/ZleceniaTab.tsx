@@ -4,9 +4,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { useZleceniaOddzialu, useZlecenieWz } from '@/hooks/useZleceniaOddzialu';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { CalendarIcon } from 'lucide-react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 
 type ZlStatusFilter = 'all' | 'robocza' | 'potwierdzona' | 'w_trasie' | 'dostarczona' | 'anulowana';
@@ -113,6 +120,52 @@ function ZlSzczegolyDialog({
   );
 }
 
+function DeadlineExtendPicker({ zlecenie, onDone }: { zlecenie: ZlecenieOddzialuDto; onDone: () => void }) {
+  const [date, setDate] = useState<Date>();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleExtend = async () => {
+    if (!date) return;
+    setSaving(true);
+    const newDeadline = new Date(date);
+    newDeadline.setHours(16, 0, 0, 0);
+    await supabase
+      .from('zlecenia')
+      .update({ deadline_wz: newDeadline.toISOString(), flaga_brak_wz: false } as any)
+      .eq('id', zlecenie.id);
+    toast.success('✅ Termin przedłużony');
+    setSaving(false);
+    setOpen(false);
+    onDone();
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" className="text-xs">
+          ✅ Przedłuż termin
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={date}
+          onSelect={setDate}
+          className={cn("p-3 pointer-events-auto")}
+        />
+        {date && (
+          <div className="p-2 border-t flex justify-end">
+            <Button size="sm" onClick={handleExtend} disabled={saving}>
+              {saving ? 'Zapisywanie...' : `Przedłuż do ${format(date, 'dd.MM')}`}
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ZleceniaTab({
   oddzialId,
   pastOnly = false,
@@ -136,6 +189,28 @@ export function ZleceniaTab({
     w_trasie: zlecenia.filter(z => z.status === 'w_trasie').length,
     dostarczona: zlecenia.filter(z => z.status === 'dostarczona').length,
     anulowana: zlecenia.filter(z => z.status === 'anulowana').length,
+  };
+
+  const handleAnuluj = async (zl: ZlecenieOddzialuDto) => {
+    await supabase
+      .from('zlecenia')
+      .update({ status: 'anulowana' } as any)
+      .eq('id', zl.id);
+
+    // Notify sender
+    if (zl.deadline_wz) {
+      const deadlineStr = new Date(zl.deadline_wz).toLocaleDateString('pl-PL');
+      await supabase.from('powiadomienia').insert({
+        user_id: (zl as any).nadawca_id || '',
+        typ: 'zlecenie_anulowane',
+        tresc: `Zlecenie ${zl.numer} zostało anulowane — brak dokumentów WZ przed terminem ${deadlineStr}`,
+        zlecenie_id: zl.id,
+        przeczytane: false,
+      } as any);
+    }
+
+    toast.success('❌ Zlecenie anulowane');
+    refetch();
   };
 
   if (loading) return <p className="text-muted-foreground text-center py-8">Ładowanie zleceń...</p>;
@@ -175,13 +250,14 @@ export function ZleceniaTab({
                   <TableHead>Odbiorca</TableHead>
                   <TableHead className="text-right">Kg</TableHead>
                   <TableHead>Kurs</TableHead>
+                  <TableHead>WZ</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map(z => (
                   <TableRow
                     key={z.id}
-                    className="cursor-pointer hover:bg-muted/50"
+                    className={`cursor-pointer hover:bg-muted/50 ${z.flaga_brak_wz ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
                     onClick={() => setSelectedZl(z)}
                   >
                     <TableCell className="font-mono text-sm">{z.numer}</TableCell>
@@ -197,6 +273,17 @@ export function ZleceniaTab({
                         ? <Badge variant="outline" className="font-mono text-xs">{z.kurs_numer}{z.kurs_nrrej ? ` · ${z.kurs_nrrej}` : ''}</Badge>
                         : <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs">bez kursu ⚠️</Badge>
                       }
+                    </TableCell>
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      {z.flaga_brak_wz ? (
+                        <div className="flex items-center gap-1">
+                          <Badge variant="destructive" className="text-[10px] whitespace-nowrap">⏰ Deadline WZ</Badge>
+                          <Button size="sm" variant="ghost" className="text-xs h-6 px-1" onClick={() => handleAnuluj(z)}>❌</Button>
+                          <DeadlineExtendPicker zlecenie={z} onDone={refetch} />
+                        </div>
+                      ) : z.ma_wz ? (
+                        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400">✓ WZ</Badge>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}
