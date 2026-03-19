@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
 import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
 import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
+import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
 import { MojeZleceniaTab } from '@/components/sprzedawca/MojeZleceniaTab';
 import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
 import { Button } from '@/components/ui/button';
@@ -46,31 +47,25 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       uwagi: d.uwagi || '',
     }));
 
-    if (newWzList.length === 1) {
-      // Single WZ - replace first empty or add
-      if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
-        setWzList(newWzList);
-      } else {
-        setWzList([...wzList, ...newWzList]);
-      }
+    if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
+      setWzList(newWzList);
     } else {
-      // Multiple WZ - add all as separate cards
-      if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
-        setWzList(newWzList);
-      } else {
-        setWzList([...wzList, ...newWzList]);
-      }
+      setWzList([...wzList, ...newWzList]);
     }
     toast.success(`Zaimportowano ${newWzList.length} WZ`);
   }, [wzList]);
 
-  const handleSubmit = () => {
-    if (!oddzialId || !dzien || !godzina) {
-      toast.error('Uzupełnij wszystkie pola');
-      return;
-    }
+  const handleGoToCheck = () => {
     if (wzList.some(w => !w.odbiorca || !w.adres || !w.masa_kg)) {
       toast.error('Uzupełnij dane WZ');
+      return;
+    }
+    setStep(4);
+  };
+
+  const handleSubmit = (forceVerify: boolean) => {
+    if (!oddzialId || !dzien || !godzina) {
+      toast.error('Uzupełnij wszystkie pola');
       return;
     }
     create({
@@ -79,13 +74,13 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       dzien,
       preferowana_godzina: godzina,
       wz_list: wzList,
-    });
+    }, forceVerify);
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Nowe zlecenie — Krok {step}/3</CardTitle>
+        <CardTitle className="text-lg">Nowe zlecenie — Krok {step}/4</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {step === 1 && (
@@ -117,7 +112,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
               wzList={wzList} setWzList={setWzList}
               error={error} submitting={submitting}
               onBack={() => setStep(2)}
-              onSubmit={handleSubmit}
+              onSubmit={handleGoToCheck}
             />
             <ModalImportWZ
               isOpen={showImport}
@@ -125,6 +120,17 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
               onImport={handleImport}
             />
           </div>
+        )}
+        {step === 4 && oddzialId && (
+          <DostepnoscStep
+            oddzialId={oddzialId}
+            typPojazdu={typPojazdu}
+            dzien={dzien}
+            wzList={wzList}
+            onBack={() => setStep(3)}
+            onSubmit={handleSubmit}
+            submitting={submitting}
+          />
         )}
       </CardContent>
     </Card>
