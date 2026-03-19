@@ -13,6 +13,9 @@ export interface MojeZlecenie {
   liczba_wz: number;
   suma_kg: number;
   suma_palet: number;
+  deadline_wz: string | null;
+  ma_wz: boolean;
+  flaga_brak_wz: boolean;
 }
 
 export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
@@ -28,6 +31,7 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
       .from('zlecenia')
       .select(`
         id, numer, status, dzien, preferowana_godzina, typ_pojazdu,
+        deadline_wz, ma_wz, flaga_brak_wz,
         oddzialy(nazwa)
       `)
       .eq('nadawca_id', user.id)
@@ -67,6 +71,9 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
       liczba_wz: wzMap.get(z.id)?.count || 0,
       suma_kg: wzMap.get(z.id)?.kg || 0,
       suma_palet: wzMap.get(z.id)?.palet || 0,
+      deadline_wz: (z as any).deadline_wz || null,
+      ma_wz: !!(z as any).ma_wz,
+      flaga_brak_wz: !!(z as any).flaga_brak_wz,
     })));
     setLoading(false);
   }, [user, statusFilter]);

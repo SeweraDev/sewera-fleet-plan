@@ -305,6 +305,44 @@ export type Database = {
         }
         Relationships: []
       }
+      powiadomienia: {
+        Row: {
+          created_at: string | null
+          id: string
+          przeczytane: boolean
+          tresc: string
+          typ: string
+          user_id: string
+          zlecenie_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          przeczytane?: boolean
+          tresc: string
+          typ: string
+          user_id: string
+          zlecenie_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          przeczytane?: boolean
+          tresc?: string
+          typ?: string
+          user_id?: string
+          zlecenie_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "powiadomienia_zlecenie_id_fkey"
+            columns: ["zlecenie_id"]
+            isOneToOne: false
+            referencedRelation: "zlecenia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           branch: string | null

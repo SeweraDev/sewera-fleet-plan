@@ -2,6 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { ROLE_LABELS } from '@/types';
 import type { UserRole } from '@/types';
 import { LogOut } from 'lucide-react';
+import { NotificationBell } from '@/components/shared/NotificationBell';
 
 const ROLE_BADGE_COLORS: Record<UserRole, string> = {
   sprzedawca: 'bg-[hsl(var(--role-sprzedawca))]',
@@ -32,6 +33,7 @@ export function Topbar({ extra }: TopbarProps) {
 
       {profile && role && (
         <div className="flex items-center gap-3">
+          <NotificationBell />
           <span className="text-sm text-primary-foreground/90">
             {profile.full_name}
           </span>

@@ -13,6 +13,9 @@ export interface ZlecenieOddzialuDto {
   oddział_nadawcy: string | null;
   odbiorca: string | null;
   suma_kg: number;
+  deadline_wz: string | null;
+  ma_wz: boolean;
+  flaga_brak_wz: boolean;
 }
 
 export interface WzDto {
@@ -38,7 +41,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('zlecenia')
-      .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id')
+      .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id, deadline_wz, ma_wz, flaga_brak_wz')
       .eq('oddzial_id', oddzialId)
       .order('dzien', { ascending: true })
       .order('created_at', { ascending: true });
@@ -118,6 +121,9 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
         oddział_nadawcy: z.oddzial_id ? oddzialMap.get(z.oddzial_id) || null : null,
         odbiorca: wzInfo?.odbiorca || null,
         suma_kg: wzInfo?.suma_kg || 0,
+        deadline_wz: (z as any).deadline_wz || null,
+        ma_wz: !!(z as any).ma_wz,
+        flaga_brak_wz: !!(z as any).flaga_brak_wz,
       };
     }));
     setLoading(false);
