@@ -51,12 +51,12 @@ Po ukończeniu zadania Lovable dopisuje:
 - [x] **S3-005** — Integracja importu w DyspozytoPage ✅ 2026-03-19
   Przycisk "📥 Importuj z WZ" w modalu edycji zlecenia.
 
-- [ ] **S3-006** — Domówienie kierowcy (KierowcaPage)
+- [x] **S3-006** — Domówienie kierowcy (KierowcaPage) ✅ 2026-03-19
   Przycisk "➕ Domówienie" na aktywnym kursie.
-  Otwiera ModalImportWZ (tylko PDF + Ręcznie).
+  Otwiera ModalImportWZ (tylko PDF + Ręcznie, hideXls).
   Tworzy zlecenie ze statusem `do_weryfikacji`.
   Dyspozytor widzi w bannerze ⚠️ i może zatwierdzić/odrzucić.
-  MIGRACJA: ALTER TYPE zlecenie_status ADD VALUE 'do_weryfikacji'
+  Plik: src/pages/kierowca/MojaTrasa.tsx
 
 ---
 
