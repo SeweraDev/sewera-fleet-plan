@@ -41,7 +41,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('zlecenia')
-      .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id')
+      .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id, deadline_wz, ma_wz, flaga_brak_wz')
       .eq('oddzial_id', oddzialId)
       .order('dzien', { ascending: true })
       .order('created_at', { ascending: true });
