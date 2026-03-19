@@ -41,8 +41,8 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       adres: d.adres || '',
       tel: d.tel || '',
       masa_kg: d.masa_kg || 0,
-      objetosc_m3: 0,
-      ilosc_palet: 0,
+      objetosc_m3: d.objetosc_m3 || 0,
+      ilosc_palet: d.ilosc_palet || 0,
       uwagi: d.uwagi || '',
     }));
 
