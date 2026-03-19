@@ -431,9 +431,14 @@ export default function DyspozytorDashboard() {
               </Button>
             </div>
             {activeId === 'kursy' && (
-              <Button className="ml-auto mt-4" onClick={() => setShowModal(true)} disabled={!oddzialId}>
-                + Nowy kurs
-              </Button>
+              <div className="ml-auto mt-4 flex gap-2">
+                <Button variant="outline" onClick={() => setShowExcelImport(true)} disabled={!oddzialId}>
+                  📊 Importuj plan
+                </Button>
+                <Button onClick={() => setShowModal(true)} disabled={!oddzialId}>
+                  + Nowy kurs
+                </Button>
+              </div>
             )}
           </div>
 
