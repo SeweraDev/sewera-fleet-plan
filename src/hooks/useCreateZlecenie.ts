@@ -77,7 +77,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
       }
     }
 
-    toast.success('✅ Zlecenie złożone');
+    toast.success(forceVerify ? '⚠️ Zlecenie złożone do weryfikacji' : '✅ Zlecenie złożone');
     setSubmitting(false);
     onSuccess?.();
   };
