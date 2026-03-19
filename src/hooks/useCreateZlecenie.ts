@@ -28,7 +28,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const create = async (input: ZlecenieInput) => {
+  const create = async (input: ZlecenieInput, forceVerify = false) => {
     if (!user) return;
     setSubmitting(true);
     setError(null);
@@ -44,7 +44,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
         dzien: input.dzien,
         preferowana_godzina: input.preferowana_godzina,
         nadawca_id: user.id,
-        status: 'robocza',
+        status: forceVerify ? 'do_weryfikacji' : 'robocza',
       })
       .select('id')
       .single();
