@@ -75,6 +75,18 @@ brak ostrzeżenia gdy ładunek przekracza pojemność auta.
 
 ## ✅ NAPRAWIONE
 
+### BUG-F08 — Brak powiadomień bell w Topbarze (BUG-004)
+**Naprawiony:** Sprint 3C — 2026-03-19
+**Fix:** NotificationBell + usePowiadomienia + Realtime
+
+### BUG-F09 — Brak informacji o deadline WZ (BUG-005)
+**Naprawiony:** Sprint 3C — 2026-03-19
+**Fix:** DeadlineBadge w MojeZleceniaTab (🟢/🟡/🔴)
+
+### BUG-F10 — Cron check-deadline-wz nie istnieje (BUG-007)
+**Naprawiony:** Sprint 3C — 2026-03-19
+**Fix:** Edge Function check-deadline-wz + pg_cron co godzinę
+
 ### BUG-F01 — Auth hardcoded zamiast Supabase
 **Naprawiony:** Sprint 1.5
 **Fix:** Przepisano useAuth + LoginPage
