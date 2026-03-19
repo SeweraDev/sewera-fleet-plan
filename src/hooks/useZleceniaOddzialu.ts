@@ -13,6 +13,9 @@ export interface ZlecenieOddzialuDto {
   oddział_nadawcy: string | null;
   odbiorca: string | null;
   suma_kg: number;
+  deadline_wz: string | null;
+  ma_wz: boolean;
+  flaga_brak_wz: boolean;
 }
 
 export interface WzDto {
