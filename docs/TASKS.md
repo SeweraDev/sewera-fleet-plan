@@ -62,7 +62,7 @@ Po ukończeniu zadania Lovable dopisuje:
 
 ### BLOK B: Import Excel — plan kursów (dyspozytor)
 
-- [ ] **S3B-001** — Modal importu planu Excela (DyspozytoPage)
+- [x] **S3B-001** — Modal importu planu Excela (DyspozytoPage) ✅ 2026-03-19
   Przycisk "📊 Importuj plan" obok "+ Nowy kurs".
   KROK 1: drag & drop XLS/XLSX → Edge Function parse-excel-plan
   KROK 2: podgląd kursów z walidacją kierowcy/auta
@@ -70,11 +70,11 @@ Po ukończeniu zadania Lovable dopisuje:
   Nierozpoznany kierowca/auto → dropdown wyboru przed zatwierdzeniem
   Pole "Dzień importu" (date picker) — Excel nie zawiera daty!
 
-- [ ] **S3B-002** — Lista A-I w formularzu zlecenia (SprzedawcaPage)
+- [x] **S3B-002** — Lista A-I w formularzu zlecenia (SprzedawcaPage) ✅ 2026-03-19
   W kroku 2 dodaj zakładki: "📋 Wybierz typ (B-I)" | "🚛 Wybierz pojazd"
   Tabela z kodami B-I i opisami → kliknięcie ustawia typ_pojazdu
 
-- [ ] **S3B-003** — Import WZ z Excela (SprzedawcaPage)
+- [x] **S3B-003** — Import WZ z Excela (SprzedawcaPage) ✅ 2026-03-19
   W zakładce XLS w ModalImportWZ: sprzedawca wybiera swój wiersz
   z planu kursów. Wypełnia formularz WZ.
 
