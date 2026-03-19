@@ -31,6 +31,7 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
       .from('zlecenia')
       .select(`
         id, numer, status, dzien, preferowana_godzina, typ_pojazdu,
+        deadline_wz, ma_wz, flaga_brak_wz,
         oddzialy(nazwa)
       `)
       .eq('nadawca_id', user.id)
