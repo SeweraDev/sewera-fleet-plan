@@ -115,6 +115,8 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       if (d.adres) setAdres(d.adres);
       if (d.tel) setTel(d.tel);
       if (d.masa_kg) setMasaKg(String(d.masa_kg));
+      if (d.ilosc_palet) setIloscPalet(String(d.ilosc_palet));
+      if (d.objetosc_m3) setObjetoscM3(String(d.objetosc_m3));
       if (d.uwagi) setUwagi(d.uwagi);
     }
   }, []);
