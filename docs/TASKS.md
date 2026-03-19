@@ -24,15 +24,14 @@ Po ukończeniu zadania Lovable dopisuje:
 
 ### BLOK A: Import PDF (Edge Functions)
 
-- [ ] **S3-001** — Edge Function `parse-wz-pdf`
+- [x] **S3-001** — Edge Function `parse-wz-pdf` ✅ 2026-03-19
   Parser PDF dokumentów WZ z systemu Ekonom/Proman.
   Pola: nr_wz, nr_zamowienia, odbiorca_nazwa, adres_dostawy,
   osoba_kontaktowa, tel, masa_kg, ilosc_palet, objetosc_m3,
   uwagi, pozycje_towarowe[], data_wz, pewnosc.
-  Palety: wykryj pozycję "PALETA" lub wzorzec "paleta=N szt" w opisie.
   Biblioteka: pdf-parse (npm)
 
-- [ ] **S3-002** — Edge Function `parse-excel-plan`
+- [x] **S3-002** — Edge Function `parse-excel-plan` ✅ 2026-03-19
   Parser planu kursów z Excela (eksport z ERP).
   Szuka po nazwach nagłówków (case insensitive).
   Grupuje wiersze po KURS + KIEROWCA.
