@@ -288,17 +288,17 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
   );
 }
 
-/* ─── XLS Tab ─── */
+/* ─── XLS Tab (uses parse-excel-plan Edge Function) ─── */
 function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
-  const [rows, setRows] = useState<WZImportData[]>([]);
+  const [rows, setRows] = useState<(WZImportData & { typ_pojazdu?: string })[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Plik za duży (max 5 MB)');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Plik za duży (max 10 MB)');
       return;
     }
     setParsing(true);
@@ -310,7 +310,7 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
 
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-xls`,
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-excel-plan`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -325,19 +325,26 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
       return;
     }
 
-    const mapped: WZImportData[] = (json.wiersze || []).map((w: any) => ({
-      numer_wz: w.nr_wz,
-      nr_zamowienia: w.nr_zamowienia,
-      odbiorca: w.odbiorca,
-      adres: w.adres_dostawy,
-      tel: w.tel,
-      masa_kg: w.masa_kg,
-      ilosc_palet: null,
-      objetosc_m3: null,
-      uwagi: w.uwagi,
-    }));
-    setRows(mapped);
-    setSelected(new Set(mapped.map((_, i) => i)));
+    // Flatten all zlecenia from all kursy into a flat WZ list
+    const allWz: (WZImportData & { typ_pojazdu?: string })[] = [];
+    for (const kurs of (json.kursy || [])) {
+      for (const zl of (kurs.zlecenia || [])) {
+        allWz.push({
+          numer_wz: zl.nr_wz,
+          nr_zamowienia: null,
+          odbiorca: zl.odbiorca,
+          adres: zl.adres_pelny,
+          tel: null,
+          masa_kg: zl.masa_kg,
+          ilosc_palet: null,
+          objetosc_m3: null,
+          uwagi: [zl.rodzaj_dostawy, zl.uwagi].filter(Boolean).join('; ') || null,
+          typ_pojazdu: kurs.typ_pojazdu,
+        });
+      }
+    }
+    setRows(allWz);
+    setSelected(new Set(allWz.map((_, i) => i)));
   }, []);
 
   const toggleRow = (i: number) => {
@@ -355,18 +362,18 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
         <input
           ref={fileRef}
           type="file"
-          accept=".xls,.xlsx,.csv"
+          accept=".xls,.xlsx"
           className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         />
-        <p className="text-sm font-medium text-muted-foreground">📊 Wybierz plik Excel / CSV</p>
-        <p className="text-xs text-muted-foreground mt-1">XLS, XLSX, CSV do 5 MB</p>
+        <p className="text-sm font-medium text-muted-foreground">📊 Wybierz plik Excel</p>
+        <p className="text-xs text-muted-foreground mt-1">XLS, XLSX do 10 MB · Plan kursów z ERP</p>
       </div>
 
       {parsing && (
         <div className="text-center py-4">
           <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
-          <p className="text-sm text-muted-foreground mt-2">Wczytuję arkusz...</p>
+          <p className="text-sm text-muted-foreground mt-2">Analizuję arkusz...</p>
         </div>
       )}
 
@@ -374,22 +381,36 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
 
       {rows.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm font-medium">{rows.length} wierszy znalezionych</p>
-          <div className="max-h-60 overflow-auto space-y-1">
-            {rows.map((r, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 p-2 rounded border cursor-pointer hover:bg-muted/50"
-                onClick={() => toggleRow(i)}
-              >
-                <Checkbox checked={selected.has(i)} />
-                <div className="flex-1 min-w-0">
-                  <span className="text-xs font-mono">{r.numer_wz || '—'}</span>
-                  <span className="text-xs text-muted-foreground mx-2">{r.odbiorca || '—'}</span>
-                  <span className="text-xs">{r.masa_kg ? `${r.masa_kg} kg` : ''}</span>
-                </div>
-              </div>
-            ))}
+          <p className="text-sm font-medium">{rows.length} WZ znalezionych</p>
+          <div className="max-h-60 overflow-auto border rounded-md">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 sticky top-0">
+                <tr>
+                  <th className="px-2 py-1 w-8"></th>
+                  <th className="px-2 py-1 text-left">Nr WZ</th>
+                  <th className="px-2 py-1 text-left">Odbiorca</th>
+                  <th className="px-2 py-1 text-left">Adres</th>
+                  <th className="px-2 py-1 text-right">Kg</th>
+                  <th className="px-2 py-1 text-left">Typ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr
+                    key={i}
+                    className="border-t border-muted/50 cursor-pointer hover:bg-muted/30"
+                    onClick={() => toggleRow(i)}
+                  >
+                    <td className="px-2 py-1"><Checkbox checked={selected.has(i)} /></td>
+                    <td className="px-2 py-1 font-mono">{r.numer_wz || '—'}</td>
+                    <td className="px-2 py-1 max-w-[120px] truncate">{r.odbiorca || '—'}</td>
+                    <td className="px-2 py-1 max-w-[120px] truncate">{r.adres || '—'}</td>
+                    <td className="px-2 py-1 text-right">{r.masa_kg ?? '—'}</td>
+                    <td className="px-2 py-1 text-muted-foreground">{r.typ_pojazdu || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <Button
             onClick={() => onParsed(rows.filter((_, i) => selected.has(i)))}
