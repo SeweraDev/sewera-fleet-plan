@@ -39,16 +39,16 @@ Po ukończeniu zadania Lovable dopisuje:
   E→Winda MAX, F/G→HDS 11,7t, H/I→HDS 8,9t. Typ A → pomiń.
   Biblioteka: xlsx (SheetJS, npm)
 
-- [ ] **S3-003** — Komponent `ModalImportWZ` (shared)
+- [x] **S3-003** — Komponent `ModalImportWZ` (shared) ✅ 2026-03-19
   4 zakładki: 📄 PDF / 📊 XLS / 📋 Wklej tekst / ✏️ Ręcznie
   Używany przez: SprzedawcaPage, DyspozytoPage, KierowcaPage
   Props: isOpen, onClose, onImport(wzData[])
 
-- [ ] **S3-004** — Integracja importu w SprzedawcaPage
+- [x] **S3-004** — Integracja importu w SprzedawcaPage ✅ 2026-03-19
   Przycisk "📥 Importuj WZ" otwiera ModalImportWZ.
   Wiele WZ z XLS → wiele kart WZ w zleceniu.
 
-- [ ] **S3-005** — Integracja importu w DyspozytoPage
+- [x] **S3-005** — Integracja importu w DyspozytoPage ✅ 2026-03-19
   Przycisk "📥 Importuj z WZ" w modalu edycji zlecenia.
 
 - [ ] **S3-006** — Domówienie kierowcy (KierowcaPage)
