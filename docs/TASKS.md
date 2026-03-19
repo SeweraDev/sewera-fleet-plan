@@ -88,12 +88,12 @@ Po ukończeniu zadania Lovable dopisuje:
   Trigger set_deadline_wz przy INSERT
   Trigger update_ma_wz przy INSERT do zlecenia_wz
 
-- [ ] **S3C-002** — Edge Function `check-deadline-wz` (cron co godzinę)
+- [x] **S3C-002** — Edge Function `check-deadline-wz` (cron co godzinę) ✅ 2026-03-19
   Flaguje zlecenia gdzie: ma_wz=false AND deadline_wz < NOW()
   UPDATE zlecenia SET flaga_brak_wz=true
   INSERT do powiadomienia dla nadawcy
 
-- [ ] **S3C-003** — Tabela powiadomienia + UI bell w Topbarze
+- [x] **S3C-003** — Tabela powiadomienia + UI bell w Topbarze ✅ 2026-03-19
   Ikona 🔔 z badge nieprzeczytanych.
   Dropdown z listą powiadomień.
   Realtime na tabeli powiadomienia.
