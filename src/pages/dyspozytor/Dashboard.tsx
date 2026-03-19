@@ -20,6 +20,7 @@ import { useKursActions } from '@/hooks/useKursActions';
 import { useCreateKurs } from '@/hooks/useCreateKurs';
 import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
+import { ImportExcelModal } from '@/components/dyspozytor/ImportExcelModal';
 import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
