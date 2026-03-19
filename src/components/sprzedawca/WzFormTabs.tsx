@@ -173,7 +173,7 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
       <div className="flex gap-2">
         <Button variant="outline" onClick={onBack}>← Wstecz</Button>
         <Button onClick={onSubmit} disabled={submitting}>
-          {submitting ? 'Wysyłanie...' : 'Złóż zlecenie'}
+          {submitting ? 'Wysyłanie...' : 'Sprawdź dostępność →'}
         </Button>
       </div>
     </div>
