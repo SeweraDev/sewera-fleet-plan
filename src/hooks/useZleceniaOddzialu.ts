@@ -121,6 +121,9 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
         oddział_nadawcy: z.oddzial_id ? oddzialMap.get(z.oddzial_id) || null : null,
         odbiorca: wzInfo?.odbiorca || null,
         suma_kg: wzInfo?.suma_kg || 0,
+        deadline_wz: (z as any).deadline_wz || null,
+        ma_wz: !!(z as any).ma_wz,
+        flaga_brak_wz: !!(z as any).flaga_brak_wz,
       };
     }));
     setLoading(false);
