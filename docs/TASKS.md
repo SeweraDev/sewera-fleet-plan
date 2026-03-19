@@ -111,12 +111,13 @@ Po ukończeniu zadania Lovable dopisuje:
 
 ### BLOK D: Weryfikacja zajętości przy składaniu zlecenia
 
-- [ ] **S3D-001** — Sprawdzanie dostępności w formularzu (SprzedawcaPage)
-  Po kroku 5 (WZ z masą/m³/paletami) → sprawdź zajętość w czasie rzeczywistym
+- [x] **S3D-001** — Sprawdzanie dostępności w formularzu (SprzedawcaPage) ✅ 2026-03-19
+  Krok 4 po WZ: hook useSprawdzDostepnosc sprawdza zajętość floty w czasie rzeczywistym
   ✅ Mieści się → normalny INSERT, status 'robocza'
   ⚠️ Nie mieści się → dwa przyciski:
-    "Zmień termin / pojazd" (wraca do kroku 3/2)
-    "Złóż mimo to → do weryfikacji"
+    "Zmień termin / pojazd" (wraca do kroku 3)
+    "Złóż mimo to → do weryfikacji" (status 'do_weryfikacji')
+  Pliki: useSprawdzDostepnosc.ts, DostepnoscStep.tsx, Dashboard.tsx, useCreateZlecenie.ts
 
 ---
 
