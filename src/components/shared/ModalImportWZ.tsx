@@ -442,7 +442,7 @@ function cleanText(text: string): string {
 /* ─── formatMasaKg — display with Polish thousands separator ─── */
 function formatMasaKg(masa: number | null | undefined): string {
   if (!masa) return '';
-  return Math.round(masa).toLocaleString('pl-PL');
+  return Math.ceil(masa).toLocaleString('pl-PL');
 }
 
 /* ─── parseWZText — Ekonom WZ parser v5 ─── */
@@ -548,7 +548,7 @@ function parseWZText(rawText: string): WZImportData {
   let masa_kg = 0;
   const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
   if (wagaM) {
-    masa_kg = parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0;
+    masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
   }
 
   // 7. objetosc_m3
