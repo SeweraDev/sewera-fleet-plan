@@ -207,7 +207,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
     { key: 'odbiorca', label: 'Odbiorca' },
     { key: 'adres', label: 'Adres dostawy' },
     { key: 'tel', label: 'Telefon' },
-    { key: 'masa_kg', label: 'Masa kg', type: 'number' },
+    { key: 'masa_kg', label: 'Masa kg' },
     { key: 'ilosc_palet', label: 'Ilość palet', type: 'number' },
     { key: 'objetosc_m3', label: 'Objętość m³', type: 'number' },
     { key: 'uwagi', label: 'Uwagi' },
@@ -256,11 +256,16 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
                   <Input
                     className="h-8 text-sm flex-1"
                     type={f.type || 'text'}
-                    value={val?.toString() ?? ''}
+                    value={f.key === 'masa_kg' && typeof val === 'number' ? formatMasaKg(val) : (val?.toString() ?? '')}
                     onChange={e => {
+                      const raw = e.target.value;
                       setFormData(prev => prev ? {
                         ...prev,
-                        [f.key]: f.type === 'number' ? (e.target.value ? Number(e.target.value) : null) : e.target.value,
+                        [f.key]: f.type === 'number'
+                          ? (raw ? Number(raw) : null)
+                          : f.key === 'masa_kg'
+                            ? (parseFloat(raw.replace(/\s/g, '').replace(',', '.')) || 0)
+                            : raw,
                       } : prev);
                     }}
                   />
@@ -425,8 +430,24 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   );
 }
 
-/* ─── parseWZText — Ekonom WZ parser v4 ─── */
-function parseWZText(text: string): WZImportData {
+/* ─── cleanText — remove non-printable chars from PDF clipboard ─── */
+function cleanText(text: string): string {
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/[^\x20-\x7E\u00A0-\u017E\n\r\t]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/(\n\s*){3,}/g, '\n\n');
+}
+
+/* ─── formatMasaKg — display with Polish thousands separator ─── */
+function formatMasaKg(masa: number | null | undefined): string {
+  if (!masa) return '';
+  return Math.round(masa).toLocaleString('pl-PL');
+}
+
+/* ─── parseWZText — Ekonom WZ parser v5 ─── */
+function parseWZText(rawText: string): WZImportData {
+  const text = cleanText(rawText);
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
   // 1. nr_wz — always prefix with "WZ " if missing
@@ -565,7 +586,7 @@ function parseWZText(text: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  console.log('[parseWZText v4] result:', {
+  console.log('[parseWZText v5] result:', {
     numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi,
   });
 
@@ -592,6 +613,12 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
         placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres..."
         value={text}
         onChange={e => setText(e.target.value)}
+        onPaste={e => {
+          e.preventDefault();
+          const pasted = e.clipboardData.getData('text/plain');
+          const cleaned = cleanText(pasted);
+          setText(cleaned);
+        }}
       />
       <Button onClick={parse} disabled={!text.trim()} size="sm">Parsuj tekst</Button>
 
@@ -603,7 +630,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
             ['Odbiorca', result.odbiorca],
             ['Adres', result.adres],
             ['Telefon', result.tel],
-            ['Masa kg', result.masa_kg?.toString()],
+            ['Masa kg', formatMasaKg(result.masa_kg)],
             ['Ilość palet', result.ilosc_palet?.toString()],
             ['Objętość m³', result.objetosc_m3?.toString()],
           ] as [string, string | undefined | null][]).map(([label, val]) => (
