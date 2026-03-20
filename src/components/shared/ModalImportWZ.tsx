@@ -625,7 +625,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
             ['Odbiorca', result.odbiorca],
             ['Adres', result.adres],
             ['Telefon', result.tel],
-            ['Masa kg', result.masa_kg?.toString()],
+            ['Masa kg', formatMasaKg(result.masa_kg)],
             ['Ilość palet', result.ilosc_palet?.toString()],
             ['Objętość m³', result.objetosc_m3?.toString()],
           ] as [string, string | undefined | null][]).map(([label, val]) => (
