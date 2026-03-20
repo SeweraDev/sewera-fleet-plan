@@ -256,7 +256,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
                   <Input
                     className="h-8 text-sm flex-1"
                     type={f.type || 'text'}
-                    value={val?.toString() ?? ''}
+                    value={f.key === 'masa_kg' && typeof val === 'number' ? formatMasaKg(val) : (val?.toString() ?? '')}
                     onChange={e => {
                       setFormData(prev => prev ? {
                         ...prev,
