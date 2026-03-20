@@ -425,46 +425,61 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   );
 }
 
-/* ─── parseWZText — Ekonom WZ parser v3 ─── */
+/* ─── parseWZText — Ekonom WZ parser v4 ─── */
 function parseWZText(text: string): WZImportData {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  // 1. nr_wz
-  const wzM = text.match(/WZ\s+[A-Z]{2}\/\d+\/\d+\/\d+\/\d+/);
-  const numer_wz = wzM ? wzM[0] : null;
+  // 1. nr_wz — always prefix with "WZ " if missing
+  let numer_wz: string | null = null;
+  const wzM = text.match(/WZ\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  if (wzM) {
+    numer_wz = `WZ ${wzM[1]}`;
+  } else {
+    const wzBare = text.match(/([A-Z]{2}\/\d{2,3}\/\d{2}\/\d{2}\/\d{5,})/);
+    if (wzBare) numer_wz = `WZ ${wzBare[1]}`;
+  }
 
-  // 2. nr_zamowienia — look for label first, then pattern
+  // 2. nr_zamowienia — label first, then pattern
   let nr_zamowienia: string | null = null;
   const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/i);
-  if (zamLabel) {
-    nr_zamowienia = zamLabel[1];
-  }
+  if (zamLabel) nr_zamowienia = zamLabel[1];
   if (!nr_zamowienia) {
-    const zamPattern = text.match(/([TRYZ]\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
+    const zamPattern = text.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
     if (zamPattern) nr_zamowienia = zamPattern[1];
   }
 
-  // 3. odbiorca — skip SEWERA, ODDZIAŁ, addresses, NIP lines
-  //    Find first line with legal form OR 3+ CAPS words (not noise)
+  // 3. odbiorca — CRITICAL: skip SEWERA block completely, find second company
   let odbiorca: string | null = null;
+  const SELLER_MARKERS = /SEWERA|KOŚCIUSZKI\s*326|NR\s*BDO:\s*000044503/i;
   const SKIP_PATTERNS = [
-    /SEWERA/i, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
+    SELLER_MARKERS, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
     /NIP:/i, /NR BDO:/i, /Adres\s+dostawy/i, /Waga\s+netto/i,
     /Nr\s+zam/i, /PALETA/i, /Tel\./i, /Os\.\s*kontaktowa/i,
     /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
-    /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i,
+    /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
+    /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
   ];
-  for (const line of lines) {
+
+  // Find SEWERA line index to skip the seller block
+  let seweraIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (SELLER_MARKERS.test(lines[i])) { seweraIdx = i; break; }
+  }
+
+  // Search for odbiorca starting after SEWERA block
+  const searchStart = seweraIdx >= 0 ? seweraIdx + 1 : 0;
+  for (let i = searchStart; i < lines.length; i++) {
+    const line = lines[i];
     if (SKIP_PATTERNS.some(p => p.test(line))) continue;
     const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
-    const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ]{2,}$/.test(w)).length;
+    const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     if (hasLegalForm || capsWords >= 3) {
       odbiorca = line;
       break;
     }
   }
 
-  // 4. adres_dostawy
+  // 4. adres_dostawy — priority 1: "Adres dostawy" section
   let adres: string | null = null;
   const adresIdx = lines.findIndex(l => /^Adres\s+dostawy$/i.test(l));
   if (adresIdx >= 0) {
@@ -472,7 +487,6 @@ function parseWZText(text: string): WZImportData {
     for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
       const l = lines[i];
       if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi)/i.test(l)) break;
-      // skip "Budowa-..." name lines but collect address lines
       if (/^Budowa/i.test(l)) continue;
       if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
         addrParts.push(l);
@@ -480,7 +494,7 @@ function parseWZText(text: string): WZImportData {
     }
     if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
   }
-  // Fallback: use odbiorca's address (line after odbiorca with ul./postal code)
+  // Priority 2: address from ODBIORCA block (line after odbiorca name)
   if (!adres && odbiorca) {
     const odbIdx = lines.indexOf(odbiorca);
     if (odbIdx >= 0) {
@@ -493,15 +507,23 @@ function parseWZText(text: string): WZImportData {
     }
   }
 
-  // 5. tel — first phone AFTER "Adres dostawy" section (not seller phone)
+  // 5. tel — ONLY from "Adres dostawy" section, NOT from footer (after "Wystawił:")
   let tel: string | null = null;
-  const telSearchStart = adresIdx >= 0 ? adresIdx : (lines.indexOf(odbiorca || '') >= 0 ? lines.indexOf(odbiorca!) : 0);
-  for (let i = telSearchStart; i < lines.length; i++) {
-    const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
-    if (telM) { tel = telM[1].trim(); break; }
+  const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
+  if (adresIdx >= 0) {
+    // Only search between "Adres dostawy" and either "Nr zam" or end of address section
+    const telEndIdx = Math.min(
+      lines.findIndex((l, i) => i > adresIdx && /Nr\s+zam|Uwagi|PALETA|Waga/i.test(l)),
+      wystawilIdx >= 0 ? wystawilIdx : lines.length
+    );
+    const effectiveEnd = telEndIdx >= 0 ? telEndIdx : adresIdx + 10;
+    for (let i = adresIdx; i < effectiveEnd && i < lines.length; i++) {
+      const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+      if (telM) { tel = telM[1].trim(); break; }
+    }
   }
 
-  // 6. masa_kg
+  // 6. masa_kg — ONLY "Waga netto razem:", NEVER "RAZEM:" (that's item count!)
   let masa_kg = 0;
   const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
   if (wagaM) {
@@ -513,7 +535,7 @@ function parseWZText(text: string): WZImportData {
   const objM = text.match(/([\d.,]+)\s*m[³3]/i);
   if (objM) objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0;
 
-  // 8. ilosc_palet — scan for PALETA in goods lines
+  // 8. ilosc_palet
   let ilosc_palet = 0;
   for (const line of lines) {
     if (/PALETA/i.test(line)) {
@@ -526,22 +548,24 @@ function parseWZText(text: string): WZImportData {
     if (palPattern) ilosc_palet = parseInt(palPattern[1]);
   }
 
-  // 9. uwagi — text after "Nr zamówienia (systemowy):" line
+  // 9. uwagi — text after "Uwagi:" up to "Na podstawie art."
+  //    Skip "Nr zamówienia (systemowy):" and "Nr oferty:" lines
   let uwagi: string | null = null;
-  const sysZamIdx = lines.findIndex(l => /Nr\s+zam(?:ówienia)?\s*\(systemowy\)\s*:/i.test(l));
-  if (sysZamIdx >= 0) {
+  const uwagiIdx = lines.findIndex(l => /^Uwagi\s*:/i.test(l));
+  if (uwagiIdx >= 0) {
     const afterLines: string[] = [];
-    for (let i = sysZamIdx + 1; i < lines.length; i++) {
+    for (let i = uwagiIdx + 1; i < lines.length; i++) {
       const l = lines[i];
-      if (/Waga\s+netto/i.test(l) || /PALETA/i.test(l) || l === '') break;
-      // skip if it's just the order number repeated
-      if (nr_zamowienia && l === nr_zamowienia) continue;
+      if (/Na\s+podstawie\s+art/i.test(l)) break;
+      if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
+      if (/Nr\s+oferty/i.test(l)) continue;
+      if (nr_zamowienia && l.trim() === nr_zamowienia) continue;
       afterLines.push(l);
     }
-    uwagi = afterLines.join(' ').trim() || null;
+    uwagi = afterLines.join('\n').trim() || null;
   }
 
-  console.log('[parseWZText v3] result:', {
+  console.log('[parseWZText v4] result:', {
     numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi,
   });
 
