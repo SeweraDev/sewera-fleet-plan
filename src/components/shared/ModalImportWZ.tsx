@@ -581,7 +581,7 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  console.log('[parseWZText v4] result:', {
+  console.log('[parseWZText v5] result:', {
     numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi,
   });
 
