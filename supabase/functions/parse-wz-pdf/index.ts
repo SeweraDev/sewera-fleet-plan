@@ -81,6 +81,7 @@ function parseSeweraDoc(rawText: string) {
           nazwaLines.push(l);
         }
       }
+      // Komentarz
       nabywca = nazwaLines.join(" ").replace(/\s+/g, " ").trim();
       adresNabywcy = adresLines.join(", ").trim();
     }
