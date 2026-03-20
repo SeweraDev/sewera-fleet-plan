@@ -151,21 +151,9 @@ function parseSeweraDoc(rawText: string) {
     }
   }
 
-  // ── PALETY ──
-  let iloscPalet = 0;
-  const paletaMatch = text.match(/PALETA\s+[^\n]+\n(?:[^\n]+\n){0,5}?([\d]+[,.][\d]+)\s+SZT/i);
-  if (paletaMatch) {
-    iloscPalet = Math.round(parseFloat(paletaMatch[1].replace(',', '.')) || 0);
-  }
-  // Fallback: simple inline match
-  if (!iloscPalet) {
-    for (const line of lines) {
-      if (/PALETA/i.test(line)) {
-        const palQty = line.match(/(\d+)\s*(?:SZT|szt)/i);
-        if (palQty) { iloscPalet = parseInt(palQty[1]); break; }
-      }
-    }
-  }
+  // ── PALETY — zawsze 0, użytkownik wpisuje ręcznie ──
+  // Pozycja "PALETA" w dokumencie = paleta zwrotna, nie liczba palet załadunku
+  const iloscPalet = 0;
 
   // ── UWAGI ──
   let uwagi = '';
