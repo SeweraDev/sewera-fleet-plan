@@ -209,8 +209,9 @@ serve(async (req) => {
     const getNum = (row: any[], field: string): number | null => {
       const v = get(row, field);
       if (!v) return null;
-      const n = parseFloat(v.replace(",", "."));
-      return isNaN(n) ? null : n;
+      const s = v.replace(/\s/g, '').replace(',', '.');
+      const n = parseFloat(s);
+      return isNaN(n) ? null : Math.ceil(n);
     };
 
     // Parse rows into courses

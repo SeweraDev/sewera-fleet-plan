@@ -192,7 +192,7 @@ function parseEkonomWz(text: string) {
   let masa_kg: number | null = null;
   const masaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
   if (masaM) {
-    masa_kg = parseFloat(masaM[1].replace(/\s/g, '').replace(',', '.'));
+    masa_kg = Math.ceil(parseFloat(masaM[1].replace(/\s/g, '').replace(',', '.')));
     found++;
   }
 
