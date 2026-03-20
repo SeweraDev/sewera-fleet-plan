@@ -46,34 +46,47 @@ function parseSeweraDoc(rawText: string) {
 
   let nabywca = '';
   let adresNabywcy = '';
-  // Firma jest zawsze powtórzona dwukrotnie w dokumencie:
-  // raz na górze (przed NabywcaSprzedawca) i raz w bloku nabywcy
-  // Szukamy pierwszego wystąpienia — linie 3-10 od początku dokumentu
-  // pomijamy SEWERA, szukamy pierwszej linii CAPS która nie jest SEWERA
-  
-  const topLines = lines.slice(2, 12);
-  const nazwaLines: string[] = [];
-  const adresLines: string[] = [];
-  let doAdresu = false;
-  let startFound = false;
-  for (const l of topLines) {
-    if (/SEWERA|NabywcaSprzedawca|Sprzedawca|^NIP:|^NR BDO:|ODDZIAŁ|Nr ewid\./.test(l)) {
-      if (startFound) break;
-      continue;
+  if (isPZ) {
+    // Firma nabywcy jest zawsze zaraz po linii "nr: XXXX"
+    const nrLineIdx = lines.findIndex(l => /^nr:\s+[A-Z0-9]/i.test(l));
+    if (nrLineIdx > -1) {
+      const nazwaLines: string[] = [];
+      const adresLines: string[] = [];
+      let doAdresu = false;
+      for (let i = nrLineIdx + 1; i < Math.min(nrLineIdx + 8, lines.length); i++) {
+        const l = lines[i];
+        if (/^(NabywcaSprzedawca|Nr ewid\.|NIP:)/.test(l)) break;
+        if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) doAdresu = true;
+        if (doAdresu) {
+          if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
+        } else {
+          nazwaLines.push(l);
+        }
+      }
+      nabywca = nazwaLines.join(' ').replace(/\s+/g, ' ').trim();
+      adresNabywcy = adresLines.join(', ').trim();
     }
-    if (/Potwierdzenie zamówienia|^nr:/i.test(l)) continue;
-    if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) {
-      doAdresu = true;
-    }
-    if (doAdresu) {
-      if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
-    } else {
-      startFound = true;
-      nazwaLines.push(l);
+  } else {
+    // WZ/WZS: firma jest po bloku SEWERA, między etykietą a "Magazyn wydający:"
+    const sewEnd = lines.findIndex(l => /^(ul\. KOŚCIUSZKI|ul\. DOJAZDOWA|ul\. WYZWOLENIA)/i.test(l));
+    if (sewEnd > -1) {
+      const nazwaLines: string[] = [];
+      const adresLines: string[] = [];
+      let doAdresu = false;
+      for (let i = sewEnd + 1; i < Math.min(sewEnd + 8, lines.length); i++) {
+        const l = lines[i];
+        if (/^(Magazyn wydający|Adres dostawy|NIP:|Nr ewid\.)/.test(l)) break;
+        if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) doAdresu = true;
+        if (doAdresu) {
+          if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
+        } else {
+          nazwaLines.push(l);
+        }
+      }
+      nabywca = nazwaLines.join(' ').replace(/\s+/g, ' ').trim();
+      adresNabywcy = adresLines.join(', ').trim();
     }
   }
-  nabywca = nazwaLines.join(' ').replace(/\s+/g, ' ').trim();
-  adresNabywcy = adresLines.join(', ').trim();
   // KROK 5: Adres dostawy + telefon + osoba kontaktowa
   let adresDostawy = '';
   let tel = '';
