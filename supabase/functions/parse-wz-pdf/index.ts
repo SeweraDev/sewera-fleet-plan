@@ -172,12 +172,8 @@ function parseSeweraDoc(rawText: string) {
       .trim();
   }
 
-  // ── OBJETOSC ──
-  let objetosc_m3: number | null = null;
-  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
-  if (objM) {
-    objetosc_m3 = parseFloat(objM[1].replace(',', '.'));
-  }
+  // ── OBJETOSC — zawsze 0, do ręcznego uzupełnienia ──
+  const objetosc_m3 = 0;
 
   // Count found fields for confidence
   let found = 0;
