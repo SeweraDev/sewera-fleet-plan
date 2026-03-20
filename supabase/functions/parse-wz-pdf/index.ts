@@ -15,24 +15,21 @@ function cleanText(text: string): string {
     .replace(/(\n\s*){3,}/g, '\n\n');
 }
 
-/* ─── Document type identification ─── */
-function identyfikujTyp(text: string): 'WZ' | 'WZS' | 'PZ' {
-  if (/Potwierdzenie zamówienia/i.test(text)) return 'PZ';
-  if (/WZS\s+[A-Z]{2}\/\d/.test(text)) return 'WZS';
-  return 'WZ';
-}
-
 /* ─── Unified Sewera document parser ─── */
 function parseSeweraDoc(rawText: string) {
-  // KROK 0: Odetnij stopkę — wszystko od "Wystawił:" to dane handlowca
+
+  // KROK 0: Odetnij stopkę (Wystawił: + osoba drukująca) — przed jakimkolwiek parsowaniem
   const wystawilIdx = rawText.search(/\nWystawił:/i);
   const text = wystawilIdx > -1 ? rawText.substring(0, wystawilIdx) : rawText;
-  const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-  const typ = identyfikujTyp(text);
 
-  // ── NR DOKUMENTU ──
+  // KROK 1: Typ dokumentu
+  const isPZ = /Potwierdzenie zamówienia/i.test(text);
+  const isWZS = /WZS\s+[A-Z]{2}\/\d/.test(text);
+  const typDokumentu = isPZ ? 'PZ' : isWZS ? 'WZS' : 'WZ';
+
+  // KROK 2: Nr dokumentu
   let nrDokumentu = '';
-  if (typ === 'WZ' || typ === 'WZS') {
+  if (!isPZ) {
     const m = text.match(/(WZS?\s+[A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
     nrDokumentu = m ? m[1].trim() : '';
   } else {
@@ -40,52 +37,61 @@ function parseSeweraDoc(rawText: string) {
     nrDokumentu = m ? m[1].trim() : '';
   }
 
-  // ── NR ZAMÓWIENIA ──
-  let nrZam = '';
+  // KROK 3: Nr zamówienia
   const mSys = text.match(/Nr zamówienia \(systemowy\):\s*([A-Z0-9\/]+)/);
   const mNag = text.match(/\[Nr zam:\s*([A-Z0-9\/]+)\]/);
-  nrZam = (mSys?.[1] || mNag?.[1] || (typ === 'PZ' ? nrDokumentu : '')).trim();
+  const nrZam = (mSys?.[1] || mNag?.[1] || (isPZ ? nrDokumentu : '')).trim();
 
-  // ── NABYWCA / ODBIORCA ──
-  const etykieta = (typ === 'PZ') ? /\bNabywca\b/ : /\bOdbiorca\b/;
+  // KROK 4: Nabywca / Odbiorca
   let nabywca = '';
   let adresNabywcy = '';
 
-  const etIdx = lines.findIndex((l: string) => etykieta.test(l));
+  const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+  
+  const etIdx = lines.findIndex((l: string) => 
+    l.includes('NabywcaSprzedawca') || l.includes('OdbiorcaInformacje') ||
+    l === 'Nabywca' || l === 'Odbiorca' || l.includes('Sprzedawca Nabywca') ||
+    l.includes('Sprzedawca Odbiorca')
+  );
+
   if (etIdx > -1) {
-    const blok: string[] = [];
-    for (let i = etIdx + 1; i < Math.min(etIdx + 15, lines.length); i++) {
-      const l = lines[i];
-      if (/^(Informacje|Termin zapłaty|Adres dostawy|Magazyn wydający|Lp\.|Nr ewid)/.test(l)) break;
-      if (/SEWERA|KOŚCIUSZKI 326|NIP: 6340|NR BDO:|ODDZIAŁ/.test(l)) continue;
-      blok.push(l);
-    }
-    const nazwaLines: string[] = [];
-    const adresLines: string[] = [];
+    const kandidaci: string[] = [];
+    const adresK: string[] = [];
     let doAdresu = false;
-    for (const l of blok) {
-      if (!doAdresu && (l.match(/^(ul\.|al\.|os\.|pl\.)/i) || l.match(/^\d{2}-\d{3}/))) {
+
+    for (let i = etIdx + 1; i < Math.min(etIdx + 20, lines.length); i++) {
+      const l = lines[i];
+      if (/^(OdbiorcaInformacje|Odbiorca$|Informacje$|Adres dostawy|Termin zapłaty|Lp\.|Nr ewid\.)/.test(l)) break;
+      if (/SEWERA|KOŚCIUSZKI 326|NIP: 6340|NR BDO:|ODDZIAŁ/.test(l)) continue;
+      if (/^NIP:/.test(l)) continue;
+
+      if (!doAdresu && (l.match(/^(ul\.|al\.|os\.|pl\.)/) || l.match(/^\d{2}-\d{3}/))) {
         doAdresu = true;
       }
+
       if (doAdresu) {
-        if (l.match(/^(ul\.|al\.|os\.|pl\.)/i) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
+        if (l.match(/^(ul\.|al\.|os\.|pl\.)/) || l.match(/^\d{2}-\d{3}/)) {
+          adresK.push(l);
+        }
       } else {
-        if (!l.match(/^NIP:|^Nr ewid\./)) nazwaLines.push(l);
+        kandidaci.push(l);
       }
     }
-    nabywca = nazwaLines.join(' ').replace(/\s+/g, ' ').trim();
-    adresNabywcy = adresLines.join(', ').trim();
+
+    nabywca = kandidaci.join(' ').replace(/\s+/g, ' ').trim();
+    adresNabywcy = adresK.join(', ').trim();
   }
 
-  // ── ADRES DOSTAWY + TELEFON ──
+  // KROK 5: Adres dostawy + telefon + osoba kontaktowa
   let adresDostawy = '';
   let tel = '';
+  let osobaKontaktowa = '';
   const maAdresDostawy = /Adres\s+dostawy/i.test(text);
 
   if (maAdresDostawy) {
     const adIdx = text.search(/Adres\s+dostawy/i);
-    const afterAd = text.substring(adIdx + 15, adIdx + 600);
-    const stopAd = afterAd.search(/\nLp\.|\nMagazyn wydający:|Termin zapłaty.*Forma/i);
+    const afterAd = text.substring(adIdx + 14, adIdx + 500);
+    const stopAd = afterAd.search(/\nLp\.|\nTermin zapłaty|Magazyn wydający/i);
     const adBlok = (stopAd > -1 ? afterAd.substring(0, stopAd) : afterAd)
       .split('\n').map((l: string) => l.trim()).filter(Boolean);
 
@@ -93,16 +99,20 @@ function parseSeweraDoc(rawText: string) {
     const kodLines: string[] = [];
 
     for (const l of adBlok) {
-      if (!tel) {
-        const telM = l.match(/[Tt]el\.?\s*:?\s*([0-9][0-9\s\-]{8,})/);
-        if (telM) {
-          tel = telM[1].split(/\s{2,}|[A-Za-z]/)[0]
-            .replace(/\-/g, ' ').trim()
-            .replace(/\s+/g, ' ');
-          continue;
+      if (/Os\.\s*kontaktowa:/i.test(l)) {
+        const osM = l.match(/Os\.\s*kontaktowa:\s*([^0-9Tel\.]+?)(?:\s+tel\.?|$)/i);
+        if (osM) osobaKontaktowa = osM[1].trim();
+        const telM = l.match(/tel\.?\s*([0-9][0-9\s\-]{8,})/i);
+        if (telM && !tel) {
+          tel = telM[1].replace(/\-/g, ' ').replace(/\s+/g, ' ').trim();
         }
+        continue;
       }
-      if (l.startsWith('Os. kontaktowa:')) continue;
+      if (/^Tel\.?[:\s]/i.test(l) && !tel) {
+        const telM = l.match(/Tel\.?[:\s]+([0-9][0-9\s]{8,})/i);
+        if (telM) tel = telM[1].replace(/\s+/g, ' ').trim();
+        continue;
+      }
       if (l.match(/^(ul\.|al\.|os\.|pl\.)/i)) { ulicaLines.push(l); continue; }
       if (l.match(/^\d{2}-\d{3}/)) { kodLines.push(l); continue; }
     }
@@ -119,10 +129,10 @@ function parseSeweraDoc(rawText: string) {
     adresDostawy = adresNabywcy;
   }
 
-  // ── MASA ──
+  // KROK 6: MASA
   let masaKg = 0;
 
-  if (typ === 'WZ' || typ === 'WZS') {
+  if (!isPZ) {
     const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
     if (wagaIdx > -1) {
       const afterWaga = text.substring(wagaIdx + 20, wagaIdx + 200);
@@ -132,32 +142,26 @@ function parseSeweraDoc(rawText: string) {
       }
     }
   } else {
-    // PZ: masa jest PRZED "Razem: [wartość PLN]"
-    // Struktura: [ilość pozycji z przecinkiem] → [MASA z przecinkiem] → Razem: [PLN]
-    // Masa = PRZEDOSTATNIA liczba z przecinkiem przed "Razem:"
-    const razIdx = text.search(/\nRazem:\s+[\d\s]+[,.][\d]+/);
-    if (razIdx > -1) {
-      const beforeRaz = text.substring(Math.max(0, razIdx - 300), razIdx);
-      const numeryZPrzecinkiem = [...beforeRaz.matchAll(/([\d ]+[,]\d+)/g)]
-        .map((m: RegExpMatchArray) => m[1].replace(/\s/g, '').replace(',', '.'))
-        .filter((n: string) => !isNaN(parseFloat(n)));
-      // Przedostatnia = masa, ostatnia = ilość pozycji (np. "99,00")
-      const idx = numeryZPrzecinkiem.length >= 2
-        ? numeryZPrzecinkiem.length - 2
-        : numeryZPrzecinkiem.length - 1;
-      if (idx >= 0) {
-        masaKg = Math.ceil(parseFloat(numeryZPrzecinkiem[idx]) || 0);
+    const razM = text.match(/([\d ]+[,]\d+)(?:\s*\n?\s*)(?:[\d ,]+)?Razem:/);
+    if (razM) {
+      const razIdx = text.search(/[\d ,]+Razem:|Razem:\s*[\d ,]+/i);
+      if (razIdx > -1) {
+        const before = text.substring(Math.max(0, razIdx - 200), razIdx);
+        const numery = [...before.matchAll(/([\d ]*\d[,]\d+)/g)]
+          .map((m: RegExpMatchArray) => m[1].replace(/\s/g, '').replace(',', '.'))
+          .filter((n: string) => parseFloat(n) > 0);
+        if (numery.length >= 2) {
+          masaKg = Math.ceil(parseFloat(numery[numery.length - 2]) || 0);
+        } else if (numery.length === 1) {
+          masaKg = Math.ceil(parseFloat(numery[0]) || 0);
+        }
       }
     }
   }
 
-  // ── PALETY — zawsze 0, użytkownik wpisuje ręcznie ──
-  // Pozycja "PALETA" w dokumencie = paleta zwrotna, nie liczba palet załadunku
-  const iloscPalet = 0;
-
-  // ── UWAGI ──
+  // KROK 7: Uwagi
   let uwagi = '';
-  const uwagiM = text.match(/Uwagi(?:\s+dot\.\s+wysyłki)?:\s*\n([\s\S]*?)(?:\nNa podstawie art\. 481|\nWystawił:|\nOsoba drukująca:|$)/i);
+  const uwagiM = text.match(/Uwagi(?:\s+dot\.\s+wysyłki)?:\s*\n([\s\S]*?)$/i);
   if (uwagiM) {
     uwagi = uwagiM[1]
       .split('\n')
@@ -166,47 +170,26 @@ function parseSeweraDoc(rawText: string) {
         l.length > 0 &&
         !l.startsWith('Nr zamówienia (systemowy):') &&
         !l.startsWith('Nr oferty:') &&
-        !l.match(/^WZ\s+[A-Z]{2}\//)
+        !l.match(/^WZ\s+[A-Z]{2}\//) &&
+        !l.match(/^Na podstawie art\./)
       )
       .join('\n')
       .trim();
   }
 
-  // ── OBJETOSC — zawsze 0, do ręcznego uzupełnienia ──
-  const objetosc_m3 = 0;
-
-  // Count found fields for confidence (palety/m3 excluded — always manual)
-  let found = 0;
-  const total = 8;
-  if (nrDokumentu) found++;
-  if (nrZam) found++;
-  if (nabywca) found++;
-  if (adresNabywcy) found++;
-  if (adresDostawy) found++;
-  if (tel) found++;
-  if (masaKg) found++;
-  if (uwagi) found++;
-
   return {
-    typ_dokumentu: typ,
+    typ_dokumentu: typDokumentu,
     nr_wz: nrDokumentu,
     nr_zamowienia: nrZam,
-    odbiorca_nazwa: nabywca,
-    odbiorca_adres_siedziby: adresNabywcy,
+    odbiorca: nabywca,
     adres_dostawy: adresDostawy,
     ma_adres_dostawy: maAdresDostawy,
     tel,
-    tel2: null as string | null,
+    osoba_kontaktowa: osobaKontaktowa,
     masa_kg: masaKg,
-    ilosc_palet: iloscPalet,
-    objetosc_m3,
-    uwagi: uwagi || null,
-    uwagi_krotkie: uwagi || null,
-    nazwa_budowy: null as string | null,
-    osoba_kontaktowa: null as string | null,
-    data_wz: null as string | null,
-    pozycje: [] as any[],
-    pewnosc: Math.round((found / total) * 100),
+    ilosc_palet: 0,
+    objetosc_m3: 0,
+    uwagi,
   };
 }
 
