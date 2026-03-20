@@ -188,9 +188,9 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       odbiorca: json.odbiorca_nazwa,
       adres,
       tel: json.tel,
-      masa_kg: json.masa_kg,
-      ilosc_palet: json.ilosc_palet,
-      objetosc_m3: json.objetosc_m3,
+      masa_kg: json.masa_kg ?? 0,
+      ilosc_palet: json.ilosc_palet ?? 0,
+      objetosc_m3: json.objetosc_m3 ?? 0,
       uwagi: uwagi || null,
     });
   }, [onSwitchManual]);
@@ -425,7 +425,7 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   );
 }
 
-/* ─── parseWZText — Ekonom WZ parser v2 ─── */
+/* ─── parseWZText — Ekonom WZ parser v3 ─── */
 function parseWZText(text: string): WZImportData {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
@@ -433,81 +433,91 @@ function parseWZText(text: string): WZImportData {
   const wzM = text.match(/WZ\s+[A-Z]{2}\/\d+\/\d+\/\d+\/\d+/);
   const numer_wz = wzM ? wzM[0] : null;
 
-  // 2. nr_zamowienia
+  // 2. nr_zamowienia — look for label first, then pattern
   let nr_zamowienia: string | null = null;
-  const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s]+([A-Z0-9\/]+)/i);
+  const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/i);
   if (zamLabel) {
     nr_zamowienia = zamLabel[1];
-  } else {
-    const zamPattern = text.match(/([RT]\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
+  }
+  if (!nr_zamowienia) {
+    const zamPattern = text.match(/([TRYZ]\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
     if (zamPattern) nr_zamowienia = zamPattern[1];
   }
 
-  // 3. odbiorca — second company name, skip SEWERA
+  // 3. odbiorca — skip SEWERA, ODDZIAŁ, addresses, NIP lines
+  //    Find first line with legal form OR 3+ CAPS words (not noise)
   let odbiorca: string | null = null;
+  const SKIP_PATTERNS = [
+    /SEWERA/i, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
+    /NIP:/i, /NR BDO:/i, /Adres\s+dostawy/i, /Waga\s+netto/i,
+    /Nr\s+zam/i, /PALETA/i, /Tel\./i, /Os\.\s*kontaktowa/i,
+    /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
+    /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i,
+  ];
   for (const line of lines) {
-    if (!/[A-ZĄĆĘŁŃÓŚŹŻ]{5,}/.test(line)) continue;
-    if (/SEWERA/i.test(line)) continue;
-    if (/ODDZIAŁ/i.test(line)) continue;
-    if (/^ul\./i.test(line) || /^al\./i.test(line) || /^os\./i.test(line)) continue;
-    if (/NIP:/i.test(line) || /NR BDO:/i.test(line)) continue;
-    if (/Adres dostawy/i.test(line)) continue;
-    if (/Waga\s+netto/i.test(line)) continue;
-    if (/Nr\s+zam/i.test(line)) continue;
-    if (/PALETA/i.test(line)) continue;
-
-    const wordCount = line.split(/\s+/).length;
-    const hasLegalForm = /SP\.|SPÓŁKA|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
-    if (wordCount >= 5 || hasLegalForm) {
+    if (SKIP_PATTERNS.some(p => p.test(line))) continue;
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ]{2,}$/.test(w)).length;
+    if (hasLegalForm || capsWords >= 3) {
       odbiorca = line;
       break;
     }
   }
 
-  // 4. adres_dostawy — look for "Adres dostawy" section
+  // 4. adres_dostawy
   let adres: string | null = null;
-  const adresIdx = lines.findIndex(l => /adres\s+dostawy/i.test(l));
+  const adresIdx = lines.findIndex(l => /^Adres\s+dostawy$/i.test(l));
   if (adresIdx >= 0) {
     const addrParts: string[] = [];
-    for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 5; i++) {
+    for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
       const l = lines[i];
-      if (/^(Os\.\s+kontaktowa|Tel|Nr\s+zam|PALETA|Waga)/i.test(l)) break;
+      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi)/i.test(l)) break;
+      // skip "Budowa-..." name lines but collect address lines
+      if (/^Budowa/i.test(l)) continue;
       if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
         addrParts.push(l);
       }
     }
     if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
   }
-  // fallback: first ul. line with postal code that's not SEWERA address
-  if (!adres) {
-    for (const line of lines) {
-      if (/ul\./i.test(line) && /\d{2}-\d{3}/.test(line) && !/Kościuszki/i.test(line)) {
-        adres = line;
-        break;
+  // Fallback: use odbiorca's address (line after odbiorca with ul./postal code)
+  if (!adres && odbiorca) {
+    const odbIdx = lines.indexOf(odbiorca);
+    if (odbIdx >= 0) {
+      for (let i = odbIdx + 1; i < Math.min(odbIdx + 3, lines.length); i++) {
+        if (/ul\.|al\.|os\.|pl\./i.test(lines[i]) || /\d{2}-\d{3}/.test(lines[i])) {
+          adres = lines[i];
+          break;
+        }
       }
     }
   }
 
-  // 5. tel — first phone in delivery address section (not seller)
+  // 5. tel — first phone AFTER "Adres dostawy" section (not seller phone)
   let tel: string | null = null;
-  const searchFrom = adresIdx >= 0 ? lines.slice(adresIdx) : lines;
-  for (const line of searchFrom) {
-    const telM = line.match(/Tel\.?:?\s*([\d\s]{9,})/i);
+  const telSearchStart = adresIdx >= 0 ? adresIdx : (lines.indexOf(odbiorca || '') >= 0 ? lines.indexOf(odbiorca!) : 0);
+  for (let i = telSearchStart; i < lines.length; i++) {
+    const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
     if (telM) { tel = telM[1].trim(); break; }
   }
 
-  // 6. masa_kg — "Waga netto razem: X XXX,XX"
-  let masa_kg: number | null = null;
+  // 6. masa_kg
+  let masa_kg = 0;
   const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
   if (wagaM) {
-    masa_kg = parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.'));
+    masa_kg = parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0;
   }
 
-  // 7. ilosc_palet — PALETA line quantity or paleta=X pattern
-  let ilosc_palet: number | null = null;
+  // 7. objetosc_m3
+  let objetosc_m3 = 0;
+  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
+  if (objM) objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0;
+
+  // 8. ilosc_palet — scan for PALETA in goods lines
+  let ilosc_palet = 0;
   for (const line of lines) {
     if (/PALETA/i.test(line)) {
-      const palQty = line.match(/(\d+)\s*(?:SZT|szt)/);
+      const palQty = line.match(/(\d+)\s*(?:SZT|szt)/i);
       if (palQty) { ilosc_palet = parseInt(palQty[1]); break; }
     }
   }
@@ -516,29 +526,29 @@ function parseWZText(text: string): WZImportData {
     if (palPattern) ilosc_palet = parseInt(palPattern[1]);
   }
 
-  // 8. uwagi — text after "Nr zamówienia (systemowy):" line, skip the nr itself
+  // 9. uwagi — text after "Nr zamówienia (systemowy):" line
   let uwagi: string | null = null;
-  const uwagiIdx = lines.findIndex(l => /Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?:/i.test(l));
-  if (uwagiIdx >= 0) {
+  const sysZamIdx = lines.findIndex(l => /Nr\s+zam(?:ówienia)?\s*\(systemowy\)\s*:/i.test(l));
+  if (sysZamIdx >= 0) {
     const afterLines: string[] = [];
-    for (let i = uwagiIdx + 1; i < lines.length; i++) {
+    for (let i = sysZamIdx + 1; i < lines.length; i++) {
       const l = lines[i];
-      if (/Waga\s+netto/i.test(l) || /PALETA/i.test(l)) break;
-      if (l && l !== nr_zamowienia) afterLines.push(l);
+      if (/Waga\s+netto/i.test(l) || /PALETA/i.test(l) || l === '') break;
+      // skip if it's just the order number repeated
+      if (nr_zamowienia && l === nr_zamowienia) continue;
+      afterLines.push(l);
     }
     uwagi = afterLines.join(' ').trim() || null;
   }
 
-  // objetosc_m3
-  let objetosc_m3: number | null = null;
-  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
-  if (objM) objetosc_m3 = parseFloat(objM[1].replace(',', '.'));
-
-  console.log('[parseWZText] result:', {
+  console.log('[parseWZText v3] result:', {
     numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi,
   });
 
-  return { numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi };
+  return {
+    numer_wz, nr_zamowienia, odbiorca, adres, tel,
+    masa_kg, ilosc_palet, objetosc_m3, uwagi,
+  };
 }
 
 /* ─── Paste Tab ─── */
@@ -604,8 +614,16 @@ function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
         <div><Label className="text-xs">Adres *</Label><Input className="h-8 text-sm" value={form.adres ?? ''} onChange={e => update('adres', e.target.value)} /></div>
         <div><Label className="text-xs">Telefon</Label><Input className="h-8 text-sm" value={form.tel ?? ''} onChange={e => update('tel', e.target.value)} /></div>
         <div><Label className="text-xs">Masa kg *</Label><Input className="h-8 text-sm" type="number" value={form.masa_kg ?? ''} onChange={e => update('masa_kg', Number(e.target.value))} /></div>
-        <div><Label className="text-xs">Ilość palet</Label><Input className="h-8 text-sm" type="number" value={form.ilosc_palet ?? ''} onChange={e => update('ilosc_palet', e.target.value ? Number(e.target.value) : null)} /></div>
-        <div><Label className="text-xs">Objętość m³</Label><Input className="h-8 text-sm" type="number" value={form.objetosc_m3 ?? ''} onChange={e => update('objetosc_m3', e.target.value ? Number(e.target.value) : null)} /></div>
+        <div>
+          <Label className="text-xs">Ilość palet</Label>
+          <Input className="h-8 text-sm" type="number" value={form.ilosc_palet ?? ''} onChange={e => update('ilosc_palet', e.target.value ? Number(e.target.value) : 0)} />
+          <p className="text-[10px] text-muted-foreground mt-0.5">Uzupełnij jeśli brak na dokumencie</p>
+        </div>
+        <div>
+          <Label className="text-xs">Objętość m³</Label>
+          <Input className="h-8 text-sm" type="number" value={form.objetosc_m3 ?? ''} onChange={e => update('objetosc_m3', e.target.value ? Number(e.target.value) : 0)} />
+          <p className="text-[10px] text-muted-foreground mt-0.5">Uzupełnij jeśli brak na dokumencie</p>
+        </div>
         <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={form.uwagi ?? ''} onChange={e => update('uwagi', e.target.value)} /></div>
       </div>
       <Button onClick={() => onParsed(form)} disabled={!form.odbiorca && !form.adres} className="w-full">
