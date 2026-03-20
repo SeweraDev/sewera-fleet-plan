@@ -301,6 +301,11 @@ serve(async (req) => {
       const parsed = await pdf(new Uint8Array(buffer));
       text = parsed.text || "";
 
+      // TEMPORARY DEBUG LOG — remove after investigation
+      console.log("RAW_TEXT_START");
+      console.log(text);
+      console.log("RAW_TEXT_END");
+
       if (!text || text.trim().length < 10) {
         return new Response(
           JSON.stringify({ error: "Nie można odczytać PDF — plik może być zeskanowanym obrazem", pewnosc: 0 }),
