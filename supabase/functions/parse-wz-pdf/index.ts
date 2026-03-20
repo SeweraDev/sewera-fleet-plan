@@ -133,33 +133,27 @@ function parseSeweraDoc(rawText: string) {
     }
   } else {
     // PZ: masa jest PRZED "Razem: [wartość PLN]"
+    // Struktura: [ilość pozycji z przecinkiem] → [MASA z przecinkiem] → Razem: [PLN]
+    // Masa = PRZEDOSTATNIA liczba z przecinkiem przed "Razem:"
     const razIdx = text.search(/\nRazem:\s+[\d\s]+[,.][\d]+/);
     if (razIdx > -1) {
-      const beforeRaz = text.substring(Math.max(0, razIdx - 150), razIdx);
-      const numery = [...beforeRaz.matchAll(/([\d ]+[,.][\d]+|[\d]+)/g)]
+      const beforeRaz = text.substring(Math.max(0, razIdx - 300), razIdx);
+      const numeryZPrzecinkiem = [...beforeRaz.matchAll(/([\d ]+[,]\d+)/g)]
         .map((m: RegExpMatchArray) => m[1].replace(/\s/g, '').replace(',', '.'))
         .filter((n: string) => !isNaN(parseFloat(n)));
-      if (numery.length > 0) {
-        masaKg = Math.ceil(parseFloat(numery[numery.length - 1]) || 0);
+      // Przedostatnia = masa, ostatnia = ilość pozycji (np. "99,00")
+      const idx = numeryZPrzecinkiem.length >= 2
+        ? numeryZPrzecinkiem.length - 2
+        : numeryZPrzecinkiem.length - 1;
+      if (idx >= 0) {
+        masaKg = Math.ceil(parseFloat(numeryZPrzecinkiem[idx]) || 0);
       }
     }
   }
 
-  // ── PALETY ──
-  let iloscPalet = 0;
-  const paletaMatch = text.match(/PALETA\s+[^\n]+\n(?:[^\n]+\n){0,5}?([\d]+[,.][\d]+)\s+SZT/i);
-  if (paletaMatch) {
-    iloscPalet = Math.round(parseFloat(paletaMatch[1].replace(',', '.')) || 0);
-  }
-  // Fallback: simple inline match
-  if (!iloscPalet) {
-    for (const line of lines) {
-      if (/PALETA/i.test(line)) {
-        const palQty = line.match(/(\d+)\s*(?:SZT|szt)/i);
-        if (palQty) { iloscPalet = parseInt(palQty[1]); break; }
-      }
-    }
-  }
+  // ── PALETY — zawsze 0, użytkownik wpisuje ręcznie ──
+  // Pozycja "PALETA" w dokumencie = paleta zwrotna, nie liczba palet załadunku
+  const iloscPalet = 0;
 
   // ── UWAGI ──
   let uwagi = '';
@@ -178,16 +172,12 @@ function parseSeweraDoc(rawText: string) {
       .trim();
   }
 
-  // ── OBJETOSC ──
-  let objetosc_m3: number | null = null;
-  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
-  if (objM) {
-    objetosc_m3 = parseFloat(objM[1].replace(',', '.'));
-  }
+  // ── OBJETOSC — zawsze 0, do ręcznego uzupełnienia ──
+  const objetosc_m3 = 0;
 
-  // Count found fields for confidence
+  // Count found fields for confidence (palety/m3 excluded — always manual)
   let found = 0;
-  const total = 10;
+  const total = 8;
   if (nrDokumentu) found++;
   if (nrZam) found++;
   if (nabywca) found++;
@@ -195,9 +185,7 @@ function parseSeweraDoc(rawText: string) {
   if (adresDostawy) found++;
   if (tel) found++;
   if (masaKg) found++;
-  if (iloscPalet) found++;
   if (uwagi) found++;
-  if (objetosc_m3) found++;
 
   return {
     typ_dokumentu: typ,
