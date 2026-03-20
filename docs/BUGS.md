@@ -1,5 +1,5 @@
 # BUGS.md — Znane błędy i status
-📅 Ostatnia aktualizacja: 2026-03-19
+📅 Ostatnia aktualizacja: 2026-03-20
 
 ---
 
@@ -47,6 +47,22 @@ Masa: 25 kg (błąd) zamiast 375 kg
 ---
 
 ## ✅ NAPRAWIONE
+
+### BUG-F15 — Parser PDF: masa_kg brała przedostatni numer zamiast ostatniego
+**Naprawiony:** 2026-03-20
+**Fix:** Zmieniono `numery[numery.length - 2]` na `numery[numery.length - 1]`
+
+### BUG-F16 — Parser PDF: kontakty nie parsowały osoby kontaktowej poprawnie
+**Naprawiony:** 2026-03-20
+**Fix:** Nowa logika zbierania kontaktów: Os. kontaktowa, Tel., imię+tel w jednej linii
+
+### BUG-F17 — Parser PDF: nabywca KROK 4 nie rozpoznawał firmy poprawnie
+**Naprawiony:** 2026-03-20
+**Fix:** Rozdzielono logikę PZ (po linii `nr:`) vs WZ (po adresie oddziału SEWERA)
+
+### BUG-F18 — Parser PDF: lines is not defined (runtime error 500)
+**Naprawiony:** 2026-03-20
+**Fix:** Dodano brakującą deklarację `const lines = text.split('\n')...` na początku parsera
 
 ### BUG-F11 — Edge Function parse-wz-pdf: Buffer is not defined
 **Naprawiony:** 2026-03-19
