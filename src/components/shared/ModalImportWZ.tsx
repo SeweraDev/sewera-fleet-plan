@@ -442,7 +442,7 @@ function cleanText(text: string): string {
 /* ─── formatMasaKg — display with Polish thousands separator ─── */
 function formatMasaKg(masa: number | null | undefined): string {
   if (!masa) return '';
-  return Math.round(masa).toLocaleString('pl-PL');
+  return Math.ceil(masa).toLocaleString('pl-PL');
 }
 
 /* ─── parseWZText — Ekonom WZ parser v5 ─── */
