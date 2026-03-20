@@ -425,6 +425,122 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   );
 }
 
+/* ─── parseWZText — Ekonom WZ parser v2 ─── */
+function parseWZText(text: string): WZImportData {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // 1. nr_wz
+  const wzM = text.match(/WZ\s+[A-Z]{2}\/\d+\/\d+\/\d+\/\d+/);
+  const numer_wz = wzM ? wzM[0] : null;
+
+  // 2. nr_zamowienia
+  let nr_zamowienia: string | null = null;
+  const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s]+([A-Z0-9\/]+)/i);
+  if (zamLabel) {
+    nr_zamowienia = zamLabel[1];
+  } else {
+    const zamPattern = text.match(/([RT]\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
+    if (zamPattern) nr_zamowienia = zamPattern[1];
+  }
+
+  // 3. odbiorca — second company name, skip SEWERA
+  let odbiorca: string | null = null;
+  for (const line of lines) {
+    if (!/[A-ZĄĆĘŁŃÓŚŹŻ]{5,}/.test(line)) continue;
+    if (/SEWERA/i.test(line)) continue;
+    if (/ODDZIAŁ/i.test(line)) continue;
+    if (/^ul\./i.test(line) || /^al\./i.test(line) || /^os\./i.test(line)) continue;
+    if (/NIP:/i.test(line) || /NR BDO:/i.test(line)) continue;
+    if (/Adres dostawy/i.test(line)) continue;
+    if (/Waga\s+netto/i.test(line)) continue;
+    if (/Nr\s+zam/i.test(line)) continue;
+    if (/PALETA/i.test(line)) continue;
+
+    const wordCount = line.split(/\s+/).length;
+    const hasLegalForm = /SP\.|SPÓŁKA|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    if (wordCount >= 5 || hasLegalForm) {
+      odbiorca = line;
+      break;
+    }
+  }
+
+  // 4. adres_dostawy — look for "Adres dostawy" section
+  let adres: string | null = null;
+  const adresIdx = lines.findIndex(l => /adres\s+dostawy/i.test(l));
+  if (adresIdx >= 0) {
+    const addrParts: string[] = [];
+    for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 5; i++) {
+      const l = lines[i];
+      if (/^(Os\.\s+kontaktowa|Tel|Nr\s+zam|PALETA|Waga)/i.test(l)) break;
+      if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
+        addrParts.push(l);
+      }
+    }
+    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+  }
+  // fallback: first ul. line with postal code that's not SEWERA address
+  if (!adres) {
+    for (const line of lines) {
+      if (/ul\./i.test(line) && /\d{2}-\d{3}/.test(line) && !/Kościuszki/i.test(line)) {
+        adres = line;
+        break;
+      }
+    }
+  }
+
+  // 5. tel — first phone in delivery address section (not seller)
+  let tel: string | null = null;
+  const searchFrom = adresIdx >= 0 ? lines.slice(adresIdx) : lines;
+  for (const line of searchFrom) {
+    const telM = line.match(/Tel\.?:?\s*([\d\s]{9,})/i);
+    if (telM) { tel = telM[1].trim(); break; }
+  }
+
+  // 6. masa_kg — "Waga netto razem: X XXX,XX"
+  let masa_kg: number | null = null;
+  const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
+  if (wagaM) {
+    masa_kg = parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.'));
+  }
+
+  // 7. ilosc_palet — PALETA line quantity or paleta=X pattern
+  let ilosc_palet: number | null = null;
+  for (const line of lines) {
+    if (/PALETA/i.test(line)) {
+      const palQty = line.match(/(\d+)\s*(?:SZT|szt)/);
+      if (palQty) { ilosc_palet = parseInt(palQty[1]); break; }
+    }
+  }
+  if (!ilosc_palet) {
+    const palPattern = text.match(/paleta\s*=\s*(\d+)\s*szt/i);
+    if (palPattern) ilosc_palet = parseInt(palPattern[1]);
+  }
+
+  // 8. uwagi — text after "Nr zamówienia (systemowy):" line, skip the nr itself
+  let uwagi: string | null = null;
+  const uwagiIdx = lines.findIndex(l => /Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?:/i.test(l));
+  if (uwagiIdx >= 0) {
+    const afterLines: string[] = [];
+    for (let i = uwagiIdx + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (/Waga\s+netto/i.test(l) || /PALETA/i.test(l)) break;
+      if (l && l !== nr_zamowienia) afterLines.push(l);
+    }
+    uwagi = afterLines.join(' ').trim() || null;
+  }
+
+  // objetosc_m3
+  let objetosc_m3: number | null = null;
+  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
+  if (objM) objetosc_m3 = parseFloat(objM[1].replace(',', '.'));
+
+  console.log('[parseWZText] result:', {
+    numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+  });
+
+  return { numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi };
+}
+
 /* ─── Paste Tab ─── */
 function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [text, setText] = useState('');
@@ -432,49 +548,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 
   const parse = () => {
     if (!text.trim()) return;
-    const r: WZImportData = {
-      numer_wz: null, nr_zamowienia: null, odbiorca: null,
-      adres: null, tel: null, masa_kg: null, ilosc_palet: null, objetosc_m3: null, uwagi: null,
-    };
-
-    const wzM = text.match(/WZ\s+[A-Z]{2}\/[\d\/]+/);
-    if (wzM) r.numer_wz = wzM[0].replace(/^WZ\s+/, '');
-
-    // Nr zamówienia — obsługuje T7/, R7/ i inne prefixy X7/
-    const zamM = text.match(/[A-Z]\d\/[A-Z]{2}\/[\d\/]+/i);
-    if (zamM) r.nr_zamowienia = zamM[0];
-
-    // Odbiorca — najpierw szukaj prefixu, potem nazwy firmy
-    const odbM = text.match(/Odbiorca[:\s]+(.+?)(?:\n|$)/i);
-    if (odbM) {
-      r.odbiorca = odbM[1].trim();
-    } else {
-      const firmaM = text.match(/^(.+(?:SP(?:ÓŁKA|\.)?\s*(?:Z\s*(?:O\.?\s*O\.?|OGRANICZON\S+\s+ODPOWIEDZIALNO\S+)|AKCYJNA|JAWNA|KOMANDYTOWA|PARTNERSKA|CYWILNA)|S\.?\s*A\.?|SP\.\s*J\.|SP\.\s*K\.|S\.?\s*C\.?).*)$/im);
-      if (firmaM) r.odbiorca = firmaM[1].trim();
-    }
-
-    const adrM = text.match(/ul\.\s*.+\d{2}-\d{3}\s*\w+/i);
-    if (adrM) r.adres = adrM[0].trim();
-
-    const telM = text.match(/Tel\.?:?\s*([\d\s]{9,})/i);
-    if (telM) r.tel = telM[1].trim();
-
-    // Masa — łap "X kg" oraz "Waga netto razem: X" (bez suffixu kg)
-    const kgMatches = [...text.matchAll(/([\d.,]+)\s*kg/gi)];
-    if (kgMatches.length > 0) {
-      r.masa_kg = parseFloat(kgMatches[kgMatches.length - 1][1].replace(',', '.'));
-    } else {
-      const wagaM = text.match(/wag[aę]\s*(?:netto\s*)?(?:razem)?[:\s]*([\d.,]+)/i);
-      if (wagaM) r.masa_kg = parseFloat(wagaM[1].replace(',', '.'));
-    }
-
-    const palM = text.match(/(\d+)\s*[Pp]alet/i);
-    if (palM) r.ilosc_palet = parseInt(palM[1]);
-
-    const objM = text.match(/([\d.,]+)\s*m[³3]/i);
-    if (objM) r.objetosc_m3 = parseFloat(objM[1].replace(',', '.'));
-
-    setResult(r);
+    setResult(parseWZText(text));
   };
 
   return (
