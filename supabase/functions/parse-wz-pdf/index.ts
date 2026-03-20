@@ -251,6 +251,10 @@ serve(async (req) => {
       text = body.text || "";
     }
 
+    console.log("=== RAW START ===");
+    console.log(text);
+    console.log("=== RAW END ===");
+
     const result = parseSeweraDoc(cleanText(text));
 
     return new Response(JSON.stringify(result), {
