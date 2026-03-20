@@ -268,7 +268,6 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
                             : raw,
                       } : prev);
                     }}
-                    }}
                   />
                 </div>
               );
