@@ -425,8 +425,24 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   );
 }
 
-/* ─── parseWZText — Ekonom WZ parser v4 ─── */
-function parseWZText(text: string): WZImportData {
+/* ─── cleanText — remove non-printable chars from PDF clipboard ─── */
+function cleanText(text: string): string {
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/[^\x20-\x7E\u00A0-\u017E\n\r\t]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/(\n\s*){3,}/g, '\n\n');
+}
+
+/* ─── formatMasaKg — display with Polish thousands separator ─── */
+function formatMasaKg(masa: number | null | undefined): string {
+  if (!masa) return '';
+  return Math.round(masa).toLocaleString('pl-PL');
+}
+
+/* ─── parseWZText — Ekonom WZ parser v5 ─── */
+function parseWZText(rawText: string): WZImportData {
+  const text = cleanText(rawText);
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
   // 1. nr_wz — always prefix with "WZ " if missing
