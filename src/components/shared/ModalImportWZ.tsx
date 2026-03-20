@@ -188,9 +188,9 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       odbiorca: json.odbiorca_nazwa,
       adres,
       tel: json.tel,
-      masa_kg: json.masa_kg,
-      ilosc_palet: json.ilosc_palet,
-      objetosc_m3: json.objetosc_m3,
+      masa_kg: json.masa_kg ?? 0,
+      ilosc_palet: json.ilosc_palet ?? 0,
+      objetosc_m3: json.objetosc_m3 ?? 0,
       uwagi: uwagi || null,
     });
   }, [onSwitchManual]);
