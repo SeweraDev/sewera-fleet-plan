@@ -251,9 +251,8 @@ serve(async (req) => {
       text = body.text || "";
     }
 
-    console.log("=== RAW START ===");
+    console.log("RAW_TEXT_START");
     console.log(text);
-    console.log("=== RAW END ===");
 
     const result = parseSeweraDoc(cleanText(text));
 
