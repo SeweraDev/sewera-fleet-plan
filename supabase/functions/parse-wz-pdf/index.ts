@@ -150,10 +150,8 @@ function parseSeweraDoc(rawText: string) {
         const numery = [...before.matchAll(/([\d ]*\d[,]\d+)/g)]
           .map((m: RegExpMatchArray) => m[1].replace(/\s/g, '').replace(',', '.'))
           .filter((n: string) => parseFloat(n) > 0);
-        if (numery.length >= 2) {
-          masaKg = Math.ceil(parseFloat(numery[numery.length - 2]) || 0);
-        } else if (numery.length === 1) {
-          masaKg = Math.ceil(parseFloat(numery[0]) || 0);
+        if (numery.length >= 1) {
+          masaKg = Math.ceil(parseFloat(numery[numery.length - 1]) || 0);
         }
       }
     }
