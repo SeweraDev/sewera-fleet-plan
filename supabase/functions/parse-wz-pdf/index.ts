@@ -312,7 +312,7 @@ serve(async (req) => {
       text = body.text || "";
     }
 
-    const result = parseEkonomWz(text);
+    const result = parseEkonomWz(cleanText(text));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
