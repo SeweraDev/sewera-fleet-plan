@@ -29,75 +29,86 @@ interface Pozycja {
 function parseEkonomWz(text: string) {
   let found = 0;
   const total = 16;
+  const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
 
-  // 1. nr_wz
-  const nr_wz = ext(text, [
-    /WZ\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/i,
-    /WZ\s+([A-Z]{2}\/[\d\/]+)/i,
-    /(?:WZ[:\s]+)([\w\-\/]+)/i,
-  ]);
-  if (nr_wz) found++;
+  // 1. nr_wz — always include "WZ " prefix
+  let nr_wz: string | null = null;
+  const wzM = text.match(/WZ\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  if (wzM) {
+    nr_wz = `WZ ${wzM[1]}`;
+    found++;
+  } else {
+    const wzBare = text.match(/([A-Z]{2}\/\d{2,3}\/\d{2}\/\d{2}\/\d{5,})/);
+    if (wzBare) { nr_wz = `WZ ${wzBare[1]}`; found++; }
+  }
 
-  // 2. nr_zamowienia
+  // 2. nr_zamowienia — supports BR/, T7/, R7/ etc.
   let nr_zamowienia = ext(text, [
-    /Nr\s+zam\.?[:\s]+(T7\/[^\s\n]+)/i,
-    /(T7\/[A-Z]{2}\/[\d\/]+)/i,
-    /Nr\s+zam(?:ówienia)?[:\s]+([\w\-\/]+)/i,
+    /Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/i,
+    /([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/,
   ]);
   if (nr_zamowienia) found++;
 
-  // 3. odbiorca_nazwa — first line after "Odbiorca" header
+  // 3. odbiorca — SKIP SEWERA block, find second company
   let odbiorca_nazwa: string | null = null;
   let odbiorca_adres_siedziby: string | null = null;
-  const odbM = text.match(/Odbiorca\s*[:\n]\s*(.+?)(?:\n(.+?))?(?:\n\n|\nAdres|\nNIP)/is);
-  if (odbM) {
-    odbiorca_nazwa = odbM[1]?.trim() || null;
-    if (odbiorca_nazwa) found++;
-    // 4. odbiorca_adres_siedziby — second line
-    if (odbM[2]) {
-      odbiorca_adres_siedziby = odbM[2].trim();
-      found++;
-    }
+  const SELLER_MARKERS = /SEWERA|KOŚCIUSZKI\s*326|NR\s*BDO:\s*000044503/i;
+  const SKIP_LINES = [
+    SELLER_MARKERS, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
+    /NIP:/i, /NR BDO:/i, /Adres\s+dostawy/i, /Waga\s+netto/i,
+    /Nr\s+zam/i, /PALETA/i, /Tel\./i, /Os\.\s*kontaktowa/i,
+    /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
+    /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
+    /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
+  ];
+  let seweraIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (SELLER_MARKERS.test(lines[i])) { seweraIdx = i; break; }
   }
-  if (!odbiorca_nazwa) {
-    odbiorca_nazwa = ext(text, [
-      /Odbiorca[:\s]*\n?\s*(.+?)(?:\n|$)/i,
-      /Nabywca[:\s]*\n?\s*(.+?)(?:\n|$)/i,
-    ]);
-    if (odbiorca_nazwa) found++;
+  const searchStart = seweraIdx >= 0 ? seweraIdx + 1 : 0;
+  for (let i = searchStart; i < lines.length; i++) {
+    const line = lines[i];
+    if (SKIP_LINES.some((p: RegExp) => p.test(line))) continue;
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const capsWords = line.split(/\s+/).filter((w: string) => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
+    if (hasLegalForm || capsWords >= 3) {
+      odbiorca_nazwa = line;
+      found++;
+      // Next line with address = odbiorca_adres_siedziby
+      if (i + 1 < lines.length) {
+        const next = lines[i + 1];
+        if (/ul\.|al\.|os\.|pl\./i.test(next) || /\d{2}-\d{3}/.test(next)) {
+          odbiorca_adres_siedziby = next;
+          found++;
+        }
+      }
+      break;
+    }
   }
 
   // 5. adres_dostawy + 6. nazwa_budowy
   let adres_dostawy: string | null = null;
   let nazwa_budowy: string | null = null;
-  const adrSection = text.match(/Adres\s+dostawy\s*[:\n]\s*([\s\S]*?)(?:Os\.\s*kontaktowa|Osoba\s+kontaktowa|Tel\.|$)/i);
-  if (adrSection) {
-    const lines = adrSection[1].split('\n').map(l => l.trim()).filter(Boolean);
+  const adresIdx = lines.findIndex((l: string) => /^Adres\s+dostawy$/i.test(l));
+  if (adresIdx >= 0) {
     const addrLines: string[] = [];
-    for (const line of lines) {
-      if (/^(ul\.|al\.|os\.|pl\.)/.test(line) || /\d{2}-\d{3}/.test(line)) {
-        addrLines.push(line);
-      } else if (addrLines.length === 0) {
-        // line before address = nazwa_budowy
-        nazwa_budowy = line;
-        found++;
+    for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
+      const l = lines[i];
+      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi)/i.test(l)) break;
+      if (/^Budowa/i.test(l)) { nazwa_budowy = l; found++; continue; }
+      if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrLines.length > 0) {
+        addrLines.push(l);
       }
     }
     if (addrLines.length > 0) {
       adres_dostawy = addrLines.join(', ');
       found++;
-    } else if (lines.length > 0) {
-      // fallback: take all lines as address
-      adres_dostawy = lines.join(', ');
-      found++;
     }
   }
-  if (!adres_dostawy) {
-    adres_dostawy = ext(text, [
-      /Adres\s+dostawy[:\s]*\n?\s*(.+?\d{2}-\d{3}\s*\w+)/is,
-      /((?:ul\.|al\.|os\.)\s*.+?\d{2}-\d{3}\s*\w+)/i,
-    ]);
-    if (adres_dostawy) found++;
+  // Fallback: use odbiorca address
+  if (!adres_dostawy && odbiorca_adres_siedziby) {
+    adres_dostawy = odbiorca_adres_siedziby;
+    found++;
   }
 
   // 7. osoba_kontaktowa
@@ -107,13 +118,22 @@ function parseEkonomWz(text: string) {
   ]);
   if (osoba_kontaktowa) found++;
 
-  // 8. tel — first phone
-  const tel = ext(text, [
-    /Tel\.?\s*:?\s*([\d\s\-]{9,15})/i,
-  ])?.replace(/\s+/g, ' ').trim() || null;
-  if (tel) found++;
+  // 8. tel — ONLY from "Adres dostawy" section, NOT footer
+  let tel: string | null = null;
+  const wystawilIdx = lines.findIndex((l: string) => /Wystawił/i.test(l));
+  if (adresIdx >= 0) {
+    const telEndIdx = lines.findIndex((l: string, i: number) => i > adresIdx && /Nr\s+zam|Uwagi|PALETA|Waga/i.test(l));
+    const effectiveEnd = Math.min(
+      telEndIdx >= 0 ? telEndIdx : adresIdx + 10,
+      wystawilIdx >= 0 ? wystawilIdx : lines.length
+    );
+    for (let i = adresIdx; i < effectiveEnd && i < lines.length; i++) {
+      const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+      if (telM) { tel = telM[1].replace(/\s+/g, ' ').trim(); found++; break; }
+    }
+  }
 
-  // 9. tel2 — second phone
+  // 9. tel2 — second phone in delivery section
   let tel2: string | null = null;
   const telMatches = [...text.matchAll(/(?:Tel\.?|p\.)\s*:?\s*(?:[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\s+)?([\d\s]{9,15})/gi)];
   if (telMatches.length >= 2) {
@@ -123,12 +143,10 @@ function parseEkonomWz(text: string) {
 
   // 10. pozycje_towarowe
   const pozycje: Pozycja[] = [];
-  // Try to find table rows: lp | kod_towaru | ...
   const rowRegex = /(\d+)\s+(\d{4,8})\s*(?:\(([^)]*)\))?\s*(?:(\d{13}))?\s+(.+?)\s+(\d+[.,]?\d*)\s+(SZT|KG|M|MB|M2|M3|KPL|OP|PAL|T)/gi;
   let rm;
   while ((rm = rowRegex.exec(text)) !== null) {
     const nazwaFull = rm[5].trim();
-    // Split nazwa into main + dodatkowa if multiline
     const nameParts = nazwaFull.split(/\n/);
     pozycje.push({
       lp: parseInt(rm[1]),
@@ -141,7 +159,6 @@ function parseEkonomWz(text: string) {
       jm: rm[7].toUpperCase(),
     });
   }
-  // Simpler fallback for Ekonom table format
   if (pozycje.length === 0) {
     const simpleRowRegex = /^\s*(\d+)\s+(\d{4,8})\b/gm;
     let sr;
@@ -163,36 +180,36 @@ function parseEkonomWz(text: string) {
   }
   if (pozycje.length > 0) found++;
 
-  // 11. masa_kg
+  // 11. masa_kg — ONLY "Waga netto razem", NEVER "RAZEM:" (that's item count)
   let masa_kg: number | null = null;
-  const masaM = text.match(/Waga\s+netto\s+razem\s*:?\s*[\d]*\s*([\d.,]+)/i)
-    || text.match(/Masa\s+(?:netto\s+)?razem\s*:?\s*([\d.,]+)/i)
-    || text.match(/Waga\s+netto[:\s]+([\d.,]+)/i);
+  const masaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
   if (masaM) {
-    masa_kg = parseFloat(masaM[1].replace(',', '.'));
+    masa_kg = parseFloat(masaM[1].replace(/\s/g, '').replace(',', '.'));
     found++;
   }
 
-  // 12 + 13. uwagi / uwagi_krotkie
+  // 12 + 13. uwagi / uwagi_krotkie — collect after "Uwagi:" up to "Na podstawie art."
   let uwagi: string | null = null;
   let uwagi_krotkie: string | null = null;
-  const uwagiM = text.match(/Uwagi\s*:?\s*\n?([\s\S]*?)(?:\n\n|Podpis|Wystawił|$)/i);
-  if (uwagiM) {
-    uwagi = uwagiM[1].trim() || null;
-    if (uwagi) found++;
-    // Extract short note after "Nr zamówienia (systemowy): ..."
-    const shortM = uwagi?.match(/Nr\s+zam[^:]*:\s*\S+\s*([\s\S]*)/i);
-    if (shortM && shortM[1].trim()) {
-      uwagi_krotkie = shortM[1].trim();
-      found++;
+  const uwagiLineIdx = lines.findIndex((l: string) => /^Uwagi\s*:/i.test(l));
+  if (uwagiLineIdx >= 0) {
+    const afterLines: string[] = [];
+    for (let i = uwagiLineIdx + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (/Na\s+podstawie\s+art/i.test(l)) break;
+      if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
+      if (/Nr\s+oferty/i.test(l)) continue;
+      if (nr_zamowienia && l.trim() === nr_zamowienia) continue;
+      afterLines.push(l);
     }
-    // Also extract nr_zamowienia from uwagi if not found yet
-    if (!nr_zamowienia && uwagi) {
-      const zamFromUwagi = uwagi.match(/(T7\/[A-Z]{2}\/[\d\/]+)/i);
-      if (zamFromUwagi) {
-        nr_zamowienia = zamFromUwagi[1];
-        found++;
-      }
+    uwagi_krotkie = afterLines.join('\n').trim() || null;
+    uwagi = uwagi_krotkie;
+    if (uwagi) found++;
+    // Also extract nr_zamowienia from uwagi section if not found
+    if (!nr_zamowienia) {
+      const uwagiSection = lines.slice(uwagiLineIdx, uwagiLineIdx + 5).join('\n');
+      const zamFromUwagi = uwagiSection.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
+      if (zamFromUwagi) { nr_zamowienia = zamFromUwagi[1]; found++; }
     }
   }
 
@@ -204,12 +221,17 @@ function parseEkonomWz(text: string) {
     found++;
   }
 
-  // 15. ilosc_palet
+  // 15. ilosc_palet — from PALETA goods line
   let ilosc_palet: number | null = null;
-  const palM = text.match(/(\d+)\s*[Pp]alet/i) || text.match(/(\d+)\s*EUR/i) || text.match(/(\d+)\s*[Pp]al\b/i);
-  if (palM) {
-    ilosc_palet = parseInt(palM[1]);
-    found++;
+  for (const line of lines) {
+    if (/PALETA/i.test(line)) {
+      const palQty = line.match(/(\d+)\s*(?:SZT|szt)/i);
+      if (palQty) { ilosc_palet = parseInt(palQty[1]); found++; break; }
+    }
+  }
+  if (!ilosc_palet) {
+    const palPattern = text.match(/paleta\s*=\s*(\d+)\s*szt/i);
+    if (palPattern) { ilosc_palet = parseInt(palPattern[1]); found++; }
   }
 
   // 16. objetosc_m3
