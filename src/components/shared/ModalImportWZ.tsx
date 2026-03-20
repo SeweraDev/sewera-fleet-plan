@@ -207,7 +207,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
     { key: 'odbiorca', label: 'Odbiorca' },
     { key: 'adres', label: 'Adres dostawy' },
     { key: 'tel', label: 'Telefon' },
-    { key: 'masa_kg', label: 'Masa kg', type: 'number' },
+    { key: 'masa_kg', label: 'Masa kg' },
     { key: 'ilosc_palet', label: 'Ilość palet', type: 'number' },
     { key: 'objetosc_m3', label: 'Objętość m³', type: 'number' },
     { key: 'uwagi', label: 'Uwagi' },
