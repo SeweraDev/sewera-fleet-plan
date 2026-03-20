@@ -42,44 +42,59 @@ function parseSeweraDoc(rawText: string) {
   const mNag = text.match(/\[Nr zam:\s*([A-Z0-9\/]+)\]/);
   const nrZam = (mSys?.[1] || mNag?.[1] || (isPZ ? nrDokumentu : '')).trim();
 
-  // KROK 4: Nabywca / Odbiorca
+  // KROK 4: Nabywca — firma jest na POCZĄTKU dokumentu (przed tabelą Sprzedawca/Nabywca)
+  // Struktura PZ: nagłówek → nr → [NAZWA FIRMY] → adres → Nr ewid. → NabywcaSprzedawca → ...
+  // Struktura WZ: nagłówek → nr WZ → SprzedawcaOdbiorca → blok SEWERA → [NAZWA FIRMY]
   let nabywca = '';
   let adresNabywcy = '';
 
   const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-  
-  const etIdx = lines.findIndex((l: string) => 
-    l.includes('NabywcaSprzedawca') || l.includes('OdbiorcaInformacje') ||
-    l === 'Nabywca' || l === 'Odbiorca' || l.includes('Sprzedawca Nabywca') ||
-    l.includes('Sprzedawca Odbiorca')
-  );
 
-  if (etIdx > -1) {
-    const kandidaci: string[] = [];
-    const adresK: string[] = [];
-    let doAdresu = false;
-
-    for (let i = etIdx + 1; i < Math.min(etIdx + 20, lines.length); i++) {
-      const l = lines[i];
-      if (/^(OdbiorcaInformacje|Odbiorca$|Informacje$|Adres dostawy|Termin zapłaty|Lp\.|Nr ewid\.)/.test(l)) break;
-      if (/SEWERA|KOŚCIUSZKI 326|NIP: 6340|NR BDO:|ODDZIAŁ/.test(l)) continue;
-      if (/^NIP:/.test(l)) continue;
-
-      if (!doAdresu && (l.match(/^(ul\.|al\.|os\.|pl\.)/) || l.match(/^\d{2}-\d{3}/))) {
-        doAdresu = true;
-      }
-
-      if (doAdresu) {
-        if (l.match(/^(ul\.|al\.|os\.|pl\.)/) || l.match(/^\d{2}-\d{3}/)) {
-          adresK.push(l);
+  if (isPZ) {
+    // W PZ firma nabywcy jest na górze — pierwsze linie po "nr: XXXX"
+    const nrIdx = lines.findIndex(l => l.match(/^nr:\s*[A-Z]/i));
+    if (nrIdx > -1) {
+      const nazwaLines: string[] = [];
+      const adresLines: string[] = [];
+      let doAdresu = false;
+      for (let i = nrIdx + 1; i < Math.min(nrIdx + 10, lines.length); i++) {
+        const l = lines[i];
+        if (/^(NabywcaSprzedawca|Sprzedawca|Nabywca|Nr ewid\.)/.test(l)) break;
+        if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) doAdresu = true;
+        if (doAdresu) {
+          if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
+        } else {
+          nazwaLines.push(l);
         }
-      } else {
-        kandidaci.push(l);
       }
+      nabywca = nazwaLines.join(' ').replace(/\s+/g, ' ').trim();
+      adresNabywcy = adresLines.join(', ').trim();
     }
-
-    nabywca = kandidaci.join(' ').replace(/\s+/g, ' ').trim();
-    adresNabywcy = adresK.join(', ').trim();
+  } else {
+    // WZ/WZS: firma jest po bloku SEWERA — szukamy po etykiecie Odbiorca
+    const etIdx = lines.findIndex(l =>
+      l.includes('SprzedawcaOdbiorca') || l.includes('Sprzedawca Odbiorca') ||
+      l.includes('OdbiorcaSprzedawca') || l === 'Odbiorca'
+    );
+    if (etIdx > -1) {
+      const nazwaLines: string[] = [];
+      const adresLines: string[] = [];
+      let doAdresu = false;
+      for (let i = etIdx + 1; i < Math.min(etIdx + 20, lines.length); i++) {
+        const l = lines[i];
+        if (/^(Magazyn wydający|Adres dostawy|Termin zapłaty|Lp\.)/.test(l)) break;
+        if (/SEWERA|KOŚCIUSZKI 326|NIP: 6340|NR BDO:|ODDZIAŁ/.test(l)) continue;
+        if (/^NIP:/.test(l)) continue;
+        if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) doAdresu = true;
+        if (doAdresu) {
+          if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
+        } else {
+          nazwaLines.push(l);
+        }
+      }
+      nabywca = nazwaLines.join(' ').replace(/\s+/g, ' ').trim();
+      adresNabywcy = adresLines.join(', ').trim();
+    }
   }
 
   // KROK 5: Adres dostawy + telefon + osoba kontaktowa
