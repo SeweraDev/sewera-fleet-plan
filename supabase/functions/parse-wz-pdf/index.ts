@@ -42,6 +42,8 @@ function parseSeweraDoc(rawText: string) {
   const mNag = text.match(/\[Nr zam:\s*([A-Z0-9\/]+)\]/);
   const nrZam = (mSys?.[1] || mNag?.[1] || (isPZ ? nrDokumentu : '')).trim();
 
+  const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+
   let nabywca = '';
   let adresNabywcy = '';
   // Firma jest zawsze powtórzona dwukrotnie w dokumencie:
