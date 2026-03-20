@@ -98,24 +98,36 @@ function parseSeweraDoc(rawText: string) {
     const ulicaLines: string[] = [];
     const kodLines: string[] = [];
 
+    const kontakty: string[] = [];
     for (const l of adBlok) {
-      if (/Os\.\s*kontaktowa:/i.test(l)) {
-        const osM = l.match(/Os\.\s*kontaktowa:\s*([^0-9Tel\.]+?)(?:\s+tel\.?|$)/i);
-        if (osM) osobaKontaktowa = osM[1].trim();
-        const telM = l.match(/tel\.?\s*([0-9][0-9\s\-]{8,})/i);
-        if (telM && !tel) {
-          tel = telM[1].replace(/\-/g, ' ').replace(/\s+/g, ' ').trim();
-        }
+      // Linia "Os. kontaktowa: Andrzej Nandzik"
+      if (/Os\.?\s*kontaktowa/i.test(l)) {
+        const osM = l.match(/Os\.?\s*kontaktowa:\s*(.+?)(?:\s+tel\.?\s*[\d].*)?$/i);
+        const telM = l.match(/tel\.?\s*([0-9][0-9\s\-]{7,})/i);
+        const imie = osM?.[1]?.trim() || '';
+        const telefon = telM?.[1]?.replace(/\-/g,' ').trim() || '';
+        kontakty.push([imie, telefon].filter(Boolean).join(' '));
         continue;
       }
-      if (/^Tel\.?[:\s]/i.test(l) && !tel) {
+      // Linia "Tel.: 602 303 264"
+      if (/^Tel\.?[:\s]/i.test(l)) {
         const telM = l.match(/Tel\.?[:\s]+([0-9][0-9\s]{8,})/i);
-        if (telM) tel = telM[1].replace(/\s+/g, ' ').trim();
+        if (telM) kontakty.push(telM[1].trim());
         continue;
       }
+      // Linia "Marcin Kot tel. 694 447 293" (imię + tel w jednej linii)
+      if (/[A-ZŁŚŹŻĆĄĘ][a-złśźżćąę]+ [A-ZŁŚŹŻĆĄĘ][a-złśźżćąę]+\s+tel\.?\s+[0-9]/i.test(l)) {
+        const m = l.match(/(.+?)\s+tel\.?\s+([0-9][0-9\s\-]{7,})/i);
+        if (m) kontakty.push(`${m[1].trim()} ${m[2].replace(/\-/g,' ').trim()}`);
+        continue;
+      }
+      // Ulica
       if (l.match(/^(ul\.|al\.|os\.|pl\.)/i)) { ulicaLines.push(l); continue; }
+      // Kod pocztowy
       if (l.match(/^\d{2}-\d{3}/)) { kodLines.push(l); continue; }
     }
+    osobaKontaktowa = kontakty.join(', ');
+    tel = '';  // tel jest zawarty w osobaKontaktowa
 
     const ulica = ulicaLines[0] || '';
     const kodMiasto = kodLines[0] || '';
