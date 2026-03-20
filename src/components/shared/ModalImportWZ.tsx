@@ -614,8 +614,16 @@ function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
         <div><Label className="text-xs">Adres *</Label><Input className="h-8 text-sm" value={form.adres ?? ''} onChange={e => update('adres', e.target.value)} /></div>
         <div><Label className="text-xs">Telefon</Label><Input className="h-8 text-sm" value={form.tel ?? ''} onChange={e => update('tel', e.target.value)} /></div>
         <div><Label className="text-xs">Masa kg *</Label><Input className="h-8 text-sm" type="number" value={form.masa_kg ?? ''} onChange={e => update('masa_kg', Number(e.target.value))} /></div>
-        <div><Label className="text-xs">Ilość palet</Label><Input className="h-8 text-sm" type="number" value={form.ilosc_palet ?? ''} onChange={e => update('ilosc_palet', e.target.value ? Number(e.target.value) : null)} /></div>
-        <div><Label className="text-xs">Objętość m³</Label><Input className="h-8 text-sm" type="number" value={form.objetosc_m3 ?? ''} onChange={e => update('objetosc_m3', e.target.value ? Number(e.target.value) : null)} /></div>
+        <div>
+          <Label className="text-xs">Ilość palet</Label>
+          <Input className="h-8 text-sm" type="number" value={form.ilosc_palet ?? ''} onChange={e => update('ilosc_palet', e.target.value ? Number(e.target.value) : 0)} />
+          <p className="text-[10px] text-muted-foreground mt-0.5">Uzupełnij jeśli brak na dokumencie</p>
+        </div>
+        <div>
+          <Label className="text-xs">Objętość m³</Label>
+          <Input className="h-8 text-sm" type="number" value={form.objetosc_m3 ?? ''} onChange={e => update('objetosc_m3', e.target.value ? Number(e.target.value) : 0)} />
+          <p className="text-[10px] text-muted-foreground mt-0.5">Uzupełnij jeśli brak na dokumencie</p>
+        </div>
         <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={form.uwagi ?? ''} onChange={e => update('uwagi', e.target.value)} /></div>
       </div>
       <Button onClick={() => onParsed(form)} disabled={!form.odbiorca && !form.adres} className="w-full">
