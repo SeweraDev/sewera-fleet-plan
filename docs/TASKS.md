@@ -1,5 +1,5 @@
 # TASKS.md — Aktualne zadania
-📅 Ostatnia aktualizacja: 2026-03-19
+📅 Ostatnia aktualizacja: 2026-03-20
 
 ---
 
@@ -53,12 +53,16 @@ Wszystkie zadania Sprintu 3 (Bloki A–D) zostały ukończone ✅
 
 ---
 
-## POPRAWKI PO SPRINCIE 3 (2026-03-19)
+## POPRAWKI PO SPRINCIE 3
 
 - [x] **FIX-001** — Edge Function parse-wz-pdf: Buffer → Uint8Array (Deno) ✅ 2026-03-19
 - [x] **FIX-002** — Parser tekstu WZ: nr zamówienia R7/ oprócz T7/ ✅ 2026-03-19
 - [x] **FIX-003** — Parser tekstu WZ: odbiorca bez prefixu "Odbiorca:" ✅ 2026-03-19
 - [x] **FIX-004** — Parser tekstu WZ: masa "Waga netto razem: X" bez "kg" ✅ 2026-03-19
+- [x] **FIX-005** — Parser PDF: masa_kg — bierze ostatni numer (nie przedostatni) ✅ 2026-03-20
+- [x] **FIX-006** — Parser PDF: kontakty — obsługa osoby kontaktowej + tel w różnych formatach ✅ 2026-03-20
+- [x] **FIX-007** — Parser PDF: nabywca KROK 4 — rozdzielenie PZ vs WZ (szuka po adresie SEWERA) ✅ 2026-03-20
+- [x] **FIX-008** — Parser PDF: lines is not defined — dodano brakującą deklarację ✅ 2026-03-20
 
 ---
 

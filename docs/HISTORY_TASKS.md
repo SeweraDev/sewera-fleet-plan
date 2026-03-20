@@ -1,5 +1,5 @@
 # HISTORY_TASKS.md — Historia ukończonych zadań
-📅 Ostatnia aktualizacja: 2026-03-19
+📅 Ostatnia aktualizacja: 2026-03-20
 
 ---
 
@@ -131,11 +131,19 @@
 
 ---
 
-## POPRAWKI PO SPRINCIE 3
+## POPRAWKI PO SPRINCIE 3 (2026-03-19)
 ✅ Edge Function parse-wz-pdf: Buffer → Uint8Array (Deno compatibility)
 ✅ Parser tekstu WZ: obsługa nr zamówienia R7/ oprócz T7/
 ✅ Parser tekstu WZ: odbiorca bez wymaganego prefixu "Odbiorca:"
 ✅ Parser tekstu WZ: masa "Waga netto razem: X" bez wymaganego "kg"
+
+---
+
+## POPRAWKI PARSERA PDF (2026-03-20)
+✅ Parser PDF: masa_kg — bierze ostatni numer z sekcji (nie przedostatni)
+✅ Parser PDF: kontakty — nowa logika zbierania osoby kontaktowej i telefonu
+✅ Parser PDF: nabywca KROK 4 — rozdzielenie PZ vs WZ (szuka po adresie oddziału SEWERA)
+✅ Parser PDF: lines is not defined — dodano brakującą deklarację zmiennej
 
 ---
 
@@ -205,6 +213,8 @@ src/
       KpiTab.tsx
       RaportyTab.tsx
   hooks/
+    use-mobile.tsx
+    use-toast.ts
     useAuth.ts
     useBlokady.ts
     useCreateKurs.ts
@@ -271,3 +281,7 @@ docs/
 | Parser WZ nie łapał R7/ | Regex [A-Z]\d/ zamiast T7/ |
 | Parser WZ nie łapał odbiorcy | Fallback na nazwy firm (SP. Z O.O. itd.) |
 | Parser WZ nie łapał masy | Fallback na "Waga netto razem: X" |
+| Parser PDF: masa_kg błędny indeks | numery[length-1] zamiast [length-2] |
+| Parser PDF: kontakty nie parsowane | Nowa logika Os. kontaktowa + Tel. |
+| Parser PDF: nabywca źle rozpoznawany | PZ: po `nr:`, WZ: po adresie SEWERA |
+| Parser PDF: lines is not defined | Dodano deklarację na początku parsera |
