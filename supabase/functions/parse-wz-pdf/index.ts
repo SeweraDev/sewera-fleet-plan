@@ -133,14 +133,20 @@ function parseSeweraDoc(rawText: string) {
     }
   } else {
     // PZ: masa jest PRZED "Razem: [wartość PLN]"
+    // Struktura: [ilość pozycji z przecinkiem] → [MASA z przecinkiem] → Razem: [PLN]
+    // Masa = PRZEDOSTATNIA liczba z przecinkiem przed "Razem:"
     const razIdx = text.search(/\nRazem:\s+[\d\s]+[,.][\d]+/);
     if (razIdx > -1) {
-      const beforeRaz = text.substring(Math.max(0, razIdx - 150), razIdx);
-      const numery = [...beforeRaz.matchAll(/([\d ]+[,.][\d]+|[\d]+)/g)]
+      const beforeRaz = text.substring(Math.max(0, razIdx - 300), razIdx);
+      const numeryZPrzecinkiem = [...beforeRaz.matchAll(/([\d ]+[,]\d+)/g)]
         .map((m: RegExpMatchArray) => m[1].replace(/\s/g, '').replace(',', '.'))
         .filter((n: string) => !isNaN(parseFloat(n)));
-      if (numery.length > 0) {
-        masaKg = Math.ceil(parseFloat(numery[numery.length - 1]) || 0);
+      // Przedostatnia = masa, ostatnia = ilość pozycji (np. "99,00")
+      const idx = numeryZPrzecinkiem.length >= 2
+        ? numeryZPrzecinkiem.length - 2
+        : numeryZPrzecinkiem.length - 1;
+      if (idx >= 0) {
+        masaKg = Math.ceil(parseFloat(numeryZPrzecinkiem[idx]) || 0);
       }
     }
   }
