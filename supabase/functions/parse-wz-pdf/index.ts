@@ -175,9 +175,9 @@ function parseSeweraDoc(rawText: string) {
   // ── OBJETOSC — zawsze 0, do ręcznego uzupełnienia ──
   const objetosc_m3 = 0;
 
-  // Count found fields for confidence
+  // Count found fields for confidence (palety/m3 excluded — always manual)
   let found = 0;
-  const total = 10;
+  const total = 8;
   if (nrDokumentu) found++;
   if (nrZam) found++;
   if (nabywca) found++;
@@ -185,9 +185,7 @@ function parseSeweraDoc(rawText: string) {
   if (adresDostawy) found++;
   if (tel) found++;
   if (masaKg) found++;
-  if (iloscPalet) found++;
   if (uwagi) found++;
-  if (objetosc_m3) found++;
 
   return {
     typ_dokumentu: typ,
