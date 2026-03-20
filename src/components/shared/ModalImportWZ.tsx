@@ -608,6 +608,12 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
         placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres..."
         value={text}
         onChange={e => setText(e.target.value)}
+        onPaste={e => {
+          e.preventDefault();
+          const pasted = e.clipboardData.getData('text/plain');
+          const cleaned = cleanText(pasted);
+          setText(cleaned);
+        }}
       />
       <Button onClick={parse} disabled={!text.trim()} size="sm">Parsuj tekst</Button>
 
