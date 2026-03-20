@@ -258,10 +258,16 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
                     type={f.type || 'text'}
                     value={f.key === 'masa_kg' && typeof val === 'number' ? formatMasaKg(val) : (val?.toString() ?? '')}
                     onChange={e => {
+                      const raw = e.target.value;
                       setFormData(prev => prev ? {
                         ...prev,
-                        [f.key]: f.type === 'number' ? (e.target.value ? Number(e.target.value) : null) : e.target.value,
+                        [f.key]: f.type === 'number'
+                          ? (raw ? Number(raw) : null)
+                          : f.key === 'masa_kg'
+                            ? (parseFloat(raw.replace(/\s/g, '').replace(',', '.')) || 0)
+                            : raw,
                       } : prev);
+                    }}
                     }}
                   />
                 </div>
