@@ -606,11 +606,57 @@ function parseWZText(rawText: string): WZImportData {
 /* ─── Paste Tab ─── */
 function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [text, setText] = useState('');
+  const [parsing, setParsing] = useState(false);
   const [result, setResult] = useState<WZImportData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const parse = () => {
+  const parse = async () => {
     if (!text.trim()) return;
-    setResult(parseWZText(text));
+    setParsing(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ text }),
+        }
+      );
+      const json: ParsedPdfResult = await res.json();
+
+      if (json.error) {
+        setError(json.error);
+        setParsing(false);
+        return;
+      }
+
+      console.log("PASTE EDGE FUNCTION RESPONSE:", JSON.stringify(json));
+      const mapped: WZImportData = {
+        numer_wz: json.nr_wz || '',
+        nr_zamowienia: json.nr_zamowienia || '',
+        odbiorca: json.odbiorca || '',
+        adres: json.adres_dostawy || '',
+        tel: json.osoba_kontaktowa || json.tel || '',
+        osoba_kontaktowa: json.osoba_kontaktowa || '',
+        masa_kg: json.masa_kg || 0,
+        ilosc_palet: json.ilosc_palet || 0,
+        objetosc_m3: json.objetosc_m3 || 0,
+        uwagi: json.uwagi || '',
+        typ_dokumentu: (json as any).typ_dokumentu || 'WZ',
+        ma_adres_dostawy: (json as any).ma_adres_dostawy ?? false,
+      };
+      setResult(mapped);
+    } catch (e: any) {
+      setError('Błąd połączenia: ' + (e.message || ''));
+    }
+    setParsing(false);
   };
 
   return (
@@ -620,14 +666,12 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
         placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres..."
         value={text}
         onChange={e => setText(e.target.value)}
-        onPaste={e => {
-          e.preventDefault();
-          const pasted = e.clipboardData.getData('text/plain');
-          const cleaned = cleanText(pasted);
-          setText(cleaned);
-        }}
       />
-      <Button onClick={parse} disabled={!text.trim()} size="sm">Parsuj tekst</Button>
+      <Button onClick={parse} disabled={!text.trim() || parsing} size="sm">
+        {parsing ? 'Analizuję...' : 'Parsuj tekst'}
+      </Button>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {result && (
         <div className="space-y-2 pt-2 border-t">
