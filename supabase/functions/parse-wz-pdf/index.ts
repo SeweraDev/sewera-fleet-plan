@@ -147,7 +147,7 @@ function parseSeweraDoc(rawText: string) {
         if (m) kontakty.push(`${m[1].trim()} ${m[2].replace(/\-/g, " ").trim()}`);
         continue;
       }
-      const m = afterWaga.match(/([\d ]+[,.][\d]+)/);
+      if (l.match(/^(ul\.|al\.|os\.|pl\.)/i)) {
         ulicaLines.push(l);
         continue;
       }
@@ -172,27 +172,7 @@ function parseSeweraDoc(rawText: string) {
       const beforeLines = text
         .substring(0, magazynIdx)
         .split("\n")
-  !l.match(/^Na podstawie art\./),
-```
-
-Edytuj te dwie linie bezpośrednio w Supabase. Wejdź w **View code**, znajdź i zmień:
-
-**Zmiana 1** — znajdź linię:
-```
-const m = afterWaga.match(/([\d ]+[,.][\d]+)/);
-```
-Zamień na:
-```
-const m = afterWaga.match(/([\d ]+[,.][\d]{2,})/);
-```
-
-**Zmiana 2** — znajdź linię:
-```
-          !l.match(/^Na podstawie art\./),
-```
-Zamień na:
-```
-          !l.includes("Na podstawie art.") && !l.includes("Kupuj"),
+        .map((l: string) => l.trim())
         .filter(Boolean);
       const kontakty: string[] = [];
       const ulicaLines: string[] = [];
@@ -237,7 +217,7 @@ Zamień na:
     const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
     if (wagaIdx > -1) {
       const afterWaga = text.substring(wagaIdx + 20, wagaIdx + 200);
-      const m = afterWaga.match(/([\d ]+[,.][\d]+)/);
+      const m = afterWaga.match(/([\d ]+[,.][\d]{2,})/);
       if (m) {
         masaKg = Math.ceil(parseFloat(m[1].replace(/\s/g, "").replace(",", ".")) || 0);
       }
@@ -269,7 +249,8 @@ Zamień na:
           !l.startsWith("Nr zamówienia (systemowy):") &&
           !l.startsWith("Nr oferty:") &&
           !l.match(/^WZ\s+[A-Z]{2}\//) &&
-          !l.match(/^Na podstawie art\./),
+          !l.includes("Na podstawie art.") &&
+          !l.includes("Kupuj"),
       )
       .join("\n")
       .trim();
