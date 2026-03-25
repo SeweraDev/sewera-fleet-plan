@@ -341,10 +341,13 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
           odbiorca: zl.odbiorca,
           adres: zl.adres_pelny,
           tel: null,
+          osoba_kontaktowa: null,
           masa_kg: zl.masa_kg,
           ilosc_palet: null,
           objetosc_m3: null,
           uwagi: [zl.rodzaj_dostawy, zl.uwagi].filter(Boolean).join('; ') || null,
+          typ_dokumentu: 'WZ',
+          ma_adres_dostawy: false,
           typ_pojazdu: kurs.typ_pojazdu,
         });
       }
