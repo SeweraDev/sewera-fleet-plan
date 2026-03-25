@@ -255,6 +255,13 @@ function parseSeweraDoc(rawText: string) {
       .trim();
   }
 
+  console.log("RESULT:", JSON.stringify({
+    odbiorca: nabywca,
+    adres_dostawy: adresDostawy,
+    masa_kg: masaKg,
+    uwagi: uwagi,
+  }));
+
   return {
     typ_dokumentu: typDokumentu,
     nr_wz: nrDokumentu,
