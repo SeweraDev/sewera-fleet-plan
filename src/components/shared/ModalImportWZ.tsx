@@ -181,7 +181,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
     const mapped: WZImportData = {
       numer_wz: json.nr_wz || '',
       nr_zamowienia: json.nr_zamowienia || '',
-      odbiorca: json.odbiorca_nazwa || '',
+      odbiorca: json.odbiorca || '',
       adres: json.adres_dostawy || '',
       tel: json.tel || '',
       osoba_kontaktowa: json.osoba_kontaktowa || '',
