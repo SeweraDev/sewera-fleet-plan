@@ -178,24 +178,22 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
     setResult(json);
 
-    // Map to form fields per spec
-    let adres = json.adres_dostawy || '';
-    let uwagi = json.uwagi_krotkie || '';
-    if (json.nazwa_budowy && !adres.includes(json.nazwa_budowy)) {
-      uwagi = uwagi ? `${json.nazwa_budowy}; ${uwagi}` : json.nazwa_budowy;
-    }
+    const mapped: WZImportData = {
+      numer_wz: json.nr_wz || '',
+      nr_zamowienia: json.nr_zamowienia || '',
+      odbiorca: json.odbiorca_nazwa || '',
+      adres: json.adres_dostawy || '',
+      tel: json.tel || '',
+      osoba_kontaktowa: json.osoba_kontaktowa || '',
+      masa_kg: json.masa_kg || 0,
+      ilosc_palet: json.ilosc_palet || 0,
+      objetosc_m3: json.objetosc_m3 || 0,
+      uwagi: json.uwagi || '',
+      typ_dokumentu: (json as any).typ_dokumentu || 'WZ',
+      ma_adres_dostawy: (json as any).ma_adres_dostawy || false,
+    };
 
-    setFormData({
-      numer_wz: json.nr_wz,
-      nr_zamowienia: json.nr_zamowienia,
-      odbiorca: json.odbiorca_nazwa,
-      adres,
-      tel: json.tel,
-      masa_kg: json.masa_kg ?? 0,
-      ilosc_palet: json.ilosc_palet ?? 0,
-      objetosc_m3: json.objetosc_m3 ?? 0,
-      uwagi: uwagi || null,
-    });
+    setFormData(mapped);
   }, [onSwitchManual]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
