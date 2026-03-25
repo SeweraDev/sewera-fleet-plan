@@ -655,7 +655,8 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 /* ─── Manual Tab ─── */
 function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [form, setForm] = useState<WZImportData>({
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, ilosc_palet: null, objetosc_m3: null, uwagi: '',
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', osoba_kontaktowa: null,
+    masa_kg: 0, ilosc_palet: null, objetosc_m3: null, uwagi: '', typ_dokumentu: 'WZ', ma_adres_dostawy: false,
   });
 
   const update = (field: keyof WZImportData, val: string | number | null) =>
