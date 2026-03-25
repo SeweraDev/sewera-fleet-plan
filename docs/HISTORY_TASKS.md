@@ -1,287 +1,75 @@
 # HISTORY_TASKS.md — Historia ukończonych zadań
-📅 Ostatnia aktualizacja: 2026-03-20
+📅 Ostatnia aktualizacja: 2026-03-25
 
 ---
 
 ## SPRINT 0 — Baza danych
-✅ Uruchomiono SPRINT_0_transport_v1.sql w Lovable Cloud
-✅ Tabele: oddzialy, flota, flota_zewnetrzna, kierowcy,
-   user_roles, zlecenia, zlecenia_wz, kursy, kurs_przystanki,
-   dostepnosc_blokady, powiadomienia
+✅ Tabele: oddzialy, flota, flota_zewnetrzna, kierowcy, user_roles, zlecenia, zlecenia_wz, kursy, kurs_przystanki, dostepnosc_blokady, powiadomienia
 ✅ RLS włączony na wszystkich tabelach
 ✅ Seed: 9 oddziałów, 28 pojazdów, 21 kierowców
-✅ Self-signup wyłączony
-
----
 
 ## SPRINT 1 — Szkielet + Auth
-✅ Knowledge file wgrany do Lovable
-✅ Routing dla 5 ról: /sprzedawca /dyspozytor /kierowca /zarzad /admin
-✅ Topbar z nazwą użytkownika + badge roli + wyloguj
-✅ Sidebar per rola
-✅ ProtectedRoute z redirect po roli
-✅ Szkielety 5 stron
-
----
+✅ Routing dla 5 ról, Topbar, Sidebar, ProtectedRoute
 
 ## SPRINT 1.5 — Fix Auth (hardcode → Supabase)
-✅ useAuth pobiera role z tabeli user_roles (nie hardcode)
-✅ LoginPage używa supabase.auth.signInWithPassword()
-✅ Redirect po logowaniu zależny od primaryRole
-✅ ProtectedRoute sprawdza roles z bazy
-✅ Konta testowe: 5 kont @sewera.pl z rolami
-✅ Kierowca@sewera.pl powiązany z Michał S. w tabeli kierowcy
-
----
+✅ useAuth + LoginPage przepisane na Supabase Auth
 
 ## SPRINT 2A — Sprzedawca
-✅ Formularz zlecenia — drawer z krokami
-✅ Krok 1: Oddział z bazy (useOddzialy)
-✅ Krok 2: Typ pojazdu z floty (useFlotaOddzialu)
-✅ Krok 3: Wybór dnia
-✅ Krok 4: Preferowana godzina (do 8:00 / do 10:00 / ... / Dowolna)
-✅ Krok 5: Dokumenty WZ (ręcznie + wklej tekst parser)
-✅ INSERT do zlecenia + zlecenia_wz
-✅ Lista "Moje zlecenia" z filtrami statusów
-✅ Poprawione etykiety pól WZ (odbiorca ≠ sprzedawca)
-✅ Opcja "Bez preferencji" w typie pojazdu
-✅ Zakładki importu WZ (mock OCR + wklej tekst)
-
----
+✅ Formularz zlecenia (5 kroków), lista "Moje zlecenia", import WZ (wklej tekst)
 
 ## SPRINT 2B — Dyspozytor
-✅ Sidebar: Kursy / Zlecenia / Flota
-✅ Automatyczne ustawienie oddziału z profilu
-✅ Widok kursów z filtrami: Wszystkie/Zaplanowane/W trasie/Zakończone
-✅ Banner ⚠️ zleceń bez kursu z przyciskiem "Przypisz"
-✅ Kolumny aut z paskami zajętości kg/m³/palet
-✅ KartaKursu: nr rej. + typ + kierowca + telefon + rozładunki
-✅ Akcje: Wyjechał / Dostarczono / Wrócił → UPDATE bazy
-✅ Realtime na tabeli kursy
-✅ ModalBuilderKursu: tworzenie kursu z wyborem auta/kierowcy/zleceń
-✅ Modal edycji zlecenia (✏️) z importem WZ
-✅ Modal edycji kursu (⚙️)
-✅ Modal przepięcia zlecenia (🔀) między kursami
-✅ Zakładka Zlecenia: wszystkie zlecenia z filtrami + kolumna Kurs
-✅ Zakładka Flota z 3 zakładkami: Pojazdy / Zewnętrzni / Kierowcy
-✅ CRUD pojazdów własnych (add/edit/delete) — tylko dyspozytor
-✅ CRUD kierowców (add/edit/delete) — tylko dyspozytor
-✅ CRUD zewnętrznych przewoźników — tylko dyspozytor
-✅ Kalendarz zajętości 10 dni roboczych (Pon-Pt)
-✅ Toggle blokady pojazdu/kierowcy/zewnętrznego w kalendarzu
-✅ Filtr zakresu dat (jeden dzień / zakres)
-✅ Widok kursów: model Kurs→Rozładunek→WZ (grupowanie)
-
----
+✅ Kursy, Zlecenia, Flota (4 zakładki), Kalendarz, CRUD pojazdów/kierowców/zewnętrznych, Realtime
 
 ## SPRINT 2C — Kierowca
-✅ Widok mobilny (max-width: 480px)
-✅ Kursy na dziś z bazy (useMojeKursyDzis)
-✅ Przystanki z ładunkiem per kurs
-✅ Przyciski: Wyjeżdżam / Dostarczyłem / Wróciłem
-✅ UPDATE bazy przy każdej akcji
-✅ Realtime na kurs_przystanki
-✅ Link Google Maps z trasą
-✅ "Wróciłem" aktywny tylko gdy wszystkie rozładunki zakończone
-
----
+✅ Widok mobilny, kursy na dziś, potwierdzanie rozładunków, Google Maps
 
 ## SPRINT 2D — Zarząd
-✅ Dashboard KPI z 3 zakładkami: KPI / Koszty / Raporty
-✅ Zakładka KPI: 4 kafelki + zajętość floty + live kursy + tabela oddziałów
-✅ Alert zleceń bez kursu
-✅ Zakładka Koszty: własne vs zewnętrzne + tabela przewoźników
-✅ Zakładka Raporty: filtry daty+oddział + paginacja + eksport CSV
-✅ Realtime + auto-refresh co 60s
-✅ 42 testy — wszystkie przeszły
-✅ RLS dla roli zarzad dodany
-
----
+✅ KPI, Koszty, Raporty, Realtime + auto-refresh
 
 ## SPRINT 3A — Import WZ (PDF + komponenty)
-✅ Edge Function `parse-wz-pdf` — parser PDF dokumentów WZ (Ekonom/Proman)
-✅ Edge Function `parse-excel-plan` — parser planu kursów z Excela
-✅ Komponent `ModalImportWZ` — 4 zakładki: PDF / XLS / Wklej tekst / Ręcznie
-✅ Integracja importu w SprzedawcaPage (krok 3 formularza)
-✅ Integracja importu w DyspozytoPage (edycja zlecenia)
-✅ Domówienie kierowcy → status do_weryfikacji → dyspozytor zatwierdza
-
----
+✅ Edge Function `parse-wz-pdf`, `parse-excel-plan`, `ModalImportWZ` (4 zakładki)
 
 ## SPRINT 3B — Import Excel (plan kursów)
-✅ Modal importu planu Excela z podglądem kursów i walidacją
-✅ Lista wyboru typów A-I jako alternatywa w formularzu zlecenia
-✅ Import WZ z Excela — sprzedawca wybiera swój wiersz
-
----
+✅ Modal importu planu Excela, lista typów A-I, import WZ z Excela
 
 ## SPRINT 3C — Deadline WZ + Powiadomienia
-✅ Migracja: deadline_wz, ma_wz, flaga_brak_wz + triggery
-✅ Edge Function `check-deadline-wz` (cron co godzinę)
-✅ Tabela powiadomienia + NotificationBell w Topbarze z Realtime
-✅ UI deadline w SprzedawcaPage (🟢/🟡/🔴)
-✅ UI flaga u dyspozytora (⏰ + przyciski Anuluj/Przedłuż)
-
----
+✅ deadline_wz, check-deadline-wz (cron), NotificationBell, DeadlineBadge
 
 ## SPRINT 3D — Weryfikacja zajętości
-✅ Hook useSprawdzDostepnosc — sprawdza kg/m³/palety online
-✅ DostepnoscStep — krok 4 formularza z ostrzeżeniami
-✅ Status do_weryfikacji gdy przeładowanie
+✅ useSprawdzDostepnosc, DostepnoscStep, status do_weryfikacji
 
 ---
 
-## POPRAWKI PO SPRINCIE 3 (2026-03-19)
-✅ Edge Function parse-wz-pdf: Buffer → Uint8Array (Deno compatibility)
-✅ Parser tekstu WZ: obsługa nr zamówienia R7/ oprócz T7/
-✅ Parser tekstu WZ: odbiorca bez wymaganego prefixu "Odbiorca:"
-✅ Parser tekstu WZ: masa "Waga netto razem: X" bez wymaganego "kg"
+## POPRAWKI (2026-03-19 – 2026-03-25)
+
+| ID | Opis | Data |
+|----|------|------|
+| FIX-001 | parse-wz-pdf: Buffer → Uint8Array | 2026-03-19 |
+| FIX-002 | Parser WZ: R7/ oprócz T7/ | 2026-03-19 |
+| FIX-003 | Parser WZ: odbiorca bez prefixu | 2026-03-19 |
+| FIX-004 | Parser WZ: masa bez "kg" | 2026-03-19 |
+| FIX-005 | Parser PDF: masa_kg last index | 2026-03-20 |
+| FIX-006 | Parser PDF: kontakty | 2026-03-20 |
+| FIX-007 | Parser PDF: nabywca PZ vs WZ | 2026-03-20 |
+| FIX-008 | Parser PDF: lines not defined | 2026-03-20 |
+| FIX-009 | PasteTab: disabled button PUA chars | 2026-03-25 |
 
 ---
 
-## POPRAWKI PARSERA PDF (2026-03-20)
-✅ Parser PDF: masa_kg — bierze ostatni numer z sekcji (nie przedostatni)
-✅ Parser PDF: kontakty — nowa logika zbierania osoby kontaktowej i telefonu
-✅ Parser PDF: nabywca KROK 4 — rozdzielenie PZ vs WZ (szuka po adresie oddziału SEWERA)
-✅ Parser PDF: lines is not defined — dodano brakującą deklarację zmiennej
-
----
-
-## MIGRACJE WYKONANE (chronologicznie)
+## MIGRACJE WYKONANE
 
 1. Sprint 0 SQL — baza główna
-2. RLS dla oddzialy/flota/kierowcy (SELECT authenticated)
+2. RLS dla oddzialy/flota/kierowcy
 3. Seed: 9 oddziałów, 28 aut, 21 kierowców
-4. Konta testowe + role w user_roles
-5. flota_zewnetrzna: dodano ladownosc_kg, kierowca, tel, oddzial_id, aktywny
+4. Konta testowe + role
+5. flota_zewnetrzna: ladownosc_kg, kierowca, tel, oddzial_id, aktywny
 6. flota: objetosc_m3 DROP NOT NULL
-7. flota: ADD COLUMN max_palet INT
-8. UPDATE flota: dane 28 pojazdów z max_palet
-9. zlecenia_wz: ADD COLUMN ilosc_palet INT
-10. dostepnosc_blokady: CREATE TABLE (toggle blokady)
-11. zlecenia: ADD COLUMN deadline_wz, ma_wz, flaga_brak_wz
+7. flota: ADD max_palet
+8. UPDATE flota: dane 28 pojazdów
+9. zlecenia_wz: ADD ilosc_palet
+10. dostepnosc_blokady: CREATE TABLE
+11. zlecenia: ADD deadline_wz, ma_wz, flaga_brak_wz
 12. Funkcja oblicz_deadline_wz() + triggery
 13. powiadomienia: CREATE TABLE
-14. RLS dla dyspozytor: INSERT/UPDATE/DELETE na flota/kierowcy/kursy/zlecenia
-15. RLS dla zarzad: SELECT na kursy/zlecenia/flota/kurs_przystanki
-
----
-
-## AKTUALNA STRUKTURA PLIKÓW
-
-```
-src/
-  pages/
-    LoginPage.tsx
-    Index.tsx
-    NotFound.tsx
-    UnauthorizedPage.tsx
-    sprzedawca/Dashboard.tsx
-    dyspozytor/Dashboard.tsx
-    kierowca/MojaTrasa.tsx
-    zarzad/Dashboard.tsx
-    admin/Uzytkownicy.tsx
-  components/
-    NavLink.tsx
-    shared/
-      AppLayout.tsx
-      AppSidebar.tsx
-      ConfirmDialog.tsx
-      LoadingScreen.tsx
-      ModalImportWZ.tsx
-      NotificationBell.tsx
-      PageSidebar.tsx
-      ProtectedRoute.tsx
-      RootRedirect.tsx
-      StatusBadge.tsx
-      Topbar.tsx
-    sprzedawca/
-      CzasDostawyStep.tsx
-      DostepnoscStep.tsx
-      MojeZleceniaTab.tsx
-      TypPojazduStep.tsx
-      WzFormTabs.tsx
-    dyspozytor/
-      EdytujKursModal.tsx
-      EdytujZlecenieModal.tsx
-      FlotaSection.tsx
-      ImportExcelModal.tsx
-      PrzepnijModal.tsx
-      ZleceniaTab.tsx
-    zarzad/
-      KosztyTab.tsx
-      KpiTab.tsx
-      RaportyTab.tsx
-  hooks/
-    use-mobile.tsx
-    use-toast.ts
-    useAuth.ts
-    useBlokady.ts
-    useCreateKurs.ts
-    useCreateZlecenie.ts
-    useFlotaOddzialu.ts
-    useFlotaZewnetrzna.ts
-    useKalendarzFloty.ts
-    useKierowcyOddzialu.ts
-    useKierowcyStatusDnia.ts
-    useKursActions.ts
-    useKursyDnia.ts
-    useMojeKursyDzis.ts
-    useMojeZlecenia.ts
-    useOddzialy.ts
-    usePowiadomienia.ts
-    useSprawdzDostepnosc.ts
-    useZarzadKPI.ts
-    useZleceniaBezKursu.ts
-    useZleceniaOddzialu.ts
-  providers/
-    AuthProvider.tsx
-  integrations/
-    supabase/client.ts
-    supabase/types.ts
-  types/
-    auth.ts
-    index.ts
-  lib/
-    supabase.ts
-    utils.ts
-
-supabase/
-  functions/
-    check-deadline-wz/index.ts
-    parse-excel-plan/index.ts
-    parse-wz-pdf/index.ts
-    parse-wz-xls/index.ts
-    seed-users/index.ts
-  config.toml
-
-docs/
-  TASKS.md
-  BUGS.md
-  HISTORY_TASKS.md
-  SPRINT_3B_import_excel.md
-```
-
----
-
-## PROBLEMY NAPOTKANE I ROZWIĄZANIA
-
-| Problem | Rozwiązanie |
-|---------|-------------|
-| Auth hardcoded zamiast Supabase | Przepisano useAuth + LoginPage |
-| Tabele puste po Sprint 0 | Seed wgrany osobno przez Lovable chat |
-| flota.objetosc_m3 NOT NULL | ALTER COLUMN DROP NOT NULL |
-| UNHANDLED_PROMISE_REJECTION w DyspozytoPage | Fix async w useEffect |
-| Dyspozytor nie widział oddziału | Auto-set z user_roles przy mount |
-| Terminologia "przystanek" | Zamieniono na "rozładunek" wszędzie |
-| Odbiorca w WZ = sprzedawca (błąd UX) | Poprawiono etykiety pól |
-| Palety hardcoded 33 zamiast z bazy | max_palet z tabeli flota |
-| Kalendarz pokazywał weekendy | Fix funkcji generującej dni (DOW 1-5) |
-| Buffer is not defined (Deno) | Uint8Array zamiast Buffer.from() |
-| Parser WZ nie łapał R7/ | Regex [A-Z]\d/ zamiast T7/ |
-| Parser WZ nie łapał odbiorcy | Fallback na nazwy firm (SP. Z O.O. itd.) |
-| Parser WZ nie łapał masy | Fallback na "Waga netto razem: X" |
-| Parser PDF: masa_kg błędny indeks | numery[length-1] zamiast [length-2] |
-| Parser PDF: kontakty nie parsowane | Nowa logika Os. kontaktowa + Tel. |
-| Parser PDF: nabywca źle rozpoznawany | PZ: po `nr:`, WZ: po adresie SEWERA |
-| Parser PDF: lines is not defined | Dodano deklarację na początku parsera |
+14. RLS dla dyspozytor: INSERT/UPDATE/DELETE
+15. RLS dla zarzad: SELECT

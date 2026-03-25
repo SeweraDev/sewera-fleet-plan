@@ -1,5 +1,5 @@
 # TASKS.md — Aktualne zadania
-📅 Ostatnia aktualizacja: 2026-03-20
+📅 Ostatnia aktualizacja: 2026-03-25
 
 ---
 
@@ -18,38 +18,10 @@ Po ukończeniu zadania Lovable dopisuje:
 
 ---
 
-## UKOŃCZONY SPRINT: Sprint 3 — Import WZ + Rezerwacje
+## UKOŃCZONE SPRINTY
 
-Wszystkie zadania Sprintu 3 (Bloki A–D) zostały ukończone ✅
-
----
-
-### BLOK A: Import PDF (Edge Functions)
-
-- [x] **S3-001** — Edge Function `parse-wz-pdf` ✅ 2026-03-19
-- [x] **S3-002** — Edge Function `parse-excel-plan` ✅ 2026-03-19
-- [x] **S3-003** — Komponent `ModalImportWZ` (shared) ✅ 2026-03-19
-- [x] **S3-004** — Integracja importu w SprzedawcaPage ✅ 2026-03-19
-- [x] **S3-005** — Integracja importu w DyspozytoPage ✅ 2026-03-19
-- [x] **S3-006** — Domówienie kierowcy (KierowcaPage) ✅ 2026-03-19
-
-### BLOK B: Import Excel — plan kursów (dyspozytor)
-
-- [x] **S3B-001** — Modal importu planu Excela (DyspozytoPage) ✅ 2026-03-19
-- [x] **S3B-002** — Lista A-I w formularzu zlecenia (SprzedawcaPage) ✅ 2026-03-19
-- [x] **S3B-003** — Import WZ z Excela (SprzedawcaPage) ✅ 2026-03-19
-
-### BLOK C: Rezerwacje i deadline WZ
-
-- [x] **S3C-001** — Migracja deadline_wz ✅
-- [x] **S3C-002** — Edge Function `check-deadline-wz` ✅ 2026-03-19
-- [x] **S3C-003** — Tabela powiadomienia + UI bell w Topbarze ✅ 2026-03-19
-- [x] **S3C-004** — UI deadline w SprzedawcaPage ✅ 2026-03-19
-- [x] **S3C-005** — UI flag u dyspozytora (DyspozytoPage) ✅ 2026-03-19
-
-### BLOK D: Weryfikacja zajętości przy składaniu zlecenia
-
-- [x] **S3D-001** — Sprawdzanie dostępności w formularzu (SprzedawcaPage) ✅ 2026-03-19
+Wszystkie zadania Sprintów 0–3 (Bloki A–D) zostały ukończone ✅
+Szczegóły w `docs/HISTORY_TASKS.md`
 
 ---
 
@@ -63,6 +35,7 @@ Wszystkie zadania Sprintu 3 (Bloki A–D) zostały ukończone ✅
 - [x] **FIX-006** — Parser PDF: kontakty — obsługa osoby kontaktowej + tel w różnych formatach ✅ 2026-03-20
 - [x] **FIX-007** — Parser PDF: nabywca KROK 4 — rozdzielenie PZ vs WZ (szuka po adresie SEWERA) ✅ 2026-03-20
 - [x] **FIX-008** — Parser PDF: lines is not defined — dodano brakującą deklarację ✅ 2026-03-20
+- [x] **FIX-009** — PasteTab: disabled przycisk na text.trim() → text.length===0 (PUA chars) ✅ 2026-03-25
 
 ---
 

@@ -14,141 +14,7 @@ System zarządzania transportem i logistyką dla firmy Sewera. Aplikacja webowa 
 | `sprzedawca` | `/sprzedawca` | Tworzenie zleceń, import WZ, Moje zlecenia |
 | `kierowca` | `/kierowca` | Widok dzisiejszej trasy, potwierdzanie rozładunków |
 
-Role przechowywane w tabeli `user_roles` (enum `app_role`). Użytkownik może mieć wiele ról. Autoryzacja przez `has_role()` SECURITY DEFINER + RLS.
-
----
-
-## Architektura stron
-
-### Dyspozytor (`/dyspozytor`)
-Sidebar: Kursy | Historia zleceń | Flota
-
-**Kursy** — główny widok operacyjny:
-- Wybór oddziału i dnia
-- Lista kursów dnia (karty z nagłówkiem 3-liniowym):
-  - L1: `[nr_rej badge] · typ pojazdu · status`
-  - L2: `Kierowca: imię · 📞 tel` (klikalny)
-  - L3: `Rozładunki: x/y · ⚖️ kg · 📦 pal`
-- Modal tworzenia kursu (wybór pojazdu, kierowcy, przypisanie zleceń)
-- Akcje kursu: Wyjedź, Zakończ
-- Przystanki: zmiana kolejności, potwierdzenie rozładunku
-
-**Historia zleceń** (`ZleceniaTab`):
-- Tabela zleceń oddziału z filtrami statusów
-- Modal edycji zlecenia (`EdytujZlecenieModal`)
-
-**Flota** (`FlotaSection`) — 4 zakładki:
-- 🚛 **Pojazdy własne** — tabela z tabeli `flota`, CRUD (dodaj/edytuj/usuń)
-- 🚚 **Zewnętrzni** — tabela z `flota_zewnetrzna`, pełny CRUD
-  - Kolumny: Nr rej, Typ, Ładowność, Max palet, m³, Firma, Kierowca, Telefon, Oddział
-  - Modal dodaj/edytuj z walidacją
-- 👤 **Kierowcy** — tabela z `kierowcy`, CRUD
-- 📅 **Kalendarz** — 10 dni roboczych, 3 sekcje:
-  - Pojazdy × dni (blokady typ `pojazd`)
-  - Kierowcy × dni (blokady typ `kierowca`)
-  - Transport zewnętrzny × dni (blokady typ `zewnetrzny`)
-  - Kliknięcie komórki toggle'uje blokadę w `dostepnosc_blokady`
-  - Komórki z kursem pokazują status badge
-
-### Sprzedawca (`/sprzedawca`)
-Sidebar: Nowe zlecenie | Moje zlecenia
-
-**Nowe zlecenie** — kreator 3-krokowy:
-1. Typ pojazdu + oddział
-2. Czas dostawy (dzień + godzina)
-3. Lista WZ (ręczne + import PDF/XLS)
-
-**Moje zlecenia** — tabela zleceń z filtrem statusów
-
-### Kierowca (`/kierowca`)
-- Widok dzisiejszej trasy (kursy przypisane do zalogowanego kierowcy)
-- Potwierdzanie rozładunków per przystanek
-- Import WZ przez kierowcę
-
-### Zarząd (`/zarzad`)
-Sidebar: KPI | Koszty | Raporty
-- KPI — statystyki operacyjne
-- Koszty — analiza kosztów (placeholder)
-- Raporty — raporty (placeholder)
-
-### Admin (`/admin`)
-- Placeholder — zarządzanie kontami
-
----
-
-## Schemat bazy danych
-
-### Tabele
-
-| Tabela | Opis |
-|--------|------|
-| `profiles` | Profil użytkownika (id = auth.uid, full_name, branch) |
-| `user_roles` | Role użytkowników (user_id, role enum) |
-| `oddzialy` | Oddziały firmy (id serial, nazwa) |
-| `flota` | Pojazdy własne (nr_rej, typ, ładowność, max_palet, objętość, oddział) |
-| `flota_zewnetrzna` | Zewnętrzni przewoźnicy (+ firma, kierowca, tel) |
-| `kierowcy` | Kierowcy (imie_nazwisko, tel, uprawnienia, user_id, oddział) |
-| `zlecenia` | Zlecenia transportowe (numer, dzień, status, typ_pojazdu, kurs_id, oddział) |
-| `zlecenia_wz` | Dokumenty WZ per zlecenie (odbiorca, adres, masa, objętość, palety) |
-| `kursy` | Kursy/trasy dzienne (dzień, pojazd, kierowca, status, godziny) |
-| `kurs_przystanki` | Przystanki kursu (kolejność, zlecenie_id, status) |
-| `dostepnosc_blokady` | Blokady kalendarza (zasob_id, dzien, typ: pojazd/kierowca/zewnetrzny) |
-
-### Typy pojazdów (enum w UI)
-`Dostawczy 1,2t` | `Winda 1,8t` | `Winda 6,3t` | `Winda MAX 15,8t` | `HDS 8,9t` | `HDS 9,1t` | `HDS 11,7t`
-
-### Statusy zleceń
-`nowe` → `przypisane` → `w_trasie` → `dostarczone`
-
-### Statusy kursów
-`zaplanowany` → `aktywny` → `zakończony`
-
----
-
-## Kluczowe hooki
-
-| Hook | Tabela | Opis |
-|------|--------|------|
-| `useAuth` | profiles, user_roles | Logowanie, sesja, role |
-| `useOddzialy` | oddzialy | Lista oddziałów |
-| `useFlotaOddzialu` | flota | Pojazdy własne oddziału |
-| `useFlotaZewnetrzna` | flota_zewnetrzna | Zewnętrzni przewoźnicy |
-| `useKierowcyOddzialu` | kierowcy | Kierowcy oddziału |
-| `useKierowcyStatusDnia` | kierowcy + kursy | Status kierowców danego dnia |
-| `useKursyDnia` | kursy + przystanki + flota + kierowcy | Kursy dnia z pełnymi danymi |
-| `useKursActions` | kursy, kurs_przystanki | Akcje: wyjedź, zakończ, potwierdź rozładunek |
-| `useCreateKurs` | kursy, kurs_przystanki, zlecenia | Tworzenie nowego kursu |
-| `useCreateZlecenie` | zlecenia, zlecenia_wz | Tworzenie zlecenia z WZ |
-| `useZleceniaBezKursu` | zlecenia | Zlecenia nieprzypisane do kursu |
-| `useZleceniaOddzialu` | zlecenia | Zlecenia oddziału (historia) |
-| `useMojeZlecenia` | zlecenia | Zlecenia sprzedawcy |
-| `useMojeKursyDzis` | kursy | Kursy kierowcy na dziś |
-| `useKalendarzFloty` | kursy | Kursy w kalendarzu floty |
-| `useBlokady` | dostepnosc_blokady | Blokady kalendarza |
-| `useZarzadKPI` | zlecenia, kursy | KPI zarządu |
-
----
-
-## Edge Functions
-
-| Funkcja | Opis |
-|---------|------|
-| `parse-wz-pdf` | Parsowanie PDF z danymi WZ |
-| `parse-wz-xls` | Parsowanie XLS z danymi WZ |
-| `seed-users` | Seedowanie użytkowników testowych |
-
----
-
-## Polityki RLS (podsumowanie)
-
-- **profiles**: użytkownik widzi/edytuje swoje, admin widzi/edytuje wszystkie
-- **user_roles**: użytkownik widzi swoje, admin CRUD
-- **flota / flota_zewnetrzna / kierowcy**: SELECT dla authenticated, INSERT/UPDATE/DELETE dla dyspozytor+admin
-- **zlecenia**: INSERT sprzedawca+kierowca, SELECT+UPDATE dyspozytor, SELECT zarząd+sprzedawca
-- **zlecenia_wz**: INSERT sprzedawca+kierowca, SELECT dyspozytor+sprzedawca+zarząd, UPDATE dyspozytor
-- **kursy / kurs_przystanki**: INSERT+SELECT+UPDATE dyspozytor, SELECT+UPDATE kierowca (own), SELECT zarząd
-- **dostepnosc_blokady**: INSERT+DELETE dyspozytor+admin, SELECT authenticated
-- **oddzialy**: SELECT dla authenticated
+Role przechowywane w tabeli `user_roles` (enum `app_role`). Autoryzacja przez `has_role()` SECURITY DEFINER + RLS.
 
 ---
 
@@ -163,44 +29,86 @@ Sidebar: KPI | Koszty | Raporty
 
 ---
 
+## Schemat bazy danych
+
+Szczegóły w `docs/HISTORY_TASKS.md` (sekcja Migracje).
+
+| Tabela | Opis |
+|--------|------|
+| `profiles` | Profil użytkownika (id = auth.uid, full_name, branch) |
+| `user_roles` | Role użytkowników (user_id, role enum) |
+| `oddzialy` | Oddziały firmy (9 oddziałów) |
+| `flota` | Pojazdy własne (28 pojazdów) |
+| `flota_zewnetrzna` | Zewnętrzni przewoźnicy |
+| `kierowcy` | Kierowcy (21 kierowców) |
+| `zlecenia` | Zlecenia transportowe |
+| `zlecenia_wz` | Dokumenty WZ per zlecenie |
+| `kursy` | Kursy/trasy dzienne |
+| `kurs_przystanki` | Rozładunki kursu |
+| `dostepnosc_blokady` | Blokady kalendarza |
+| `powiadomienia` | Powiadomienia użytkowników |
+
+---
+
+## Edge Functions
+
+| Funkcja | Opis |
+|---------|------|
+| `parse-wz-pdf` | Parsowanie PDF/tekstu z danymi WZ |
+| `parse-wz-xls` | Parsowanie XLS z danymi WZ |
+| `parse-excel-plan` | Parser planu kursów z Excela |
+| `check-deadline-wz` | Cron — sprawdzanie deadline WZ |
+| `seed-users` | Seedowanie użytkowników testowych |
+
+---
+
 ## Struktura plików
 
 ```
 src/
 ├── pages/
 │   ├── LoginPage.tsx
+│   ├── Index.tsx, NotFound.tsx, UnauthorizedPage.tsx
 │   ├── admin/Uzytkownicy.tsx
-│   ├── dyspozytor/Dashboard.tsx      # Główny panel dyspozytora
+│   ├── dyspozytor/Dashboard.tsx
 │   ├── kierowca/MojaTrasa.tsx
 │   ├── sprzedawca/Dashboard.tsx
 │   └── zarzad/Dashboard.tsx
 ├── components/
 │   ├── dyspozytor/
-│   │   ├── FlotaSection.tsx           # Flota: 4 zakładki + kalendarz
-│   │   ├── ZleceniaTab.tsx            # Historia zleceń
-│   │   └── EdytujZlecenieModal.tsx
+│   │   ├── EdytujKursModal.tsx, EdytujZlecenieModal.tsx
+│   │   ├── FlotaSection.tsx, ImportExcelModal.tsx
+│   │   ├── PrzepnijModal.tsx, ZleceniaTab.tsx
 │   ├── sprzedawca/
-│   │   ├── TypPojazduStep.tsx
-│   │   ├── CzasDostawyStep.tsx
-│   │   ├── WzFormTabs.tsx
-│   │   └── MojeZleceniaTab.tsx
+│   │   ├── CzasDostawyStep.tsx, DostepnoscStep.tsx
+│   │   ├── MojeZleceniaTab.tsx, TypPojazduStep.tsx, WzFormTabs.tsx
 │   ├── zarzad/
-│   │   ├── KpiTab.tsx
-│   │   ├── KosztyTab.tsx
-│   │   └── RaportyTab.tsx
-│   └── shared/
-│       ├── AppLayout.tsx / AppSidebar.tsx
-│       ├── Topbar.tsx / PageSidebar.tsx
-│       ├── ProtectedRoute.tsx / RootRedirect.tsx
-│       ├── ModalImportWZ.tsx
-│       ├── StatusBadge.tsx / ConfirmDialog.tsx
-│       └── LoadingScreen.tsx
-├── hooks/                             # Wszystkie hooki opisane wyżej
+│   │   ├── KosztyTab.tsx, KpiTab.tsx, RaportyTab.tsx
+│   ├── shared/
+│   │   ├── AppLayout.tsx, AppSidebar.tsx, Topbar.tsx, PageSidebar.tsx
+│   │   ├── ProtectedRoute.tsx, RootRedirect.tsx
+│   │   ├── ModalImportWZ.tsx, NotificationBell.tsx
+│   │   ├── StatusBadge.tsx, ConfirmDialog.tsx, LoadingScreen.tsx
+│   └── NavLink.tsx
+├── hooks/ (21 hooków — useAuth, useKursyDnia, useCreateZlecenie, etc.)
 ├── providers/AuthProvider.tsx
-├── types/
-│   ├── auth.ts                        # AppRole, UserProfile, ROLE_ROUTES
-│   └── index.ts                       # Re-export
-└── integrations/supabase/
-    ├── client.ts                      # Auto-generated
-    └── types.ts                       # Auto-generated
+├── types/ (auth.ts, index.ts)
+├── integrations/supabase/ (client.ts, types.ts — auto-generated)
+└── lib/ (supabase.ts, utils.ts)
+
+supabase/functions/
+├── check-deadline-wz/, parse-excel-plan/
+├── parse-wz-pdf/, parse-wz-xls/, seed-users/
+
+docs/
+├── TASKS.md, BUGS.md, HISTORY_TASKS.md, SPRINT_3B_import_excel.md
 ```
+
+---
+
+## Dokumentacja
+
+- `docs/TASKS.md` — Aktualne zadania i plan
+- `docs/BUGS.md` — Znane błędy i status
+- `docs/HISTORY_TASKS.md` — Historia ukończonych sprintów
+- `docs/SPRINT_3B_import_excel.md` — Specyfikacja importu Excel
