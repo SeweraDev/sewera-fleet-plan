@@ -213,12 +213,31 @@ function parseSeweraDoc(rawText: string) {
   let masaKg = 0;
 
   if (!isPZ) {
-    // WZ/WZS: masa PO "Waga netto razem:" — pierwsza liczba z przecinkiem
-    const wagaMatch = text.match(/Waga\s+netto\s+razem:\s*([\d][\d ,]*[,.]\d+)/i);
-    if (wagaMatch) {
-      masaKg = Math.ceil(parseFloat(
-        wagaMatch[1].replace(/\s/g, "").replace(",", ".")
-      ) || 0);
+    // WZ/WZS: masa PO "Waga netto razem:"
+    const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
+    if (wagaIdx > -1) {
+      const wagaLine = text.substring(wagaIdx, wagaIdx + 200);
+      // Wariant A: liczba w tej samej linii "Waga netto razem: 9 733,10"
+      const inlineMatch = wagaLine.match(/Waga\s+netto\s+razem:\s*([\d][\d ,]*[,.]\d+)/i);
+      if (inlineMatch) {
+        masaKg = Math.ceil(parseFloat(
+          inlineMatch[1].replace(/\s/g, "").replace(",", ".")
+        ) || 0);
+      } else {
+        // Wariant B: liczba w kolejnych liniach — bierz największą liczbę z przecinkiem
+        const fragment = wagaLine.split("\n").map((l: string) => l.trim()).filter(Boolean);
+        const kandydaci: number[] = [];
+        for (const fl of fragment) {
+          if (/^RAZEM:/i.test(fl)) break;
+          if (fl.includes(",") || fl.includes(".")) {
+            const n = parseFloat(fl.replace(/\s/g, "").replace(",", "."));
+            if (!isNaN(n) && n > 0) kandydaci.push(n);
+          }
+        }
+        if (kandydaci.length > 0) {
+          masaKg = Math.ceil(Math.max(...kandydaci));
+        }
+      }
     }
   } else {
     // PZ: masa PRZED "Razem:" — ostatnia liczba z przecinkiem
