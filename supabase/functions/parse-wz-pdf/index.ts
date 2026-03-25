@@ -368,7 +368,7 @@ serve(async (req) => {
       }
     } else {
       const body = await req.json();
-      text = body.text || "";
+      text = decodePUA(body.text || "");
     }
 
     console.log("RAW_TEXT_START");
