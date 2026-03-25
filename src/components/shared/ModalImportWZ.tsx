@@ -596,7 +596,8 @@ function parseWZText(rawText: string): WZImportData {
 
   return {
     numer_wz, nr_zamowienia, odbiorca, adres, tel,
-    masa_kg, ilosc_palet, objetosc_m3, uwagi,
+    osoba_kontaktowa: null, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+    typ_dokumentu: 'WZ' as string | null, ma_adres_dostawy: false,
   };
 }
 
