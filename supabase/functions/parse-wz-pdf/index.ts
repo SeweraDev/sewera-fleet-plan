@@ -216,7 +216,7 @@ function parseSeweraDoc(rawText: string) {
     // WZ/WZS: masa PO "Waga netto razem:" — pierwsza liczba z przecinkiem
     const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
     if (wagaIdx > -1) {
-      const afterWaga = text.substring(wagaIdx + 20, wagaIdx + 200);
+      const afterWaga = text.substring(wagaIdx + 18, wagaIdx + 200);
       const m = afterWaga.match(/([\d ]+[,.][\d]{2,})/);
       if (m) {
         masaKg = Math.ceil(parseFloat(m[1].replace(/\s/g, "").replace(",", ".")) || 0);
