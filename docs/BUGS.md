@@ -1,5 +1,5 @@
 # BUGS.md — Znane błędy i status
-📅 Ostatnia aktualizacja: 2026-03-20
+📅 Ostatnia aktualizacja: 2026-03-25
 
 ---
 
@@ -48,6 +48,10 @@ Masa: 25 kg (błąd) zamiast 375 kg
 
 ## ✅ NAPRAWIONE
 
+### BUG-F19 — PasteTab: przycisk "Parsuj tekst" disabled mimo wklejonego tekstu
+**Naprawiony:** 2026-03-25
+**Fix:** Zmieniono warunek `!text.trim()` na `text.length === 0` — znaki PUA z PDF były traktowane jako whitespace
+
 ### BUG-F15 — Parser PDF: masa_kg brała przedostatni numer zamiast ostatniego
 **Naprawiony:** 2026-03-20
 **Fix:** Zmieniono `numery[numery.length - 2]` na `numery[numery.length - 1]`
@@ -80,42 +84,14 @@ Masa: 25 kg (błąd) zamiast 375 kg
 **Naprawiony:** 2026-03-19
 **Fix:** Dodano fallback regex `wag[aę] netto razem: X` bez wymaganego suffixu "kg"
 
-### BUG-F08 — Brak powiadomień bell w Topbarze (BUG-004)
+### BUG-F08 — Brak powiadomień bell w Topbarze
 **Naprawiony:** Sprint 3C — 2026-03-19
-**Fix:** NotificationBell + usePowiadomienia + Realtime
 
-### BUG-F09 — Brak informacji o deadline WZ (BUG-005)
+### BUG-F09 — Brak informacji o deadline WZ
 **Naprawiony:** Sprint 3C — 2026-03-19
-**Fix:** DeadlineBadge w MojeZleceniaTab (🟢/🟡/🔴)
 
-### BUG-F10 — Cron check-deadline-wz nie istnieje (BUG-007)
+### BUG-F10 — Cron check-deadline-wz nie istnieje
 **Naprawiony:** Sprint 3C — 2026-03-19
-**Fix:** Edge Function check-deadline-wz + pg_cron co godzinę
 
-### BUG-F01 — Auth hardcoded zamiast Supabase
-**Naprawiony:** Sprint 1.5
-**Fix:** Przepisano useAuth + LoginPage
-
-### BUG-F02 — Tabele puste po uruchomieniu SQL
-**Naprawiony:** Po Sprint 2
-**Fix:** Seed wgrany przez Lovable chat
-
-### BUG-F03 — UNHANDLED_PROMISE_REJECTION w DyspozytoPage
-**Naprawiony:** Sprint 2B
-**Fix:** async przeniesione do useEffect
-
-### BUG-F04 — Dyspozytor nie widział swojego oddziału
-**Naprawiony:** Sprint 2B
-**Fix:** Auto-set oddziału z user_roles przy mount
-
-### BUG-F05 — Kalendarz pokazywał weekendy
-**Naprawiony:** Sprint 2B
-**Fix:** Filtr DOW (1-5) w funkcji generowania dni
-
-### BUG-F06 — Palety hardcoded 33 zamiast z bazy
-**Naprawiony:** Sprint 2B
-**Fix:** max_palet pobierany z tabeli flota
-
-### BUG-F07 — flota.objetosc_m3 NOT NULL blokowało INSERT
-**Naprawiony:** Migracja
-**Fix:** ALTER COLUMN objetosc_m3 DROP NOT NULL
+### BUG-F01–F07 — Starsze naprawione błędy
+Szczegóły w `docs/HISTORY_TASKS.md`
