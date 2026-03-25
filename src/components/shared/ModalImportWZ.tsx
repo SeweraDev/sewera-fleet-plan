@@ -39,6 +39,7 @@ interface ParsedPdfResult {
   nr_wz: string | null;
   nr_zamowienia: string | null;
   odbiorca_nazwa: string | null;
+  odbiorca: string | null;
   odbiorca_adres_siedziby: string | null;
   adres_dostawy: string | null;
   nazwa_budowy: string | null;
