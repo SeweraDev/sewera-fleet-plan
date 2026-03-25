@@ -41,57 +41,37 @@ function parseSeweraDoc(rawText: string) {
   const nrZam = (mSys?.[1] || mNag?.[1] || (isPZ ? nrDokumentu : "")).trim();
 
   // KROK 4: Nabywca / Odbiorca
-  // Strategia: firma nabywcy pojawia się DWUKROTNIE w dokumencie.
-  // Pierwsze wystąpienie: zaraz po "nr: XXXX" (PZ) lub po adresie oddziału SEWERA (WZ)
-  // Drugie wystąpienie: w tabeli nabywca/odbiorca — też można użyć
-  // Używamy pierwszego wystąpienia bo jest czystsze (bez sklejeń etykiet)
   let nabywca = "";
   let adresNabywcy = "";
-
   const lines = text
     .split("\n")
     .map((l: string) => l.trim())
     .filter(Boolean);
 
   if (isPZ) {
-    // PZ: firma jest na górze dokumentu, zaraz po "nr: XXXX"
-    // Struktura: "Gliwice, 19.03.2026" → "Potwierdzenie zamówienia" → "nr: R7/GL/..."
-    //            → "PRZEDSIĘBIORSTWO MAXIMUS..." → "KOMANDYTOWA" → "ul. Elizy..."
-    //            → "41-103 SIEMIANOWICE" → "Nr ewid.: 30000757" → "NabywcaSprzedawca"
-    const nrIdx = lines.findIndex((l: string) => /^nr:\s+[A-Z0-9]/i.test(l));
+    const nrIdx = lines.findIndex((l: string) => /^nr:\s*[A-Z0-9]/i.test(l));
     if (nrIdx > -1) {
       const nazwaLines: string[] = [];
       const adresLines: string[] = [];
       let doAdresu = false;
       for (let i = nrIdx + 1; i < Math.min(nrIdx + 10, lines.length); i++) {
         const l = lines[i];
-        // Stop na etykietach tabeli
         if (/^NabywcaSprzedawca|^Sprzedawca\s+Nabywca/.test(l)) break;
-        // Pomiń "Nr ewid." — to nie jest koniec nazwy, to dane rejestrowe
-        if (/^Nr ewid\./.test(l)) continue;
-        // Pomiń NIP
-        if (/^NIP:/.test(l)) continue;
-        // Wykryj przejście do adresu
-        if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) {
-          doAdresu = true;
-        }
+        if (/^Nr ewid\.|^NIP:/.test(l)) continue;
+        if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) doAdresu = true;
         if (doAdresu) {
           if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
         } else {
           nazwaLines.push(l);
         }
       }
-      // Komentarz
       nabywca = nazwaLines.join(" ").replace(/\s+/g, " ").trim();
       adresNabywcy = adresLines.join(", ").trim();
     }
   } else {
-    // WZ/WZS: firma jest po adresie oddziału SEWERA
-    // Adres oddziału zawsze zawiera: ul. KOŚCIUSZKI / ul. DOJAZDOWA / ul. WYZWOLENIA itp.
-    // Szukamy linii z adresem oddziału SEWERA (CAPS, zaczyna się od "ul.")
     const sewIdx = lines.findIndex(
       (l: string) =>
-        /^ul\.\s+[A-ZŁŚŹŻĆĄĘ]/.test(l) &&
+        /^ul\.\s+[A-Z]/.test(l) &&
         (l.includes("KATOWICE") ||
           l.includes("GLIWICE") ||
           l.includes("OŚWIĘCIM") ||
@@ -109,10 +89,9 @@ function parseSeweraDoc(rawText: string) {
       let doAdresu = false;
       for (let i = sewIdx + 1; i < Math.min(sewIdx + 10, lines.length); i++) {
         const l = lines[i];
-        if (/^(Magazyn wydający|Adres dostawy|NIP:|Nr ewid\.|Budowa)/.test(l)) break;
-        if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) {
-          doAdresu = true;
-        }
+        if (/^(Magazyn wydający|NIP:|Nr ewid\.)/.test(l)) break;
+        if (/NIP:.*Nr ewid\./i.test(l)) break;
+        if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) doAdresu = true;
         if (doAdresu) {
           if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
         } else {
@@ -125,15 +104,21 @@ function parseSeweraDoc(rawText: string) {
   }
 
   // KROK 5: Adres dostawy + kontakt
+  // Trzy warianty:
+  // A) "Adres dostawy" na osobnej linii, adres POD nią (PZ z sekcją)
+  // B) "Adres dostawy" sklejone z "Magazyn wydający:", adres PRZED "Magazyn wydający:"
+  // C) "Adres dostawy" na osobnej linii ale adres jest PRZED "Magazyn wydający:" (WZ KK/112)
+  //    → fallback z A do B gdy adres po etykiecie jest pusty
   let adresDostawy = "";
-  let tel = "";
   let osobaKontaktowa = "";
   const maAdresDostawy = /Adres\s+dostawy/i.test(text);
+  const adresSamodzielny = /\nAdres dostawy\s*\n/i.test(text);
 
-  if (maAdresDostawy) {
-    const adIdx = text.search(/Adres\s+dostawy/i);
-    const afterAd = text.substring(adIdx + 14, adIdx + 500);
-    const stopAd = afterAd.search(/\nLp\.|\nTermin zapłaty|Magazyn wydający/i);
+  if (adresSamodzielny) {
+    // Wariant A: szukaj adresu po etykiecie "Adres dostawy"
+    const adIdx = text.search(/\nAdres dostawy\s*\n/i);
+    const afterAd = text.substring(adIdx + 15, adIdx + 500);
+    const stopAd = afterAd.search(/\nLp\.|\nTermin zapłaty|\nMagazyn wydający/i);
     const adBlok = (stopAd > -1 ? afterAd.substring(0, stopAd) : afterAd)
       .split("\n")
       .map((l: string) => l.trim())
@@ -144,7 +129,6 @@ function parseSeweraDoc(rawText: string) {
     const kontakty: string[] = [];
 
     for (const l of adBlok) {
-      // "Os. kontaktowa: Andrzej Nandzik" lub "Os. kontaktowa: Marcin Michałek tel. 531-195-028"
       if (/Os\.?\s*kontaktowa/i.test(l)) {
         const osM = l.match(/Os\.?\s*kontaktowa:\s*(.+?)(?:\s+tel\.?\s*[\d].*)?$/i);
         const telM = l.match(/tel\.?\s*([0-9][0-9\s\-]{7,})/i);
@@ -153,14 +137,12 @@ function parseSeweraDoc(rawText: string) {
         kontakty.push([imie, telefon].filter(Boolean).join(" "));
         continue;
       }
-      // "Tel.: 602 303 264" w osobnej linii
       if (/^Tel\.?[:\s]/i.test(l)) {
         const telM = l.match(/Tel\.?[:\s]+([0-9][0-9\s]{8,})/i);
         if (telM) kontakty.push(telM[1].trim());
         continue;
       }
-      // "Marcin Kot tel. 694 447 293" — imię nazwisko + tel w jednej linii
-      if (/[A-ZŁŚŹŻĆĄĘ][a-złśźżćąę]+ [A-ZŁŚŹŻĆĄĘ][a-złśźżćąę]+\s+tel\.?\s+[0-9]/i.test(l)) {
+      if (/[A-Z][a-z]+ [A-Z][a-z]+\s+tel\.?\s+[0-9]/i.test(l)) {
         const m = l.match(/(.+?)\s+tel\.?\s+([0-9][0-9\s\-]{7,})/i);
         if (m) kontakty.push(`${m[1].trim()} ${m[2].replace(/\-/g, " ").trim()}`);
         continue;
@@ -176,25 +158,62 @@ function parseSeweraDoc(rawText: string) {
     }
 
     osobaKontaktowa = kontakty.join(", ");
-    tel = "";
-
-    const ulica = ulicaLines[0] || "";
-    const kodMiasto = kodLines[0] || "";
-    adresDostawy = [ulica, kodMiasto].filter(Boolean).join(", ");
-
+    adresDostawy = [ulicaLines[0] || "", kodLines[0] || ""].filter(Boolean).join(", ");
     if (!adresDostawy) {
       const budowa = adBlok.find((l: string) => l.startsWith("Budowa"));
       adresDostawy = budowa || "";
     }
-  } else {
-    adresDostawy = adresNabywcy;
   }
+
+  // Wariant B/C: gdy brak adresu po etykiecie — szukaj PRZED "Magazyn wydający:"
+  if (!adresDostawy && maAdresDostawy) {
+    const magazynIdx = text.search(/\nMagazyn wydający:/i);
+    if (magazynIdx > -1) {
+      const beforeLines = text
+        .substring(0, magazynIdx)
+        .split("\n")
+        .map((l: string) => l.trim())
+        .filter(Boolean);
+      const kontakty: string[] = [];
+      const ulicaLines: string[] = [];
+      const kodLines: string[] = [];
+
+      for (let i = beforeLines.length - 1; i >= 0; i--) {
+        const l = beforeLines[i];
+        if (/^NIP:/.test(l) || /NIP:.*Nr ewid\./i.test(l)) break;
+        if (/^(SEWERA|NR BDO:|ODDZIAŁ|NabywcaSprzedawca|Sprzedawca|Odbiorca)/.test(l)) break;
+        if (/Os\.?\s*kontaktowa/i.test(l)) {
+          const osM = l.match(/Os\.?\s*kontaktowa:\s*(.+?)(?:\s+tel\.?\s*[\d].*)?$/i);
+          if (osM) kontakty.unshift(osM[1].trim());
+          continue;
+        }
+        if (/^Tel\.?[:\s]/i.test(l)) {
+          const telM = l.match(/Tel\.?[:\s]+([0-9][0-9\s]{8,})/i);
+          if (telM) kontakty.unshift(telM[1].trim());
+          continue;
+        }
+        if (l.match(/^\d{2}-\d{3}/)) {
+          kodLines.unshift(l);
+          continue;
+        }
+        if (l.match(/^(ul\.|al\.)/i)) {
+          ulicaLines.unshift(l);
+          continue;
+        }
+      }
+
+      if (!osobaKontaktowa) osobaKontaktowa = kontakty.join(", ");
+      adresDostawy = [ulicaLines[0] || "", kodLines[0] || ""].filter(Boolean).join(", ");
+    }
+  }
+
+  if (!adresDostawy) adresDostawy = adresNabywcy;
 
   // KROK 6: MASA
   let masaKg = 0;
 
   if (!isPZ) {
-    // WZ/WZS: masa jest PO "Waga netto razem:"
+    // WZ/WZS: masa PO "Waga netto razem:" — pierwsza liczba z przecinkiem
     const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
     if (wagaIdx > -1) {
       const afterWaga = text.substring(wagaIdx + 20, wagaIdx + 200);
@@ -204,11 +223,7 @@ function parseSeweraDoc(rawText: string) {
       }
     }
   } else {
-    // PZ: masa jest PRZED "Razem:" — w surowym tekście "1 699,15Razem:" (sklejone!)
-    // Struktura: "\n61,00\n1344,80\n1 699,15Razem:"
-    // Liczby z przecinkiem przed Razem: [61,00] [1344,80] [1699,15*]
-    // *1699,15 jest sklejone z "Razem:" więc NIE trafia do tablicy "before"
-    // Zostają [61,00] [1344,80] → bierzemy OSTATNIĄ = 1344,80 ✓
+    // PZ: masa PRZED "Razem:" — ostatnia liczba z przecinkiem
     const razIdx = text.search(/[\d ,]+Razem:|Razem:\s*[\d ,]+/i);
     if (razIdx > -1) {
       const before = text.substring(Math.max(0, razIdx - 200), razIdx);
@@ -247,8 +262,8 @@ function parseSeweraDoc(rawText: string) {
     odbiorca: nabywca,
     adres_dostawy: adresDostawy,
     ma_adres_dostawy: maAdresDostawy,
-    tel,
     osoba_kontaktowa: osobaKontaktowa,
+    tel: osobaKontaktowa,
     masa_kg: masaKg,
     ilosc_palet: 0,
     objetosc_m3: 0,
@@ -274,18 +289,15 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
       if (!file.name.toLowerCase().endsWith(".pdf")) {
         return new Response(JSON.stringify({ error: "Nieobsługiwany format pliku. Wymagany PDF." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
       const buffer = await file.arrayBuffer();
       const parsed = await pdf(new Uint8Array(buffer));
       text = parsed.text || "";
-
       if (!text || text.trim().length < 10) {
         return new Response(
           JSON.stringify({ error: "Nie można odczytać PDF — plik może być zeskanowanym obrazem", pewnosc: 0 }),
