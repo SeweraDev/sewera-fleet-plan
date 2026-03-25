@@ -179,6 +179,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
     setResult(json);
 
+    console.log("EDGE FUNCTION RESPONSE:", JSON.stringify(json));
     const mapped: WZImportData = {
       numer_wz: json.nr_wz || '',
       nr_zamowienia: json.nr_zamowienia || '',
