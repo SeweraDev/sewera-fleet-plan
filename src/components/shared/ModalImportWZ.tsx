@@ -183,7 +183,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       nr_zamowienia: json.nr_zamowienia || '',
       odbiorca: json.odbiorca || '',
       adres: json.adres_dostawy || '',
-      tel: json.tel || '',
+      tel: json.osoba_kontaktowa || json.tel || '',
       osoba_kontaktowa: json.osoba_kontaktowa || '',
       masa_kg: json.masa_kg || 0,
       ilosc_palet: json.ilosc_palet || 0,
