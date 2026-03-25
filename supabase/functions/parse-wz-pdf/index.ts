@@ -216,10 +216,12 @@ function parseSeweraDoc(rawText: string) {
     // WZ/WZS: masa PO "Waga netto razem:" — pierwsza liczba z przecinkiem
     const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
     if (wagaIdx > -1) {
-      const afterWaga = text.substring(wagaIdx + 18, wagaIdx + 200);
-      const m = afterWaga.match(/([\d ]+[,.][\d]{2,})/);
-      if (m) {
-        masaKg = Math.ceil(parseFloat(m[1].replace(/\s/g, "").replace(",", ".")) || 0);
+      const afterWaga = text.substring(wagaIdx, wagaIdx + 300);
+      const allNumbers = [...afterWaga.matchAll(/([\d][\d ]*[,.][\d]{2,})/g)]
+        .map(m => m[1].replace(/\s/g, "").replace(",", "."))
+        .filter(n => parseFloat(n) > 10);
+      if (allNumbers.length > 0) {
+        masaKg = Math.ceil(parseFloat(allNumbers[allNumbers.length - 1]) || 0);
       }
     }
   } else {
