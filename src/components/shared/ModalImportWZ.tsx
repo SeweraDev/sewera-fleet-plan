@@ -39,6 +39,7 @@ interface ParsedPdfResult {
   nr_wz: string | null;
   nr_zamowienia: string | null;
   odbiorca_nazwa: string | null;
+  odbiorca: string | null;
   odbiorca_adres_siedziby: string | null;
   adres_dostawy: string | null;
   nazwa_budowy: string | null;
@@ -181,9 +182,9 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
     const mapped: WZImportData = {
       numer_wz: json.nr_wz || '',
       nr_zamowienia: json.nr_zamowienia || '',
-      odbiorca: json.odbiorca_nazwa || '',
+      odbiorca: json.odbiorca || '',
       adres: json.adres_dostawy || '',
-      tel: json.tel || '',
+      tel: json.osoba_kontaktowa || json.tel || '',
       osoba_kontaktowa: json.osoba_kontaktowa || '',
       masa_kg: json.masa_kg || 0,
       ilosc_palet: json.ilosc_palet || 0,
