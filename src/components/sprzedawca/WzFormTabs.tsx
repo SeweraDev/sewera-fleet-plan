@@ -155,7 +155,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit }: WzFormTabsProps) {
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold text-sm text-foreground">Pozycje WZ ({wzList.length})</h3>
+      
 
       <Tabs defaultValue="reczne">
         <TabsList className="w-full">
