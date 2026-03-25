@@ -15,10 +15,13 @@ export interface WZImportData {
   odbiorca: string | null;
   adres: string | null;
   tel: string | null;
+  osoba_kontaktowa: string | null;
   masa_kg: number | null;
   ilosc_palet: number | null;
   objetosc_m3: number | null;
   uwagi: string | null;
+  typ_dokumentu: string | null;
+  ma_adres_dostawy: boolean;
 }
 
 interface Pozycja {
