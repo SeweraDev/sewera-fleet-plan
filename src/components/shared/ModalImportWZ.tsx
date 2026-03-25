@@ -15,10 +15,13 @@ export interface WZImportData {
   odbiorca: string | null;
   adres: string | null;
   tel: string | null;
+  osoba_kontaktowa: string | null;
   masa_kg: number | null;
   ilosc_palet: number | null;
   objetosc_m3: number | null;
   uwagi: string | null;
+  typ_dokumentu: string | null;
+  ma_adres_dostawy: boolean;
 }
 
 interface Pozycja {
@@ -175,24 +178,22 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
     setResult(json);
 
-    // Map to form fields per spec
-    let adres = json.adres_dostawy || '';
-    let uwagi = json.uwagi_krotkie || '';
-    if (json.nazwa_budowy && !adres.includes(json.nazwa_budowy)) {
-      uwagi = uwagi ? `${json.nazwa_budowy}; ${uwagi}` : json.nazwa_budowy;
-    }
+    const mapped: WZImportData = {
+      numer_wz: json.nr_wz || '',
+      nr_zamowienia: json.nr_zamowienia || '',
+      odbiorca: json.odbiorca_nazwa || '',
+      adres: json.adres_dostawy || '',
+      tel: json.tel || '',
+      osoba_kontaktowa: json.osoba_kontaktowa || '',
+      masa_kg: json.masa_kg || 0,
+      ilosc_palet: json.ilosc_palet || 0,
+      objetosc_m3: json.objetosc_m3 || 0,
+      uwagi: json.uwagi || '',
+      typ_dokumentu: (json as any).typ_dokumentu || 'WZ',
+      ma_adres_dostawy: (json as any).ma_adres_dostawy || false,
+    };
 
-    setFormData({
-      numer_wz: json.nr_wz,
-      nr_zamowienia: json.nr_zamowienia,
-      odbiorca: json.odbiorca_nazwa,
-      adres,
-      tel: json.tel,
-      masa_kg: json.masa_kg ?? 0,
-      ilosc_palet: json.ilosc_palet ?? 0,
-      objetosc_m3: json.objetosc_m3 ?? 0,
-      uwagi: uwagi || null,
-    });
+    setFormData(mapped);
   }, [onSwitchManual]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -340,10 +341,13 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
           odbiorca: zl.odbiorca,
           adres: zl.adres_pelny,
           tel: null,
+          osoba_kontaktowa: null,
           masa_kg: zl.masa_kg,
           ilosc_palet: null,
           objetosc_m3: null,
           uwagi: [zl.rodzaj_dostawy, zl.uwagi].filter(Boolean).join('; ') || null,
+          typ_dokumentu: 'WZ',
+          ma_adres_dostawy: false,
           typ_pojazdu: kurs.typ_pojazdu,
         });
       }
@@ -592,7 +596,8 @@ function parseWZText(rawText: string): WZImportData {
 
   return {
     numer_wz, nr_zamowienia, odbiorca, adres, tel,
-    masa_kg, ilosc_palet, objetosc_m3, uwagi,
+    osoba_kontaktowa: null, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+    typ_dokumentu: 'WZ' as string | null, ma_adres_dostawy: false,
   };
 }
 
@@ -650,7 +655,8 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 /* ─── Manual Tab ─── */
 function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [form, setForm] = useState<WZImportData>({
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, ilosc_palet: null, objetosc_m3: null, uwagi: '',
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', osoba_kontaktowa: null,
+    masa_kg: 0, ilosc_palet: null, objetosc_m3: null, uwagi: '', typ_dokumentu: 'WZ', ma_adres_dostawy: false,
   });
 
   const update = (field: keyof WZImportData, val: string | number | null) =>
