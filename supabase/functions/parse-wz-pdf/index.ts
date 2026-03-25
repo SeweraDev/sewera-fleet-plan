@@ -249,8 +249,7 @@ function parseSeweraDoc(rawText: string) {
           !l.startsWith("Nr zamówienia (systemowy):") &&
           !l.startsWith("Nr oferty:") &&
           !l.match(/^WZ\s+[A-Z]{2}\//) &&
-          !l.includes("Na podstawie art.") &&
-          !l.includes("Kupuj"),
+          !l.includes("Na podstawie art.") && !l.includes("Kupuj"),
       )
       .join("\n")
       .trim();
