@@ -324,22 +324,3 @@ serve(async (req) => {
     });
   }
 });
-W Edge Function parse-wz-pdf w funkcji parseSeweraDoc:
-
-1. W KROK 6 dla WZ/WZS, zamień:
-  const afterWaga = text.substring(wagaIdx + 20, wagaIdx + 200);
-  const m = afterWaga.match(/([\d ]+[,.][\d]+)/);
-
-Na:
-  const afterWaga = text.substring(wagaIdx + 20, wagaIdx + 200);
-  const m = afterWaga.match(/([\d ]+[,.][\d]{2,})/);
-
-2. W KROK 7, zamień linię filtra:
-  !l.match(/^Na podstawie art\./)
-
-Na:
-  !l.includes('Na podstawie art.') &&
-  !l.includes('ceny towaru') &&
-  !l.includes('Kupującego')
-
-Nie zmieniaj nic innego.
