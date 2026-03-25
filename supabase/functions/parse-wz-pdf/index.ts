@@ -147,7 +147,7 @@ function parseSeweraDoc(rawText: string) {
         if (m) kontakty.push(`${m[1].trim()} ${m[2].replace(/\-/g, " ").trim()}`);
         continue;
       }
-      if (l.match(/^(ul\.|al\.|os\.|pl\.)/i)) {
+      const m = afterWaga.match(/([\d ]+[,.][\d]+)/);
         ulicaLines.push(l);
         continue;
       }
@@ -172,7 +172,27 @@ function parseSeweraDoc(rawText: string) {
       const beforeLines = text
         .substring(0, magazynIdx)
         .split("\n")
-        .map((l: string) => l.trim())
+  !l.match(/^Na podstawie art\./),
+```
+
+Edytuj te dwie linie bezpośrednio w Supabase. Wejdź w **View code**, znajdź i zmień:
+
+**Zmiana 1** — znajdź linię:
+```
+const m = afterWaga.match(/([\d ]+[,.][\d]+)/);
+```
+Zamień na:
+```
+const m = afterWaga.match(/([\d ]+[,.][\d]{2,})/);
+```
+
+**Zmiana 2** — znajdź linię:
+```
+          !l.match(/^Na podstawie art\./),
+```
+Zamień na:
+```
+          !l.includes("Na podstawie art.") && !l.includes("Kupuj"),
         .filter(Boolean);
       const kontakty: string[] = [];
       const ulicaLines: string[] = [];
