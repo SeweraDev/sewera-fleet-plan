@@ -101,8 +101,8 @@ function parseSeweraDoc(rawText: string) {
       let doAdresu = false;
       for (let i = nrIdx + 1; i < Math.min(nrIdx + 10, lines.length); i++) {
         const l = lines[i];
-        if (/^NabywcaSprzedawca|^Sprzedawca\s+Nabywca/.test(l)) break;
-        if (/^Nr ewid\.|^NIP:/.test(l)) continue;
+        if (/^(NabywcaSprzedawca|Sprzedawca\s+Nabywca|OdbiorcaInformacje)/i.test(l)) break;
+        if (/^(Nr ewid\.|NIP:|NR BDO:)/i.test(l)) continue;
         if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) doAdresu = true;
         if (doAdresu) {
           if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
@@ -174,6 +174,9 @@ function parseSeweraDoc(rawText: string) {
     const kontakty: string[] = [];
 
     for (const l of adBlok) {
+      if (/^(Budowa|Plac|Osiedle|Hala|Magazyn|Zakład)/i.test(l)) {
+        continue;
+      }
       if (/Os\.?\s*kontaktowa/i.test(l)) {
         const osM = l.match(/Os\.?\s*kontaktowa:\s*(.+?)(?:\s+tel\.?\s*[\d].*)?$/i);
         const telM = l.match(/tel\.?\s*([0-9][0-9\s\-]{7,})/i);
@@ -203,10 +206,14 @@ function parseSeweraDoc(rawText: string) {
     }
 
     osobaKontaktowa = kontakty.join(", ");
+    const nazwaObiektu = adBlok.find((l: string) =>
+      /^(Budowa|Plac|Osiedle|Hala|Magazyn|Zakład)/i.test(l)
+    ) || "";
     adresDostawy = [ulicaLines[0] || "", kodLines[0] || ""].filter(Boolean).join(", ");
-    if (!adresDostawy) {
-      const budowa = adBlok.find((l: string) => l.startsWith("Budowa"));
-      adresDostawy = budowa || "";
+    if (nazwaObiektu && adresDostawy) {
+      adresDostawy = nazwaObiektu + ", " + adresDostawy;
+    } else if (nazwaObiektu) {
+      adresDostawy = nazwaObiektu;
     }
   }
 
