@@ -1,5 +1,5 @@
 # BUGS.md — Znane błędy i status
-📅 Ostatnia aktualizacja: 2026-03-25
+📅 Ostatnia aktualizacja: 2026-03-26
 
 ---
 
@@ -47,6 +47,14 @@ Masa: 25 kg (błąd) zamiast 375 kg
 ---
 
 ## ✅ NAPRAWIONE
+
+### BUG-F21 — decodePUA nie obsługiwała zakresu F000
+**Naprawiony:** 2026-03-26
+**Fix:** Dodano dual-offset buildMap (0xE000 + 0xF000) w decodePUA
+
+### BUG-F20 — parseSeweraDoc KROK 4/5: brak obsługi nagłówków PZ i nazwy obiektu
+**Naprawiony:** 2026-03-26
+**Fix:** KROK 4: dodano break na OdbiorcaInformacje; KROK 5: nazwaObiektu (Budowa/Hala/...) jako prefix adresu
 
 ### BUG-F19 — PasteTab: przycisk "Parsuj tekst" disabled mimo wklejonego tekstu
 **Naprawiony:** 2026-03-25
