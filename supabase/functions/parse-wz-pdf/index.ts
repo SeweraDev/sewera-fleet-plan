@@ -101,8 +101,8 @@ function parseSeweraDoc(rawText: string) {
       let doAdresu = false;
       for (let i = nrIdx + 1; i < Math.min(nrIdx + 10, lines.length); i++) {
         const l = lines[i];
-        if (/^NabywcaSprzedawca|^Sprzedawca\s+Nabywca/.test(l)) break;
-        if (/^Nr ewid\.|^NIP:/.test(l)) continue;
+        if (/^(NabywcaSprzedawca|Sprzedawca\s+Nabywca|OdbiorcaInformacje)/i.test(l)) break;
+        if (/^(Nr ewid\.|NIP:|NR BDO:)/i.test(l)) continue;
         if (!doAdresu && (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/))) doAdresu = true;
         if (doAdresu) {
           if (l.match(/^(ul\.|al\.)/) || l.match(/^\d{2}-\d{3}/)) adresLines.push(l);
