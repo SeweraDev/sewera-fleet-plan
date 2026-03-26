@@ -1,5 +1,5 @@
 # TASKS.md — Aktualne zadania
-📅 Ostatnia aktualizacja: 2026-03-25
+📅 Ostatnia aktualizacja: 2026-03-26
 
 ---
 
@@ -36,6 +36,10 @@ Szczegóły w `docs/HISTORY_TASKS.md`
 - [x] **FIX-007** — Parser PDF: nabywca KROK 4 — rozdzielenie PZ vs WZ (szuka po adresie SEWERA) ✅ 2026-03-20
 - [x] **FIX-008** — Parser PDF: lines is not defined — dodano brakującą deklarację ✅ 2026-03-20
 - [x] **FIX-009** — PasteTab: disabled przycisk na text.trim() → text.length===0 (PUA chars) ✅ 2026-03-25
+- [x] **FIX-010** — decodePUA: dual-offset (0xE000 + 0xF000) dla dokumentów Sewery ✅ 2026-03-26
+- [x] **FIX-011** — parseSeweraDoc KROK 4: obsługa nagłówków OdbiorcaInformacje/NabywcaSprzedawca ✅ 2026-03-26
+- [x] **FIX-012** — parseSeweraDoc KROK 5: nazwaObiektu (Budowa/Plac/Hala...) jako prefix adresu ✅ 2026-03-26
+- [x] **FIX-013** — parse-wz-pdf: console.log AFTER_CLEAN_START do debugowania dekodowania PUA ✅ 2026-03-26
 
 ---
 

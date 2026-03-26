@@ -1,5 +1,5 @@
 # HISTORY_TASKS.md — Historia ukończonych zadań
-📅 Ostatnia aktualizacja: 2026-03-25
+📅 Ostatnia aktualizacja: 2026-03-26
 
 ---
 
@@ -40,7 +40,7 @@
 
 ---
 
-## POPRAWKI (2026-03-19 – 2026-03-25)
+## POPRAWKI (2026-03-19 – 2026-03-26)
 
 | ID | Opis | Data |
 |----|------|------|
@@ -53,6 +53,10 @@
 | FIX-007 | Parser PDF: nabywca PZ vs WZ | 2026-03-20 |
 | FIX-008 | Parser PDF: lines not defined | 2026-03-20 |
 | FIX-009 | PasteTab: disabled button PUA chars | 2026-03-25 |
+| FIX-010 | decodePUA: dual-offset 0xE000+0xF000 | 2026-03-26 |
+| FIX-011 | parseSeweraDoc KROK 4: nagłówki PZ | 2026-03-26 |
+| FIX-012 | parseSeweraDoc KROK 5: nazwaObiektu prefix | 2026-03-26 |
+| FIX-013 | parse-wz-pdf: debug log AFTER_CLEAN | 2026-03-26 |
 
 ---
 
