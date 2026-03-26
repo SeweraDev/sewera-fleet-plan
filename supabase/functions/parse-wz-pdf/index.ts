@@ -400,7 +400,12 @@ serve(async (req) => {
     console.log("RAW_TEXT_START");
     console.log(text);
 
-    const result = parseSeweraDoc(cleanText(text));
+    const afterClean = cleanText(text);
+    console.log("AFTER_CLEAN_START");
+    console.log(afterClean.substring(0, 200));
+    console.log("AFTER_CLEAN_END");
+
+    const result = parseSeweraDoc(afterClean);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
