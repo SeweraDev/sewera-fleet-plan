@@ -8,46 +8,124 @@ const corsHeaders = {
 };
 function decodePUA(text: string): string {
   const map: Record<number, string> = {
-    0xE020: " ", 0xE021: "!", 0xE022: '"', 0xE023: "#",
-    0xE024: "$", 0xE025: "%", 0xE026: "&", 0xE027: "'",
-    0xE028: "(", 0xE029: ")", 0xE02A: "*", 0xE02B: "+",
-    0xE02C: ",", 0xE02D: "-", 0xE02E: ".", 0xE02F: "/",
-    0xE030: "0", 0xE031: "1", 0xE032: "2", 0xE033: "3",
-    0xE034: "4", 0xE035: "5", 0xE036: "6", 0xE037: "7",
-    0xE038: "8", 0xE039: "9", 0xE03A: ":", 0xE03B: ";",
-    0xE03C: "<", 0xE03D: "=", 0xE03E: ">", 0xE03F: "?",
-    0xE040: "@",
-    0xE041: "A", 0xE042: "B", 0xE043: "C", 0xE044: "D",
-    0xE045: "E", 0xE046: "F", 0xE047: "G", 0xE048: "H",
-    0xE049: "I", 0xE04A: "J", 0xE04B: "K", 0xE04C: "L",
-    0xE04D: "M", 0xE04E: "N", 0xE04F: "O", 0xE050: "P",
-    0xE051: "Q", 0xE052: "R", 0xE053: "S", 0xE054: "T",
-    0xE055: "U", 0xE056: "V", 0xE057: "W", 0xE058: "X",
-    0xE059: "Y", 0xE05A: "Z",
-    0xE05B: "[", 0xE05C: "\\", 0xE05D: "]",
-    0xE05F: "_",
-    0xE061: "a", 0xE062: "b", 0xE063: "c", 0xE064: "d",
-    0xE065: "e", 0xE066: "f", 0xE067: "g", 0xE068: "h",
-    0xE069: "i", 0xE06A: "j", 0xE06B: "k", 0xE06C: "l",
-    0xE06D: "m", 0xE06E: "n", 0xE06F: "o", 0xE070: "p",
-    0xE071: "q", 0xE072: "r", 0xE073: "s", 0xE074: "t",
-    0xE075: "u", 0xE076: "v", 0xE077: "w", 0xE078: "x",
-    0xE079: "y", 0xE07A: "z",
-    0xE100: "Ą", 0xE103: "Ć", 0xE104: "Ę", 0xE107: "Ł",
-    0xE10B: "Ń", 0xE10F: "Ó", 0xE112: "Ś", 0xE118: "Ź",
-    0xE119: "Ż",
-    0xE141: "ą", 0xE143: "ć", 0xE144: "ę", 0xE147: "ł",
-    0xE14B: "ń", 0xE14F: "ó", 0xE152: "ś", 0xE158: "ź",
-    0xE159: "ż",
-    0xE082: "„", 0xE093: "\u2013",
-    0xE080: "€", 0xE002: "ƒ",
+    0xe020: " ",
+    0xe021: "!",
+    0xe022: '"',
+    0xe023: "#",
+    0xe024: "$",
+    0xe025: "%",
+    0xe026: "&",
+    0xe027: "'",
+    0xe028: "(",
+    0xe029: ")",
+    0xe02a: "*",
+    0xe02b: "+",
+    0xe02c: ",",
+    0xe02d: "-",
+    0xe02e: ".",
+    0xe02f: "/",
+    0xe030: "0",
+    0xe031: "1",
+    0xe032: "2",
+    0xe033: "3",
+    0xe034: "4",
+    0xe035: "5",
+    0xe036: "6",
+    0xe037: "7",
+    0xe038: "8",
+    0xe039: "9",
+    0xe03a: ":",
+    0xe03b: ";",
+    0xe03c: "<",
+    0xe03d: "=",
+    0xe03e: ">",
+    0xe03f: "?",
+    0xe040: "@",
+    0xe041: "A",
+    0xe042: "B",
+    0xe043: "C",
+    0xe044: "D",
+    0xe045: "E",
+    0xe046: "F",
+    0xe047: "G",
+    0xe048: "H",
+    0xe049: "I",
+    0xe04a: "J",
+    0xe04b: "K",
+    0xe04c: "L",
+    0xe04d: "M",
+    0xe04e: "N",
+    0xe04f: "O",
+    0xe050: "P",
+    0xe051: "Q",
+    0xe052: "R",
+    0xe053: "S",
+    0xe054: "T",
+    0xe055: "U",
+    0xe056: "V",
+    0xe057: "W",
+    0xe058: "X",
+    0xe059: "Y",
+    0xe05a: "Z",
+    0xe05b: "[",
+    0xe05c: "\\",
+    0xe05d: "]",
+    0xe05f: "_",
+    0xe061: "a",
+    0xe062: "b",
+    0xe063: "c",
+    0xe064: "d",
+    0xe065: "e",
+    0xe066: "f",
+    0xe067: "g",
+    0xe068: "h",
+    0xe069: "i",
+    0xe06a: "j",
+    0xe06b: "k",
+    0xe06c: "l",
+    0xe06d: "m",
+    0xe06e: "n",
+    0xe06f: "o",
+    0xe070: "p",
+    0xe071: "q",
+    0xe072: "r",
+    0xe073: "s",
+    0xe074: "t",
+    0xe075: "u",
+    0xe076: "v",
+    0xe077: "w",
+    0xe078: "x",
+    0xe079: "y",
+    0xe07a: "z",
+    0xe100: "Ą",
+    0xe103: "Ć",
+    0xe104: "Ę",
+    0xe107: "Ł",
+    0xe10b: "Ń",
+    0xe10f: "Ó",
+    0xe112: "Ś",
+    0xe118: "Ź",
+    0xe119: "Ż",
+    0xe141: "ą",
+    0xe143: "ć",
+    0xe144: "ę",
+    0xe147: "ł",
+    0xe14b: "ń",
+    0xe14f: "ó",
+    0xe152: "ś",
+    0xe158: "ź",
+    0xe159: "ż",
+    0xe082: "„",
+    0xe093: "\u2013",
+    0xe080: "€",
+    0xe002: "ƒ",
   };
 
   return text
     .split("")
     .map((ch) => {
       const cp = ch.codePointAt(0) ?? 0;
-      return map[cp] ?? (cp >= 0xE000 && cp <= 0xF8FF ? "" : ch);
+      return map[cp] ?? (cp >= 0xe000 && cp <= 0xf8ff ? "" : ch);
     })
     .join("");
 }
@@ -149,18 +227,12 @@ function parseSeweraDoc(rawText: string) {
   }
 
   // KROK 5: Adres dostawy + kontakt
-  // Trzy warianty:
-  // A) "Adres dostawy" na osobnej linii, adres POD nią (PZ z sekcją)
-  // B) "Adres dostawy" sklejone z "Magazyn wydający:", adres PRZED "Magazyn wydający:"
-  // C) "Adres dostawy" na osobnej linii ale adres jest PRZED "Magazyn wydający:" (WZ KK/112)
-  //    → fallback z A do B gdy adres po etykiecie jest pusty
   let adresDostawy = "";
   let osobaKontaktowa = "";
   const maAdresDostawy = /Adres\s+dostawy/i.test(text);
   const adresSamodzielny = /\nAdres dostawy\s*\n/i.test(text);
 
   if (adresSamodzielny) {
-    // Wariant A: szukaj adresu po etykiecie "Adres dostawy"
     const adIdx = text.search(/\nAdres dostawy\s*\n/i);
     const afterAd = text.substring(adIdx + 15, adIdx + 500);
     const stopAd = afterAd.search(/\nLp\.|\nTermin zapłaty|\nMagazyn wydający/i);
@@ -174,9 +246,6 @@ function parseSeweraDoc(rawText: string) {
     const kontakty: string[] = [];
 
     for (const l of adBlok) {
-      if (/^(Budowa|Plac|Osiedle|Hala|Magazyn|Zakład)/i.test(l)) {
-        continue;
-      }
       if (/Os\.?\s*kontaktowa/i.test(l)) {
         const osM = l.match(/Os\.?\s*kontaktowa:\s*(.+?)(?:\s+tel\.?\s*[\d].*)?$/i);
         const telM = l.match(/tel\.?\s*([0-9][0-9\s\-]{7,})/i);
@@ -206,9 +275,7 @@ function parseSeweraDoc(rawText: string) {
     }
 
     osobaKontaktowa = kontakty.join(", ");
-    const nazwaObiektu = adBlok.find((l: string) =>
-      /^(Budowa|Plac|Osiedle|Hala|Magazyn|Zakład)/i.test(l)
-    ) || "";
+    const nazwaObiektu = adBlok.find((l: string) => /^(Budowa|Plac|Osiedle|Hala|Magazyn|Zakład)/i.test(l)) || "";
     adresDostawy = [ulicaLines[0] || "", kodLines[0] || ""].filter(Boolean).join(", ");
     if (nazwaObiektu && adresDostawy) {
       adresDostawy = nazwaObiektu + ", " + adresDostawy;
@@ -272,12 +339,13 @@ function parseSeweraDoc(rawText: string) {
       // Wariant A: liczba w tej samej linii "Waga netto razem: 9 733,10"
       const inlineMatch = wagaLine.match(/Waga\s+netto\s+razem:\s*([\d][\d ,]*[,.]\d+)/i);
       if (inlineMatch) {
-        masaKg = Math.ceil(parseFloat(
-          inlineMatch[1].replace(/\s/g, "").replace(",", ".")
-        ) || 0);
+        masaKg = Math.ceil(parseFloat(inlineMatch[1].replace(/\s/g, "").replace(",", ".")) || 0);
       } else {
         // Wariant B: liczba w kolejnych liniach — bierz największą liczbę z przecinkiem
-        const fragment = wagaLine.split("\n").map((l: string) => l.trim()).filter(Boolean);
+        const fragment = wagaLine
+          .split("\n")
+          .map((l: string) => l.trim())
+          .filter(Boolean);
         const kandydaci: number[] = [];
         for (const fl of fragment) {
           if (/^RAZEM:/i.test(fl)) break;
@@ -318,7 +386,8 @@ function parseSeweraDoc(rawText: string) {
           !l.startsWith("Nr zamówienia (systemowy):") &&
           !l.startsWith("Nr oferty:") &&
           !l.match(/^WZ\s+[A-Z]{2}\//) &&
-          !l.includes("Na podstawie art.") && !l.includes("Kupuj"),
+          !l.includes("Na podstawie art.") &&
+          !l.includes("Kupuj"),
       )
       .join("\n")
       .trim();
