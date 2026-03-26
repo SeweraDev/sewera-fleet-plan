@@ -83,19 +83,22 @@ function decodePUA(text: string): string {
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    .replace(/[^ \x20-\x7E\u00A0-\u017E\n\r\t]/g, "")
+    .replace(/[^\x20-\x7E\u00A0-\u017E\n\r\t]/g, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/(\n\s*){3,}/g, "\n\n");
 }
 
 function parseSeweraDoc(rawText: string) {
+  // KROK 0: Odetnij stopkę
   const wystawilIdx = rawText.search(/\nWystawił:/i);
   const text = wystawilIdx > -1 ? rawText.substring(0, wystawilIdx) : rawText;
 
+  // KROK 1: Typ dokumentu
   const isPZ = /Potwierdzenie zamówienia/i.test(text);
   const isWZS = /WZS\s+[A-Z]{2}\/\d/.test(text);
   const typDokumentu = isPZ ? "PZ" : isWZS ? "WZS" : "WZ";
 
+  // KROK 2: Nr dokumentu
   let nrDokumentu = "";
   if (!isPZ) {
     const m = text.match(/(WZS?\s+[A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
@@ -105,10 +108,12 @@ function parseSeweraDoc(rawText: string) {
     nrDokumentu = m ? m[1].trim() : "";
   }
 
+  // KROK 3: Nr zamówienia
   const mSys = text.match(/Nr zamówienia \(systemowy\):\s*([A-Z0-9\/]+)/);
   const mNag = text.match(/\[Nr zam:\s*([A-Z0-9\/]+)\]/);
   const nrZam = (mSys?.[1] || mNag?.[1] || (isPZ ? nrDokumentu : "")).trim();
 
+  // KROK 4: Nabywca / Odbiorca
   let nabywca = "";
   let adresNabywcy = "";
   const lines = text
@@ -171,6 +176,7 @@ function parseSeweraDoc(rawText: string) {
     }
   }
 
+  // KROK 5: Adres dostawy + kontakt
   let adresDostawy = "";
   let osobaKontaktowa = "";
   const maAdresDostawy = /Adres\s+dostawy/i.test(text);
@@ -228,6 +234,7 @@ function parseSeweraDoc(rawText: string) {
     }
   }
 
+  // Wariant B/C: gdy brak adresu po etykiecie — szukaj PRZED "Magazyn wydający:"
   if (!adresDostawy && maAdresDostawy) {
     const magazynIdx = text.search(/\nMagazyn wydający:/i);
     if (magazynIdx > -1) {
@@ -271,6 +278,7 @@ function parseSeweraDoc(rawText: string) {
 
   if (!adresDostawy) adresDostawy = adresNabywcy;
 
+  // KROK 6: MASA
   let masaKg = 0;
 
   if (!isPZ) {
@@ -302,7 +310,7 @@ function parseSeweraDoc(rawText: string) {
     const razIdx = text.search(/[\d ,]+Razem:|Razem:\s*[\d ,]+/i);
     if (razIdx > -1) {
       const before = text.substring(Math.max(0, razIdx - 200), razIdx);
-      const numery = [...before.matchAll(/([\d ]*\d,\d+)/g)]
+      const numery = [...before.matchAll(/([\d ]*\d[,]\d+)/g)]
         .map((m: RegExpMatchArray) => m[1].replace(/\s/g, "").replace(",", "."))
         .filter((n: string) => parseFloat(n) > 0);
       if (numery.length >= 1) {
@@ -311,6 +319,7 @@ function parseSeweraDoc(rawText: string) {
     }
   }
 
+  // KROK 7: Uwagi
   let uwagi = "";
   const uwagiM = text.match(/Uwagi(?:\s+dot\.\s+wysyłki)?:\s*\n([\s\S]*?)$/i);
   if (uwagiM) {
@@ -404,3 +413,4 @@ serve(async (req) => {
     });
   }
 });
+// redeployed: 2026-03-26v5
