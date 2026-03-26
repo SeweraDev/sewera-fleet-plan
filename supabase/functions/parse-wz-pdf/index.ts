@@ -174,6 +174,9 @@ function parseSeweraDoc(rawText: string) {
     const kontakty: string[] = [];
 
     for (const l of adBlok) {
+      if (/^(Budowa|Plac|Osiedle|Hala|Magazyn|Zakład)/i.test(l)) {
+        continue;
+      }
       if (/Os\.?\s*kontaktowa/i.test(l)) {
         const osM = l.match(/Os\.?\s*kontaktowa:\s*(.+?)(?:\s+tel\.?\s*[\d].*)?$/i);
         const telM = l.match(/tel\.?\s*([0-9][0-9\s\-]{7,})/i);
@@ -203,10 +206,14 @@ function parseSeweraDoc(rawText: string) {
     }
 
     osobaKontaktowa = kontakty.join(", ");
+    const nazwaObiektu = adBlok.find((l: string) =>
+      /^(Budowa|Plac|Osiedle|Hala|Magazyn|Zakład)/i.test(l)
+    ) || "";
     adresDostawy = [ulicaLines[0] || "", kodLines[0] || ""].filter(Boolean).join(", ");
-    if (!adresDostawy) {
-      const budowa = adBlok.find((l: string) => l.startsWith("Budowa"));
-      adresDostawy = budowa || "";
+    if (nazwaObiektu && adresDostawy) {
+      adresDostawy = nazwaObiektu + ", " + adresDostawy;
+    } else if (nazwaObiektu) {
+      adresDostawy = nazwaObiektu;
     }
   }
 
