@@ -99,93 +99,121 @@ type ParsePreview = {
   uwagi: string;
 };
 
-// Lokalny parser dla tekstu skopiowanego z PDF — elastyczne regexy
-function parseWzTextLocal(raw: string): Partial<ParsePreview> {
-  // Usuń znaki PUA (te same zakresy co decodePUA w edge function)
-  const text = raw
-    .split('')
-    .map(ch => {
-      const cp = ch.codePointAt(0) ?? 0;
-      return (cp >= 0xe000 && cp <= 0xf8ff) ? ' ' : ch;
-    })
-    .join('')
+// Parser tekstu WZ v5 (identyczny z ModalImportWZ) — dla tekstu skopiowanego z PDF
+function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
+  const text = rawText
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/[^\x20-\x7E\u00A0-\u017E\n\r\t]/g, '')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/(\n\s*){3,}/g, '\n\n');
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  const result: Partial<ParsePreview> = {};
-
-  // Nr WZ / WZS
-  const wzM = text.match(/\b(WZS?\s+[A-Z]{2,3}\/[\d\/]+)/);
-  if (wzM) result.numer_wz = wzM[1].replace(/\s+/g, ' ').trim();
-
-  // Nr PZ
-  if (!result.numer_wz) {
-    const pzM = text.match(/Potwierdzenie zamówienia[\s\S]{0,60}?nr:\s*([A-Z0-9\/]+)/i);
-    if (pzM) result.numer_wz = pzM[1].trim();
+  // Nr WZ
+  let numer_wz: string | undefined;
+  const wzM = text.match(/WZ\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  if (wzM) numer_wz = `WZ ${wzM[1]}`;
+  else {
+    const wzBare = text.match(/([A-Z]{2}\/\d{2,3}\/\d{2}\/\d{2}\/\d{5,})/);
+    if (wzBare) numer_wz = `WZ ${wzBare[1]}`;
   }
 
-  // Nr zamówienia systemowy
-  const zamM = text.match(/Nr\s+zamówienia\s*\(systemowy\)[:\s]+([A-Z0-9\/]+)/i);
-  if (zamM) result.nr_zamowienia = zamM[1].trim();
-
-  // Nr zam w nawiasie
-  if (!result.nr_zamowienia) {
-    const nagM = text.match(/\[Nr\s+zam[.:\s]+([A-Z0-9\/]+)\]/i);
-    if (nagM) result.nr_zamowienia = nagM[1].trim();
+  // Nr zamówienia
+  let nr_zamowienia: string | undefined;
+  const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/i);
+  if (zamLabel) nr_zamowienia = zamLabel[1];
+  if (!nr_zamowienia) {
+    const zamPattern = text.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
+    if (zamPattern) nr_zamowienia = zamPattern[1];
   }
 
-  // Numer zamówienia T7/R7/etc w tekście
-  if (!result.nr_zamowienia) {
-    const t7M = text.match(/\b([A-Z]\d\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
-    if (t7M) result.nr_zamowienia = t7M[1].trim();
+  // Odbiorca — pomiń blok SEWERA
+  let odbiorca: string | undefined;
+  const SELLER_MARKERS = /SEWERA|KOŚCIUSZKI\s*326|NR\s*BDO:\s*000044503/i;
+  const SKIP_PATTERNS = [
+    SELLER_MARKERS, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
+    /NIP:/i, /NR BDO:/i, /Adres\s+dostawy/i, /Waga\s+netto/i,
+    /Nr\s+zam/i, /PALETA/i, /Tel\./i, /Os\.\s*kontaktowa/i,
+    /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i,
+    /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
+    /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
+  ];
+  let seweraIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (SELLER_MARKERS.test(lines[i])) { seweraIdx = i; break; }
+  }
+  const searchStart = seweraIdx >= 0 ? seweraIdx + 1 : 0;
+  for (let i = searchStart; i < lines.length; i++) {
+    const line = lines[i];
+    if (SKIP_PATTERNS.some(p => p.test(line))) continue;
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
+    if (hasLegalForm || capsWords >= 3) { odbiorca = line; break; }
   }
 
-  // Masa — szukaj "Waga netto razem:" lub liczby z kg
-  const wagaM = text.match(/Waga\s+netto\s+razem[:\s]+([\d\s.,]+)/i);
-  if (wagaM) {
-    const n = parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.'));
-    if (n > 0) result.masa_kg = Math.ceil(n);
+  // Adres dostawy
+  let adres: string | undefined;
+  const adresIdx = lines.findIndex(l => /^Adres\s+dostawy$/i.test(l));
+  if (adresIdx >= 0) {
+    const addrParts: string[] = [];
+    for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
+      const l = lines[i];
+      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi)/i.test(l)) break;
+      if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
+        addrParts.push(l);
+      }
+    }
+    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
   }
-  if (!result.masa_kg) {
-    const kgM = text.match(/([\d.,]+)\s*kg/i);
-    if (kgM) {
-      const n = parseFloat(kgM[1].replace(',', '.'));
-      if (n > 0) result.masa_kg = Math.ceil(n);
+  if (!adres && odbiorca) {
+    const odbIdx = lines.indexOf(odbiorca);
+    if (odbIdx >= 0) {
+      for (let i = odbIdx + 1; i < Math.min(odbIdx + 3, lines.length); i++) {
+        if (/ul\.|al\.|os\.|pl\./i.test(lines[i]) || /\d{2}-\d{3}/.test(lines[i])) {
+          adres = lines[i]; break;
+        }
+      }
     }
   }
 
-  // Odbiorca / Nabywca
-  const nabM = text.match(/(?:Nabywca|Odbiorca)[:\s]+([^\n]{3,80})/i);
-  if (nabM) result.odbiorca = nabM[1].trim();
-
-  // Firma rozpoznana po typowych końcówkach prawnych (jeśli brak Nabywca/Odbiorca)
-  if (!result.odbiorca) {
-    const firmaM = text.match(/([A-ZŁŚĆĄĘÓŹŻ][^\n]{3,60}(?:Sp\.\s*z\s*o\.o\.|S\.A\.|Sp\.K\.|SPÓŁKA|Sp\. j\.))/i);
-    if (firmaM) result.odbiorca = firmaM[1].trim();
+  // Telefon
+  let tel: string | undefined;
+  if (adresIdx >= 0) {
+    for (let i = adresIdx; i < Math.min(adresIdx + 10, lines.length); i++) {
+      const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+      if (telM) { tel = telM[1].trim(); break; }
+    }
   }
 
-  // Adres — ul./al. + kod pocztowy
-  const ulM = text.match(/((?:ul\.|al\.|os\.)[^\n,]{3,60})/i);
-  const kodM = text.match(/(\d{2}-\d{3}\s+[A-ZŁŚĆĄ][^\n,]{2,40})/);
-  if (ulM && kodM) {
-    result.adres = `${ulM[1].trim()}, ${kodM[1].trim()}`;
-  } else if (ulM) {
-    result.adres = ulM[1].trim();
-  }
+  // Masa
+  let masa_kg = 0;
+  const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
+  if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
 
-  // Telefon / Osoba kontaktowa
-  const kontaktM = text.match(/(?:Os\.?\s*kontaktowa|Tel\.?)[:\s]+([^\n]{3,60})/i);
-  if (kontaktM) result.tel = kontaktM[1].trim();
-  if (!result.tel) {
-    const telM = text.match(/\b(\d{3}[\s-]\d{3}[\s-]\d{3}|\d{9,11})\b/);
-    if (telM) result.tel = telM[1].trim();
+  // Palety
+  let ilosc_palet = 0;
+  for (const line of lines) {
+    if (/PALETA/i.test(line)) {
+      const palQty = line.match(/(\d+)\s*(?:SZT|szt)/i);
+      if (palQty) { ilosc_palet = parseInt(palQty[1]); break; }
+    }
   }
 
   // Uwagi
-  const uwagiM = text.match(/Uwagi[^:\n]*:\s*\n([\s\S]{1,300}?)(?:\nNr zamówienia|$)/i);
-  if (uwagiM) result.uwagi = uwagiM[1].trim();
+  let uwagi: string | undefined;
+  const uwagiIdx = lines.findIndex(l => /^Uwagi\s*:/i.test(l));
+  if (uwagiIdx >= 0) {
+    const afterLines: string[] = [];
+    for (let i = uwagiIdx + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (/Na\s+podstawie\s+art/i.test(l)) break;
+      if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
+      if (/Nr\s+oferty/i.test(l)) continue;
+      afterLines.push(l);
+    }
+    uwagi = afterLines.join('\n').trim() || undefined;
+  }
 
-  return result;
+  return { numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, uwagi };
 }
 
 
@@ -303,7 +331,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
             onChange={e => { setText(e.target.value); setError(null); }}
           />
           <Button onClick={handleParse} disabled={text.length === 0 || parsing} size="sm">
-            {parsing ? 'Analizuję...' : 'Importuj'}
+            {parsing ? 'Analizuję...' : 'Parsuj tekst'}
           </Button>
           {parsing && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

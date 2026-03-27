@@ -611,16 +611,16 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [error, setError] = useState<string | null>(null);
 
   const parse = async () => {
-    console.log("PARSE_CALLED", text.length);
     if (text.length === 0) return;
     setParsing(true);
     setError(null);
     setResult(null);
 
-    console.log("PARSE_STARTING_FETCH");
+    // Lokalny parser jako baza (działa zawsze, niezależnie od edge function)
+    const local = parseWZText(text);
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      console.log("SESSION:", session?.access_token ? "OK" : "BRAK");
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
         {
@@ -634,30 +634,28 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
       );
       const json: ParsedPdfResult = await res.json();
 
-      if (json.error) {
-        setError(json.error);
-        setParsing(false);
-        return;
+      if (!json.error) {
+        // Merge: edge function uzupełnia to czego lokalny parser nie znalazł
+        setResult({
+          numer_wz: json.nr_wz || local.numer_wz,
+          nr_zamowienia: json.nr_zamowienia || local.nr_zamowienia,
+          odbiorca: json.odbiorca || local.odbiorca,
+          adres: json.adres_dostawy || local.adres,
+          tel: json.osoba_kontaktowa || json.tel || local.tel,
+          osoba_kontaktowa: json.osoba_kontaktowa || null,
+          masa_kg: json.masa_kg || local.masa_kg,
+          ilosc_palet: json.ilosc_palet || local.ilosc_palet,
+          objetosc_m3: json.objetosc_m3 || local.objetosc_m3,
+          uwagi: json.uwagi || local.uwagi,
+          typ_dokumentu: (json as any).typ_dokumentu || 'WZ',
+          ma_adres_dostawy: (json as any).ma_adres_dostawy ?? false,
+        });
+      } else {
+        setResult(local);
       }
-
-      console.log("PASTE EDGE FUNCTION RESPONSE:", JSON.stringify(json));
-      const mapped: WZImportData = {
-        numer_wz: json.nr_wz || '',
-        nr_zamowienia: json.nr_zamowienia || '',
-        odbiorca: json.odbiorca || '',
-        adres: json.adres_dostawy || '',
-        tel: json.osoba_kontaktowa || json.tel || '',
-        osoba_kontaktowa: json.osoba_kontaktowa || '',
-        masa_kg: json.masa_kg || 0,
-        ilosc_palet: json.ilosc_palet || 0,
-        objetosc_m3: json.objetosc_m3 || 0,
-        uwagi: json.uwagi || '',
-        typ_dokumentu: (json as any).typ_dokumentu || 'WZ',
-        ma_adres_dostawy: (json as any).ma_adres_dostawy ?? false,
-      };
-      setResult(mapped);
-    } catch (e: any) {
-      setError('Błąd połączenia: ' + (e.message || ''));
+    } catch {
+      // Brak połączenia — użyj lokalnego parsera
+      setResult(local);
     }
     setParsing(false);
   };
