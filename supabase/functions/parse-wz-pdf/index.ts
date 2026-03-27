@@ -83,7 +83,7 @@ function decodePUA(text: string): string {
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    .replace(/[^\x20-\x7E\u00A0-\u017E\n\r\t]/g, "")
+    .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/(\n\s*){3,}/g, "\n\n");
 }
