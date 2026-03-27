@@ -263,12 +263,19 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ParsePreview | null>(null);
+  const [decodedPreview, setDecodedPreview] = useState<string>('');
+
+  const hasPUA = text.split('').some(ch => { const cp = ch.codePointAt(0) ?? 0; return cp >= 0xe000 && cp <= 0xf8ff; });
 
   const handleParse = async () => {
     if (text.length === 0) return;
     setParsing(true);
     setError(null);
     setPreview(null);
+
+    const decoded = decodePUA(text);
+    setDecodedPreview(decoded.slice(0, 200));
+    console.log('[WzPasteTab v5] raw chars:', text.length, '| PUA:', hasPUA, '| decoded preview:', decoded.slice(0, 150));
 
     // Zawsze uruchom lokalny parser jako bazę
     const local = parseWzTextLocal(text);
@@ -371,9 +378,21 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
             value={text}
             onChange={e => { setText(e.target.value); setError(null); }}
           />
-          <Button onClick={handleParse} disabled={text.length === 0 || parsing} size="sm">
-            {parsing ? 'Analizuję...' : 'Parsuj tekst'}
-          </Button>
+          {hasPUA && (
+            <p className="text-xs text-blue-600 dark:text-blue-400">🔑 Wykryto znaki PUA (font PDF) — zostaną zdekodowane</p>
+          )}
+          <div className="flex items-center gap-2">
+            <Button onClick={handleParse} disabled={text.length === 0 || parsing} size="sm">
+              {parsing ? 'Analizuję...' : 'Parsuj tekst'}
+            </Button>
+            <span className="text-xs text-muted-foreground">parser v5</span>
+          </div>
+          {decodedPreview && (
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer">Podgląd zdekodowanego tekstu</summary>
+              <pre className="whitespace-pre-wrap text-xs bg-muted p-2 rounded max-h-28 overflow-auto mt-1">{decodedPreview}</pre>
+            </details>
+          )}
           {parsing && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full" />
