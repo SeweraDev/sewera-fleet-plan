@@ -133,10 +133,10 @@ function decodePUA(raw: string): string {
     [o+0x158]:'ź',[o+0x159]:'ż',
     [o+0x082]:'„',[o+0x093]:'–',[o+0x080]:'€',
   });
-  const map = { ...buildMap(0xe000), ...buildMap(0xf000) };
-  return raw.split('').map(ch => {
+  const map = { ...buildMap(0xe000), ...buildMap(0xf000), ...buildMap(0x10000) };
+  return Array.from(raw).map(ch => {
     const cp = ch.codePointAt(0) ?? 0;
-    return map[cp] ?? (cp >= 0xe000 && cp <= 0xf8ff ? '' : ch);
+    return map[cp] ?? ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000 ? '' : ch);
   }).join('');
 }
 
@@ -265,7 +265,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   const [decodedPreview, setDecodedPreview] = useState<string>('');
 
-  const hasPUA = text.split('').some(ch => { const cp = ch.codePointAt(0) ?? 0; return cp >= 0xe000 && cp <= 0xf8ff; });
+  const hasPUA = Array.from(text).some(ch => { const cp = ch.codePointAt(0) ?? 0; return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000; });
 
   const handleParse = async () => {
     if (text.length === 0) return;

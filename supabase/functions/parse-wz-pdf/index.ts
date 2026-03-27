@@ -69,13 +69,13 @@ function decodePUA(text: string): string {
   const map: Record<number, string> = {
     ...buildMap(0xe000),
     ...buildMap(0xf000),
+    ...buildMap(0x10000),
   };
 
-  return text
-    .split("")
+  return Array.from(text)
     .map((ch) => {
       const cp = ch.codePointAt(0) ?? 0;
-      return map[cp] ?? (cp >= 0xe000 && cp <= 0xf8ff ? "" : ch);
+      return map[cp] ?? ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000 ? "" : ch);
     })
     .join("");
 }
