@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
+import { supabase } from '@/integrations/supabase/client';
 
 interface WzFormTabsProps {
   wzList: WzInput[];
@@ -16,34 +17,6 @@ interface WzFormTabsProps {
   onSubmit: () => void;
 }
 
-function parseWzText(text: string): Partial<WzInput> {
-  const result: Partial<WzInput> = {};
-
-  const wzMatch = text.match(/(?:WZ[:\s]*)([\w\-\/]+)/i);
-  if (wzMatch) result.numer_wz = wzMatch[1].trim();
-
-  const zamMatch = text.match(/(?:T7[\/:]\s*\S+|ZAM[:\s]*)([\w\-\/]+)/i);
-  if (zamMatch) result.nr_zamowienia = zamMatch[1].trim();
-  if (!zamMatch) {
-    const t7Match = text.match(/(T7\/[\w\-\/]+)/i);
-    if (t7Match) result.nr_zamowienia = t7Match[1].trim();
-  }
-
-  const masaMatch = text.match(/([\d.,]+)\s*kg/i);
-  if (masaMatch) result.masa_kg = parseFloat(masaMatch[1].replace(',', '.'));
-
-  const adresMatch = text.match(/(?:ul\.|al\.|os\.)\s*(.+?)(?:\n|$)/i);
-  if (adresMatch) result.adres = adresMatch[0].trim();
-
-  const odbMatch = text.match(/(?:Odbiorca|Nabywca)[:\s]+(.+?)(?:\n|$)/i);
-  if (odbMatch) result.odbiorca = odbMatch[1].trim();
-
-  // palety
-  const paletMatch = text.match(/([\d]+)\s*(?:palet|pal|EUR)\b/i);
-  if (paletMatch) result.ilosc_palet = parseInt(paletMatch[1], 10);
-
-  return result;
-}
 
 const EMPTY_WZ: WzInput = {
   numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, uwagi: '',
@@ -114,40 +87,146 @@ function WzOcrTab() {
   );
 }
 
+type ParsePreview = {
+  numer_wz: string;
+  nr_zamowienia: string;
+  odbiorca: string;
+  adres: string;
+  tel: string;
+  masa_kg: number;
+  objetosc_m3: number;
+  ilosc_palet: number;
+  uwagi: string;
+};
+
 function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const [text, setText] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ParsePreview | null>(null);
 
-  const handleImport = () => {
+  const handleParse = async () => {
     if (!text.trim()) return;
-    const parsed = parseWzText(text);
-    const newWz: WzInput = {
-      numer_wz: parsed.numer_wz || '',
-      nr_zamowienia: parsed.nr_zamowienia || '',
-      odbiorca: parsed.odbiorca || '',
-      adres: parsed.adres || '',
-      tel: '',
-      masa_kg: parsed.masa_kg || 0,
-      objetosc_m3: 0,
-      ilosc_palet: parsed.ilosc_palet || 0,
-      uwagi: '',
-    };
+    setParsing(true);
+    setError(null);
+    setPreview(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ text }),
+        }
+      );
+      const json = await res.json();
+      if (json.error) {
+        setError(json.error);
+        return;
+      }
+      setPreview({
+        numer_wz: json.nr_wz || '',
+        nr_zamowienia: json.nr_zamowienia || '',
+        odbiorca: json.odbiorca || '',
+        adres: json.adres_dostawy || '',
+        tel: json.osoba_kontaktowa || json.tel || '',
+        masa_kg: json.masa_kg || 0,
+        objetosc_m3: json.objetosc_m3 || 0,
+        ilosc_palet: json.ilosc_palet || 0,
+        uwagi: json.uwagi || '',
+      });
+    } catch (e) {
+      setError('Błąd połączenia z serwerem parsowania.');
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleConfirm = () => {
+    if (!preview) return;
+    const newWz: WzInput = { ...preview };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
       setWzList([...wzList, newWz]);
     }
     setText('');
+    setPreview(null);
   };
+
+  const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
+    { key: 'numer_wz', label: 'Nr WZ' },
+    { key: 'nr_zamowienia', label: 'Nr zamówienia' },
+    { key: 'odbiorca', label: 'Odbiorca' },
+    { key: 'adres', label: 'Adres dostawy' },
+    { key: 'tel', label: 'Telefon / kontakt' },
+    { key: 'masa_kg', label: 'Masa (kg)', type: 'number' },
+    { key: 'objetosc_m3', label: 'Objętość (m³)', type: 'number' },
+    { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
+    { key: 'uwagi', label: 'Uwagi' },
+  ];
 
   return (
     <div className="space-y-3">
-      <Textarea
-        className="min-h-[120px]"
-        placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres, palety"
-        value={text}
-        onChange={e => setText(e.target.value)}
-      />
-      <Button onClick={handleImport} disabled={!text.trim()} size="sm">Importuj</Button>
+      {!preview && (
+        <>
+          <Textarea
+            className="min-h-[120px] font-mono text-xs"
+            placeholder="Wklej tekst z dokumentu WZ (z PDF, e-maila itp.) — system wyciągnie dane automatycznie"
+            value={text}
+            onChange={e => { setText(e.target.value); setError(null); }}
+          />
+          <Button onClick={handleParse} disabled={!text.trim() || parsing} size="sm">
+            {parsing ? 'Analizuję...' : 'Importuj'}
+          </Button>
+          {parsing && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full" />
+              Analizuję dokument...
+            </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </>
+      )}
+
+      {preview && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Sprawdź i popraw odczytane dane:</p>
+          <div className="space-y-2">
+            {previewFields.map(f => {
+              const val = preview[f.key];
+              const found = val !== '' && val !== 0;
+              return (
+                <div key={f.key} className="flex items-center gap-2">
+                  <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
+                  <Label className="text-xs w-32 shrink-0">{f.label}</Label>
+                  <Input
+                    className="h-8 text-sm flex-1"
+                    type={f.type || 'text'}
+                    value={val?.toString() ?? ''}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      setPreview(prev => prev ? {
+                        ...prev,
+                        [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw,
+                      } : prev);
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleConfirm}>✅ Użyj tych danych</Button>
+            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>← Wróć do tekstu</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
