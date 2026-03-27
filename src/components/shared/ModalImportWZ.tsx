@@ -617,8 +617,10 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     setError(null);
     setResult(null);
 
+    console.log("PARSE_STARTING_FETCH");
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      console.log("SESSION:", session?.access_token ? "OK" : "BRAK");
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
         {
