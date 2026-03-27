@@ -99,6 +99,96 @@ type ParsePreview = {
   uwagi: string;
 };
 
+// Lokalny parser dla tekstu skopiowanego z PDF — elastyczne regexy
+function parseWzTextLocal(raw: string): Partial<ParsePreview> {
+  // Usuń znaki PUA (te same zakresy co decodePUA w edge function)
+  const text = raw
+    .split('')
+    .map(ch => {
+      const cp = ch.codePointAt(0) ?? 0;
+      return (cp >= 0xe000 && cp <= 0xf8ff) ? ' ' : ch;
+    })
+    .join('')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/(\n\s*){3,}/g, '\n\n');
+
+  const result: Partial<ParsePreview> = {};
+
+  // Nr WZ / WZS
+  const wzM = text.match(/\b(WZS?\s+[A-Z]{2,3}\/[\d\/]+)/);
+  if (wzM) result.numer_wz = wzM[1].replace(/\s+/g, ' ').trim();
+
+  // Nr PZ
+  if (!result.numer_wz) {
+    const pzM = text.match(/Potwierdzenie zamówienia[\s\S]{0,60}?nr:\s*([A-Z0-9\/]+)/i);
+    if (pzM) result.numer_wz = pzM[1].trim();
+  }
+
+  // Nr zamówienia systemowy
+  const zamM = text.match(/Nr\s+zamówienia\s*\(systemowy\)[:\s]+([A-Z0-9\/]+)/i);
+  if (zamM) result.nr_zamowienia = zamM[1].trim();
+
+  // Nr zam w nawiasie
+  if (!result.nr_zamowienia) {
+    const nagM = text.match(/\[Nr\s+zam[.:\s]+([A-Z0-9\/]+)\]/i);
+    if (nagM) result.nr_zamowienia = nagM[1].trim();
+  }
+
+  // Numer zamówienia T7/R7/etc w tekście
+  if (!result.nr_zamowienia) {
+    const t7M = text.match(/\b([A-Z]\d\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
+    if (t7M) result.nr_zamowienia = t7M[1].trim();
+  }
+
+  // Masa — szukaj "Waga netto razem:" lub liczby z kg
+  const wagaM = text.match(/Waga\s+netto\s+razem[:\s]+([\d\s.,]+)/i);
+  if (wagaM) {
+    const n = parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.'));
+    if (n > 0) result.masa_kg = Math.ceil(n);
+  }
+  if (!result.masa_kg) {
+    const kgM = text.match(/([\d.,]+)\s*kg/i);
+    if (kgM) {
+      const n = parseFloat(kgM[1].replace(',', '.'));
+      if (n > 0) result.masa_kg = Math.ceil(n);
+    }
+  }
+
+  // Odbiorca / Nabywca
+  const nabM = text.match(/(?:Nabywca|Odbiorca)[:\s]+([^\n]{3,80})/i);
+  if (nabM) result.odbiorca = nabM[1].trim();
+
+  // Firma rozpoznana po typowych końcówkach prawnych (jeśli brak Nabywca/Odbiorca)
+  if (!result.odbiorca) {
+    const firmaM = text.match(/([A-ZŁŚĆĄĘÓŹŻ][^\n]{3,60}(?:Sp\.\s*z\s*o\.o\.|S\.A\.|Sp\.K\.|SPÓŁKA|Sp\. j\.))/i);
+    if (firmaM) result.odbiorca = firmaM[1].trim();
+  }
+
+  // Adres — ul./al. + kod pocztowy
+  const ulM = text.match(/((?:ul\.|al\.|os\.)[^\n,]{3,60})/i);
+  const kodM = text.match(/(\d{2}-\d{3}\s+[A-ZŁŚĆĄ][^\n,]{2,40})/);
+  if (ulM && kodM) {
+    result.adres = `${ulM[1].trim()}, ${kodM[1].trim()}`;
+  } else if (ulM) {
+    result.adres = ulM[1].trim();
+  }
+
+  // Telefon / Osoba kontaktowa
+  const kontaktM = text.match(/(?:Os\.?\s*kontaktowa|Tel\.?)[:\s]+([^\n]{3,60})/i);
+  if (kontaktM) result.tel = kontaktM[1].trim();
+  if (!result.tel) {
+    const telM = text.match(/\b(\d{3}[\s-]\d{3}[\s-]\d{3}|\d{9,11})\b/);
+    if (telM) result.tel = telM[1].trim();
+  }
+
+  // Uwagi
+  const uwagiM = text.match(/Uwagi[^:\n]*:\s*\n([\s\S]{1,300}?)(?:\nNr zamówienia|$)/i);
+  if (uwagiM) result.uwagi = uwagiM[1].trim();
+
+  return result;
+}
+
+
 function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const [text, setText] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -106,10 +196,24 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
   const [preview, setPreview] = useState<ParsePreview | null>(null);
 
   const handleParse = async () => {
-    if (!text.trim()) return;
+    if (text.length === 0) return;
     setParsing(true);
     setError(null);
     setPreview(null);
+
+    // Zawsze uruchom lokalny parser jako bazę
+    const local = parseWzTextLocal(text);
+    const localPreview: ParsePreview = {
+      numer_wz: local.numer_wz || '',
+      nr_zamowienia: local.nr_zamowienia || '',
+      odbiorca: local.odbiorca || '',
+      adres: local.adres || '',
+      tel: local.tel || '',
+      masa_kg: local.masa_kg || 0,
+      objetosc_m3: 0,
+      ilosc_palet: local.ilosc_palet || 0,
+      uwagi: local.uwagi || '',
+    };
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -125,23 +229,40 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
         }
       );
       const json = await res.json();
-      if (json.error) {
-        setError(json.error);
-        return;
+
+      if (!json.error) {
+        const edgePreview: ParsePreview = {
+          numer_wz: json.nr_wz || '',
+          nr_zamowienia: json.nr_zamowienia || '',
+          odbiorca: json.odbiorca || '',
+          adres: json.adres_dostawy || '',
+          tel: json.osoba_kontaktowa || json.tel || '',
+          masa_kg: json.masa_kg || 0,
+          objetosc_m3: json.objetosc_m3 || 0,
+          ilosc_palet: json.ilosc_palet || 0,
+          uwagi: json.uwagi || '',
+        };
+
+        // Użyj edge jeśli dała więcej danych, w przeciwnym razie lokalny jako fallback
+        const merged: ParsePreview = {
+          numer_wz: edgePreview.numer_wz || localPreview.numer_wz,
+          nr_zamowienia: edgePreview.nr_zamowienia || localPreview.nr_zamowienia,
+          odbiorca: edgePreview.odbiorca || localPreview.odbiorca,
+          adres: edgePreview.adres || localPreview.adres,
+          tel: edgePreview.tel || localPreview.tel,
+          masa_kg: edgePreview.masa_kg || localPreview.masa_kg,
+          objetosc_m3: edgePreview.objetosc_m3 || localPreview.objetosc_m3,
+          ilosc_palet: edgePreview.ilosc_palet || localPreview.ilosc_palet,
+          uwagi: edgePreview.uwagi || localPreview.uwagi,
+        };
+        setPreview(merged);
+      } else {
+        // Edge function zwróciła błąd — użyj lokalnego parsera
+        setPreview(localPreview);
       }
-      setPreview({
-        numer_wz: json.nr_wz || '',
-        nr_zamowienia: json.nr_zamowienia || '',
-        odbiorca: json.odbiorca || '',
-        adres: json.adres_dostawy || '',
-        tel: json.osoba_kontaktowa || json.tel || '',
-        masa_kg: json.masa_kg || 0,
-        objetosc_m3: json.objetosc_m3 || 0,
-        ilosc_palet: json.ilosc_palet || 0,
-        uwagi: json.uwagi || '',
-      });
-    } catch (e) {
-      setError('Błąd połączenia z serwerem parsowania.');
+    } catch {
+      // Brak połączenia — użyj lokalnego parsera
+      setPreview(localPreview);
     } finally {
       setParsing(false);
     }
@@ -181,7 +302,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
             value={text}
             onChange={e => { setText(e.target.value); setError(null); }}
           />
-          <Button onClick={handleParse} disabled={!text.trim() || parsing} size="sm">
+          <Button onClick={handleParse} disabled={text.length === 0 || parsing} size="sm">
             {parsing ? 'Analizuję...' : 'Importuj'}
           </Button>
           {parsing && (
