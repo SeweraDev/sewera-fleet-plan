@@ -208,38 +208,19 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     }
   }
 
-  // Masa — search near "Waga netto razem:" (inline, before, or after)
+  // Masa — last standalone number before "RAZEM:" line
   let masa_kg = 0;
-  const wagaLineIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
-  if (wagaLineIdx >= 0) {
-    const inlineM = lines[wagaLineIdx].match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
-    if (inlineM && parseFloat(inlineM[1].replace(',', '.')) > 0) {
-      masa_kg = Math.ceil(parseFloat(inlineM[1].replace(',', '.')));
-    } else {
-      const afterNums: { val: number; dec: number }[] = [];
-      for (let i = wagaLineIdx + 1; i < Math.min(wagaLineIdx + 5, lines.length); i++) {
-        if (/^RAZEM/i.test(lines[i])) break;
-        const s = lines[i].replace(/\s/g, '');
-        const m = s.match(/^([\d,.]+)$/);
-        if (m) {
-          const dec = m[1].includes(',') ? m[1].split(',')[1].length : 0;
-          afterNums.push({ val: parseFloat(m[1].replace(',', '.')), dec });
-        }
-      }
-      const w2d = afterNums.filter(c => c.dec === 2);
-      if (w2d.length >= 1) {
-        masa_kg = Math.ceil(Math.max(...w2d.map(c => c.val)));
-      } else if (afterNums.length > 0) {
-        masa_kg = Math.ceil(afterNums[0].val);
-      }
-      if (masa_kg === 0) {
-        for (let i = Math.max(0, wagaLineIdx - 3); i < wagaLineIdx; i++) {
-          if (/^RAZEM/i.test(lines[i])) continue;
-          const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
-          if (m) masa_kg = Math.ceil(parseFloat(m[1].replace(',', '.')));
-        }
-      }
+  const razemIdx = lines.findIndex(l => /^RAZEM/i.test(l));
+  if (razemIdx > 0) {
+    for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
+      const s = lines[i].replace(/\s/g, '');
+      const m = s.match(/^([\d,.]+)$/);
+      if (m) { masa_kg = Math.ceil(parseFloat(m[1].replace(',', '.'))); break; }
     }
+  }
+  if (masa_kg === 0) {
+    const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
+    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(',', '.')) || 0);
   }
 
   // Palety
