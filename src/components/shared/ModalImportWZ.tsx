@@ -497,6 +497,7 @@ function parseWZText(rawText: string): WZImportData {
     /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
     /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
     /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
+    /^\d+\.\s/, /Lp\./, /Kod\s+towaru/i, /Kod\s+EAN/i, /Nazwa\s+towaru/i, /Termin\s+zap/i, /Wydano\s+na/i, /Informacje/i, /^Cena\s/i, /^Netto$/i,
   ];
 
   // Find SEWERA line index to skip the seller block
