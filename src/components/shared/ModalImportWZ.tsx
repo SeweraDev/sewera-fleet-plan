@@ -517,7 +517,22 @@ function parseWZText(rawText: string): WZImportData {
     const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
     const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     if (hasLegalForm || capsWords >= 3) {
-      odbiorca = line;
+      const parts: string[] = [line];
+      for (let j = i + 1; j < lines.length; j++) {
+        const next = lines[j];
+        if (/NIP|Adres\s+dostawy|^Budowa|Magazyn/i.test(next)) break;
+        if (SKIP_PATTERNS.some(p => p.test(next))) break;
+        // continuation of company name (e.g. KOMANDYTOWA)
+        const nextCaps = next.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
+        const isLegalCont = /SPÓŁKA|KOMANDYT|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(next);
+        const isAddr = /ul\.|al\.|os\.|pl\./i.test(next) || /\d{2}-\d{3}/.test(next);
+        if (isLegalCont || nextCaps >= 2 || isAddr) {
+          parts.push(next);
+        } else {
+          break;
+        }
+      }
+      odbiorca = parts.join(', ');
       break;
     }
   }
