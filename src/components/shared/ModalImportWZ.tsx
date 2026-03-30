@@ -597,7 +597,7 @@ function parseWZText(rawText: string): WZImportData {
     // Search backward from anchor (PDF column layout: Tel. before Adres dostawy)
     for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
       if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
-      const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+      const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
       if (telM) { tel = telM[1].trim(); break; }
     }
     // Search forward from anchor
@@ -608,7 +608,7 @@ function parseWZText(rawText: string): WZImportData {
         wystawilIdx >= 0 ? wystawilIdx : lines.length
       );
       for (let i = deliveryAnchor; i < effectiveEnd && i < lines.length; i++) {
-        const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+        const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
         if (telM) { tel = telM[1].trim(); break; }
       }
     }
