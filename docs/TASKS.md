@@ -1,5 +1,5 @@
 # TASKS.md — Aktualne zadania
-📅 Ostatnia aktualizacja: 2026-03-26
+📅 Ostatnia aktualizacja: 2026-03-30
 
 ---
 
@@ -40,6 +40,19 @@ Szczegóły w `docs/HISTORY_TASKS.md`
 - [x] **FIX-011** — parseSeweraDoc KROK 4: obsługa nagłówków OdbiorcaInformacje/NabywcaSprzedawca ✅ 2026-03-26
 - [x] **FIX-012** — parseSeweraDoc KROK 5: nazwaObiektu (Budowa/Plac/Hala...) jako prefix adresu ✅ 2026-03-26
 - [x] **FIX-013** — parse-wz-pdf: console.log AFTER_CLEAN_START do debugowania dekodowania PUA ✅ 2026-03-26
+- [x] **FIX-014** — decodePUA: generyczny dekoder (offset = Unicode codepoint) zamiast ręcznej mapy ✅ 2026-03-30
+- [x] **FIX-015** — decodePUA: baza 0x100000 (Supplementary PUA-B) — root cause błędu dekodowania ✅ 2026-03-30
+- [x] **FIX-016** — cleanText: rozszerzony regex o U+2000-U+215F (dashes, cudzysłowy, €) ✅ 2026-03-30
+- [x] **FIX-017** — masa_kg: ostatnia liczba przed RAZEM: (obsługuje PDF table layout) ✅ 2026-03-30
+- [x] **FIX-018** — adres: 4 priorytety (forward, backward, Budowa, siedziba firmy) ✅ 2026-03-30
+- [x] **FIX-019** — tel: backward + forward od delivery anchor, obsługa myślników ✅ 2026-03-30
+- [x] **FIX-020** — uwagi: obsługa "Uwagi dot. wysyłki:", stop na "Wystawił:" ✅ 2026-03-30
+- [x] **FIX-021** — os.kontaktowa: regex na pełnym tekście, zbiera WSZYSTKIE kontakty + tel ✅ 2026-03-30
+- [x] **FIX-022** — odbiorca: skip pozycji towarowych, producentów w nawiasach, S.A.?, S.C. ✅ 2026-03-30
+- [x] **FIX-023** — odbiorca: nazwa + adres siedziby + kontynuacja nazwy firmy ✅ 2026-03-30
+- [x] **FIX-024** — WZS: obsługa prefixu WZS oprócz WZ ✅ 2026-03-30
+- [x] **FIX-025** — m³/palety: wyłączona auto-ekstrakcja z nazw towarów (ręczne wpisywanie) ✅ 2026-03-30
+- [x] **FIX-026** — merge PasteTab: fallback na local parser dla osoba_kontaktowa ✅ 2026-03-30
 
 ---
 
@@ -59,3 +72,5 @@ Możliwe kierunki:
 - [ ] Odbiorca w zleceniu ZL-MMVWSC9C jest błędny
   (wpisano sprzedawcę zamiast odbiorcy)
   Fix ręczny: dyspozytor → ✏️ edytuj zlecenie
+- [ ] Edge function parse-wz-pdf na Supabase wymaga redeployu z nowym decodePUA (baza 0x100000)
+- [ ] Lovable 2-way sync z GitHub nie działa (gitsync 403) — zmiany wklejane ręcznie

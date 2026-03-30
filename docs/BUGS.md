@@ -1,5 +1,5 @@
 # BUGS.md — Znane błędy i status
-📅 Ostatnia aktualizacja: 2026-03-26
+📅 Ostatnia aktualizacja: 2026-03-30
 
 ---
 
@@ -47,6 +47,26 @@ Masa: 25 kg (błąd) zamiast 375 kg
 ---
 
 ## ✅ NAPRAWIONE
+
+### BUG-F26 — merge PasteTab nadpisywał osoba_kontaktowa na null
+**Naprawiony:** 2026-03-30
+**Fix:** Zmieniono `json.osoba_kontaktowa || null` na `|| local.osoba_kontaktowa`
+
+### BUG-F25 — m³ i palety wyciągane z nazw towarów
+**Naprawiony:** 2026-03-30
+**Fix:** Wyłączona auto-ekstrakcja palet; m³ tylko z standalone summary lines
+
+### BUG-F24 — os.kontaktowa pusta (sklejone linie po PUA decode)
+**Naprawiony:** 2026-03-30
+**Fix:** Regex na pełnym tekście zamiast line-by-line; zbiera wszystkie kontakty
+
+### BUG-F23 — odbiorca łapał pozycje towarowe i producentów
+**Naprawiony:** 2026-03-30
+**Fix:** Skip `^\d+\.`, producentów w nawiasach, kodów produktów; S.A.?/S.C. w hasLegalForm
+
+### BUG-F22 — decodePUA nie dekodowała znaków U+100000+ (Supplementary PUA-B)
+**Naprawiony:** 2026-03-30
+**Fix:** Dodano bazę 0x100000 do tablicy bases. Root cause: Ekonom ERP koduje w PUA-B, nie PUA-A
 
 ### BUG-F21 — decodePUA nie obsługiwała zakresu F000
 **Naprawiony:** 2026-03-26

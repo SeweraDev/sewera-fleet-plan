@@ -54,7 +54,7 @@ Szczegóły w `docs/HISTORY_TASKS.md` (sekcja Migracje).
 
 | Funkcja | Opis |
 |---------|------|
-| `parse-wz-pdf` | Parsowanie PDF/tekstu z danymi WZ (dual PUA decode 0xE000+0xF000, obsługa PZ i WZ) |
+| `parse-wz-pdf` | Parsowanie PDF/tekstu z danymi WZ (generyczny PUA decode 0xE000/0xF000/0x10000/0x100000 + Win-1250, obsługa WZ/WZS/PZ) |
 | `parse-wz-xls` | Parsowanie XLS z danymi WZ |
 | `parse-excel-plan` | Parser planu kursów z Excela |
 | `check-deadline-wz` | Cron — sprawdzanie deadline WZ |

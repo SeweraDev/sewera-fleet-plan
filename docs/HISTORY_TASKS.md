@@ -1,5 +1,5 @@
 # HISTORY_TASKS.md — Historia ukończonych zadań
-📅 Ostatnia aktualizacja: 2026-03-26
+📅 Ostatnia aktualizacja: 2026-03-30
 
 ---
 
@@ -57,6 +57,19 @@
 | FIX-011 | parseSeweraDoc KROK 4: nagłówki PZ | 2026-03-26 |
 | FIX-012 | parseSeweraDoc KROK 5: nazwaObiektu prefix | 2026-03-26 |
 | FIX-013 | parse-wz-pdf: debug log AFTER_CLEAN | 2026-03-26 |
+| FIX-014 | decodePUA: generyczny dekoder (offset = Unicode codepoint) | 2026-03-30 |
+| FIX-015 | decodePUA: baza 0x100000 (Supplementary PUA-B) — root cause | 2026-03-30 |
+| FIX-016 | cleanText: rozszerzony regex U+2000-U+215F | 2026-03-30 |
+| FIX-017 | masa_kg: ostatnia liczba przed RAZEM: | 2026-03-30 |
+| FIX-018 | adres: 4 priorytety (forward, backward, Budowa, siedziba) | 2026-03-30 |
+| FIX-019 | tel: backward+forward, myślniki | 2026-03-30 |
+| FIX-020 | uwagi: "Uwagi dot. wysyłki:", stop "Wystawił:" | 2026-03-30 |
+| FIX-021 | os.kontaktowa: pełny tekst, multi-kontakt | 2026-03-30 |
+| FIX-022 | odbiorca: skip pozycji, producentów, S.A.?/S.C. | 2026-03-30 |
+| FIX-023 | odbiorca: nazwa + adres siedziby | 2026-03-30 |
+| FIX-024 | WZS: obsługa prefixu WZS | 2026-03-30 |
+| FIX-025 | m³/palety: wyłączona auto-ekstrakcja | 2026-03-30 |
+| FIX-026 | merge: fallback local osoba_kontaktowa | 2026-03-30 |
 
 ---
 
