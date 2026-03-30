@@ -531,7 +531,17 @@ function parseWZText(rawText: string): WZImportData {
     const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
     const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     if (hasLegalForm || capsWords >= 3) {
-      odbiorca = line;
+      // Zbierz nazwę + adres siedziby (kolejne linie: ul., kod pocztowy, NIP)
+      const parts = [line];
+      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+        const nl = lines[j];
+        if (/NIP:|NR BDO:|Nr\s+ewid|Adres\s+dostawy|Budowa|Magazyn|Informacje|Termin/i.test(nl)) break;
+        if (/ul\.|al\.|os\.|pl\./i.test(nl) || /^\d{2}-\d{3}/.test(nl)) { parts.push(nl); continue; }
+        // Kontynuacja nazwy firmy (np. "KOMANDYTOWA" na osobnej linii)
+        if (/^[A-ZĄĆĘŁŃÓŚŹŻ]{3,}$/i.test(nl)) { parts.push(nl); continue; }
+        break;
+      }
+      odbiorca = parts.join(', ').replace(/,\s*,/g, ',');
       break;
     }
   }
