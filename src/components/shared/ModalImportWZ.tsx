@@ -424,6 +424,7 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
 
 /* ─── decodePUA — dekoduje znaki PUA z PDF (generyczny: offset = Unicode codepoint) ─── */
 function decodePUA(text: string): string {
+  console.log('DECODE INPUT', text.length, Array.from(text).slice(0,3).map(c => c.codePointAt(0)?.toString(16)));
   // Windows-1250 mapping for 0x80-0x9F (control chars in Unicode, useful chars in Win-1250)
   const win1250: Record<number, string> = {
     0x80:'€',0x82:'‚',0x84:'„',0x85:'…',0x86:'†',0x87:'‡',
