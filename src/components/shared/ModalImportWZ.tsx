@@ -565,18 +565,6 @@ function parseWZText(rawText: string): WZImportData {
       if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
     }
   }
-  // Priority 4: address from ODBIORCA block
-  if (!adres && odbiorca) {
-    const odbIdx = lines.indexOf(odbiorca);
-    if (odbIdx >= 0) {
-      for (let i = odbIdx + 1; i < Math.min(odbIdx + 3, lines.length); i++) {
-        if (/ul\.|al\.|os\.|pl\./i.test(lines[i]) || /\d{2}-\d{3}/.test(lines[i])) {
-          adres = lines[i];
-          break;
-        }
-      }
-    }
-  }
 
   // 5. tel — search near delivery section (backward + forward from Adres dostawy / Budowa)
   let tel: string | null = null;
