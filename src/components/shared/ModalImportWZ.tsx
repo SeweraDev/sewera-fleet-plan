@@ -620,8 +620,11 @@ function parseWZText(rawText: string): WZImportData {
 
   // 7. objetosc_m3
   let objetosc_m3 = 0;
-  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
-  if (objM) objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0;
+  for (const line of lines) {
+    if (/^\d+\.\s/.test(line) || /paczka|opak|wym\s/i.test(line)) continue;
+    const objM = line.match(/^([\d.,]+)\s*m[³3]$/i);
+    if (objM) { objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0; break; }
+  }
 
   // 8. ilosc_palet
   let ilosc_palet = 0;
