@@ -157,9 +157,11 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     SELLER_MARKERS, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
     /NIP:/i, /NR BDO:/i, /Adres\s+dostawy/i, /Waga\s+netto/i,
     /Nr\s+zam/i, /PALETA/i, /Tel\./i, /Os\.\s*kontaktowa/i,
-    /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i,
+    /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
     /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
     /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
+    /^\d+\.\s/, /Lp\./, /Kod\s+towaru/i, /Kod\s+EAN/i, /Nazwa\s+towaru/i,
+    /Termin\s+zap/i, /Wydano\s+na/i, /Informacje/i, /^Cena\s/i, /^Netto$/i,
   ];
   let seweraIdx = -1;
   for (let i = 0; i < lines.length; i++) {
@@ -169,24 +171,52 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
   for (let i = searchStart; i < lines.length; i++) {
     const line = lines[i];
     if (SKIP_PATTERNS.some(p => p.test(line))) continue;
-    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    if (/\(.*(?:SPÓŁKA|SP\.|S\.A\.|S\.C\.)/i.test(line)) continue;
+    if (/^[A-Z]{1,3}-\d/.test(line)) continue;
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
     const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     if (hasLegalForm || capsWords >= 3) { odbiorca = line; break; }
   }
 
   // Adres dostawy
   let adres: string | undefined;
-  const adresIdx = lines.findIndex(l => /^Adres\s+dostawy$/i.test(l));
+  const adresIdx = lines.findIndex(l => /Adres\s+dostawy/i.test(l));
   if (adresIdx >= 0) {
     const addrParts: string[] = [];
     for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
       const l = lines[i];
-      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi)/i.test(l)) break;
+      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano)/i.test(l)) break;
+      if (/^Budowa/i.test(l)) continue;
       if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
         addrParts.push(l);
       }
     }
     if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+  }
+  if (!adres && adresIdx >= 0) {
+    const addrParts: string[] = [];
+    for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
+      const l = lines[i];
+      if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
+      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
+      if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
+      if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
+    }
+    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+  }
+  if (!adres) {
+    const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+    if (budowaIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
+        const l = lines[i];
+        if (/^(Os\.\s*kontaktowa|Tel\.|Magazyn|Termin)/i.test(l)) break;
+        if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
+          addrParts.push(l);
+        }
+      }
+      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+    }
   }
   if (!adres && odbiorca) {
     const odbIdx = lines.indexOf(odbiorca);
@@ -201,10 +231,25 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
 
   // Telefon
   let tel: string | undefined;
-  if (adresIdx >= 0) {
-    for (let i = adresIdx; i < Math.min(adresIdx + 10, lines.length); i++) {
-      const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+  const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
+  const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+  const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
+  if (deliveryAnchor >= 0) {
+    for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
+      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
+      const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
       if (telM) { tel = telM[1].trim(); break; }
+    }
+    if (!tel) {
+      const telEndIdx = lines.findIndex((l, i) => i > deliveryAnchor && /Nr\s+zam|Uwagi|PALETA|Waga|Lp\./i.test(l));
+      const effectiveEnd = Math.min(
+        telEndIdx >= 0 ? telEndIdx : deliveryAnchor + 10,
+        wystawilIdx >= 0 ? wystawilIdx : lines.length
+      );
+      for (let i = deliveryAnchor; i < effectiveEnd && i < lines.length; i++) {
+        const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
+        if (telM) { tel = telM[1].trim(); break; }
+      }
     }
   }
 
@@ -234,12 +279,12 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
 
   // Uwagi
   let uwagi: string | undefined;
-  const uwagiIdx = lines.findIndex(l => /^Uwagi\s*:/i.test(l));
+  const uwagiIdx = lines.findIndex(l => /^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(l));
   if (uwagiIdx >= 0) {
     const afterLines: string[] = [];
     for (let i = uwagiIdx + 1; i < lines.length; i++) {
       const l = lines[i];
-      if (/Na\s+podstawie\s+art/i.test(l)) break;
+      if (/Na\s+podstawie\s+art|^Wystawił/i.test(l)) break;
       if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
       if (/Nr\s+oferty/i.test(l)) continue;
       afterLines.push(l);
