@@ -523,7 +523,7 @@ function parseWZText(rawText: string): WZImportData {
   for (let i = searchStart; i < lines.length; i++) {
     const line = lines[i];
     if (SKIP_PATTERNS.some(p => p.test(line))) continue;
-    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
     const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     if (hasLegalForm || capsWords >= 3) {
       odbiorca = line;
@@ -603,11 +603,11 @@ function parseWZText(rawText: string): WZImportData {
     if (inlineM && parseFloat(inlineM[1].replace(',', '.')) > 0) {
       masa_kg = Math.ceil(parseFloat(inlineM[1].replace(',', '.')));
     } else {
-      // Collect standalone numbers from line before and lines after (up to RAZEM)
+      // Collect standalone numbers from up to 3 lines before and lines after (up to RAZEM)
       const candidates: number[] = [];
-      if (wagaLineIdx > 0) {
-        const prev = lines[wagaLineIdx - 1].replace(/\s/g, '');
-        const m = prev.match(/^([\d,.]+)$/);
+      for (let i = Math.max(0, wagaLineIdx - 3); i < wagaLineIdx; i++) {
+        if (/^RAZEM/i.test(lines[i])) continue;
+        const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
         if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
       }
       for (let i = wagaLineIdx + 1; i < Math.min(wagaLineIdx + 5, lines.length); i++) {

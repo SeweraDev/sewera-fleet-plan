@@ -217,9 +217,10 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
       masa_kg = Math.ceil(parseFloat(inlineM[1].replace(',', '.')));
     } else {
       const candidates: number[] = [];
-      if (wagaLineIdx > 0) {
-        const prev = lines[wagaLineIdx - 1].replace(/\s/g, '').match(/^([\d,.]+)$/);
-        if (prev) candidates.push(parseFloat(prev[1].replace(',', '.')));
+      for (let i = Math.max(0, wagaLineIdx - 3); i < wagaLineIdx; i++) {
+        if (/^RAZEM/i.test(lines[i])) continue;
+        const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
+        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
       }
       for (let i = wagaLineIdx + 1; i < Math.min(wagaLineIdx + 5, lines.length); i++) {
         if (/^RAZEM/i.test(lines[i])) break;
