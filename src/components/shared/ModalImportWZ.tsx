@@ -656,11 +656,25 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line
+  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line, with optional tel on same/next line
   let osoba_kontaktowa: string | null = null;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const osM = line.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)+)/i);
-    if (osM) { osoba_kontaktowa = osM[1].trim(); break; }
+    if (osM) {
+      let kontakt = osM[1].trim();
+      // Check same line for tel
+      const telSame = line.match(/Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
+      if (telSame) {
+        kontakt += ', tel. ' + telSame[1].trim();
+      } else if (i + 1 < lines.length) {
+        // Check next line for tel
+        const telNext = lines[i + 1].match(/^Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
+        if (telNext) kontakt += ', tel. ' + telNext[1].trim();
+      }
+      osoba_kontaktowa = kontakt;
+      break;
+    }
   }
 
   console.log('[parseWZText v7] result:', {
