@@ -436,44 +436,28 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   );
 }
 
-/* ─── decodePUA — dekoduje znaki PUA z PDF (identyczne jak edge function) ─── */
+/* ─── decodePUA — dekoduje znaki PUA z PDF (generyczny: offset = Unicode codepoint) ─── */
 function decodePUA(text: string): string {
-  const buildMap = (o: number): Record<number, string> => ({
-    [o+0x020]:' ',[o+0x021]:'!',[o+0x022]:'"',[o+0x023]:'#',
-    [o+0x024]:'$',[o+0x025]:'%',[o+0x026]:'&',[o+0x027]:"'",
-    [o+0x028]:'(',[o+0x029]:')',[o+0x02a]:'*',[o+0x02b]:'+',
-    [o+0x02c]:',',[o+0x02d]:'-',[o+0x02e]:'.',[o+0x02f]:'/',
-    [o+0x030]:'0',[o+0x031]:'1',[o+0x032]:'2',[o+0x033]:'3',
-    [o+0x034]:'4',[o+0x035]:'5',[o+0x036]:'6',[o+0x037]:'7',
-    [o+0x038]:'8',[o+0x039]:'9',[o+0x03a]:':',[o+0x03b]:';',
-    [o+0x03c]:'<',[o+0x03d]:'=',[o+0x03e]:'>',[o+0x03f]:'?',
-    [o+0x040]:'@',
-    [o+0x041]:'A',[o+0x042]:'B',[o+0x043]:'C',[o+0x044]:'D',
-    [o+0x045]:'E',[o+0x046]:'F',[o+0x047]:'G',[o+0x048]:'H',
-    [o+0x049]:'I',[o+0x04a]:'J',[o+0x04b]:'K',[o+0x04c]:'L',
-    [o+0x04d]:'M',[o+0x04e]:'N',[o+0x04f]:'O',[o+0x050]:'P',
-    [o+0x051]:'Q',[o+0x052]:'R',[o+0x053]:'S',[o+0x054]:'T',
-    [o+0x055]:'U',[o+0x056]:'V',[o+0x057]:'W',[o+0x058]:'X',
-    [o+0x059]:'Y',[o+0x05a]:'Z',[o+0x05b]:'[',[o+0x05c]:'\\',
-    [o+0x05d]:']',[o+0x05e]:'^',[o+0x05f]:'_',[o+0x060]:'`',
-    [o+0x061]:'a',[o+0x062]:'b',[o+0x063]:'c',[o+0x064]:'d',
-    [o+0x065]:'e',[o+0x066]:'f',[o+0x067]:'g',[o+0x068]:'h',
-    [o+0x069]:'i',[o+0x06a]:'j',[o+0x06b]:'k',[o+0x06c]:'l',
-    [o+0x06d]:'m',[o+0x06e]:'n',[o+0x06f]:'o',[o+0x070]:'p',
-    [o+0x071]:'q',[o+0x072]:'r',[o+0x073]:'s',[o+0x074]:'t',
-    [o+0x075]:'u',[o+0x076]:'v',[o+0x077]:'w',[o+0x078]:'x',
-    [o+0x079]:'y',[o+0x07a]:'z',[o+0x07b]:'{',[o+0x07c]:'|',[o+0x07d]:'}',[o+0x07e]:'~',
-    [o+0x100]:'Ą',[o+0x103]:'Ć',[o+0x104]:'Ę',[o+0x107]:'Ł',
-    [o+0x10b]:'Ń',[o+0x10f]:'Ó',[o+0x112]:'Ś',[o+0x118]:'Ź',
-    [o+0x119]:'Ż',[o+0x141]:'ą',[o+0x143]:'ć',[o+0x144]:'ę',
-    [o+0x147]:'ł',[o+0x14b]:'ń',[o+0x14f]:'ó',[o+0x152]:'ś',
-    [o+0x158]:'ź',[o+0x159]:'ż',
-    [o+0x082]:'„',[o+0x093]:'–',[o+0x080]:'€',
-  });
-  const map = { ...buildMap(0xe000), ...buildMap(0xf000), ...buildMap(0x10000) };
+  // Windows-1250 mapping for 0x80-0x9F (control chars in Unicode, useful chars in Win-1250)
+  const win1250: Record<number, string> = {
+    0x80:'€',0x82:'‚',0x84:'„',0x85:'…',0x86:'†',0x87:'‡',
+    0x89:'‰',0x8A:'Š',0x8B:'‹',0x8C:'Ś',0x8D:'Ť',0x8E:'Ž',0x8F:'Ź',
+    0x91:'\u2018',0x92:'\u2019',0x93:'\u201C',0x94:'\u201D',
+    0x95:'•',0x96:'–',0x97:'—',0x99:'™',
+    0x9A:'š',0x9B:'›',0x9C:'ś',0x9D:'ť',0x9E:'ž',0x9F:'ź',
+  };
+  const bases = [0xE000, 0xF000, 0x10000];
   return Array.from(text).map(ch => {
     const cp = ch.codePointAt(0) ?? 0;
-    return map[cp] ?? ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000 ? '' : ch);
+    for (const base of bases) {
+      const off = cp - base;
+      if (off >= 0x20 && off <= 0x24F) {
+        if (off >= 0x80 && off <= 0x9F) return win1250[off] ?? '';
+        return String.fromCodePoint(off);
+      }
+    }
+    if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0x10000) return '';
+    return ch;
   }).join('');
 }
 
@@ -481,7 +465,7 @@ function decodePUA(text: string): string {
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .replace(/[^\x20-\x7E\u00A0-\u024F\u2010-\u2027\u2030-\u205E\u20A0-\u20CF\n\r\t]/g, '')
+    .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u215F\n\r\t]/g, '')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/(\n\s*){3,}/g, '\n\n');
 }
