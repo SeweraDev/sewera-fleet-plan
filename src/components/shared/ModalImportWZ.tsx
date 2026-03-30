@@ -658,8 +658,9 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line, with optional tel on same/next line
+  // 10. osoba_kontaktowa — collect ALL contacts from "Os. kontaktowa:" section
   let osoba_kontaktowa: string | null = null;
+  const contacts: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const osM = line.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)+)/i);
@@ -668,16 +669,34 @@ function parseWZText(rawText: string): WZImportData {
       // Check same line for tel
       const telSame = line.match(/Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
       if (telSame) {
-        kontakt += ', tel. ' + telSame[1].trim();
+        kontakt += ' tel. ' + telSame[1].trim();
       } else if (i + 1 < lines.length) {
-        // Check next line for tel
         const telNext = lines[i + 1].match(/^Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
-        if (telNext) kontakt += ', tel. ' + telNext[1].trim();
+        if (telNext) { kontakt += ' tel. ' + telNext[1].trim(); i++; }
       }
-      osoba_kontaktowa = kontakt;
+      contacts.push(kontakt);
+      // Continue scanning next lines for more contacts
+      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+        const nl = lines[j];
+        // Stop on section breaks
+        if (/^(Uwagi|Nr\s+zam|PALETA|Waga|Adres|Budowa|Magazyn|Termin|Wydano|Na\s+podstawie|Wystawił|RAZEM)/i.test(nl)) break;
+        // "Marcin Kot tel. 694 447 293" or "p. Karolina 780 122 943"
+        const personTel = nl.match(/^(?:p\.\s*)?([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)*)\s+(?:tel\.?\s*:?\s*)?([\d\s\-]{9,})/i);
+        if (personTel) {
+          contacts.push(personTel[1].trim() + ' tel. ' + personTel[2].trim());
+          continue;
+        }
+        // Standalone "Tel.: 602 303 264" — attach to last contact if it has no tel yet
+        const standaloneTel = nl.match(/^Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
+        if (standaloneTel && contacts.length > 0 && !/tel\./i.test(contacts[contacts.length - 1])) {
+          contacts[contacts.length - 1] += ' tel. ' + standaloneTel[1].trim();
+          continue;
+        }
+      }
       break;
     }
   }
+  if (contacts.length > 0) osoba_kontaktowa = contacts.join(', ');
 
   console.log('[parseWZText v7] result:', {
     numer_wz, nr_zamowienia, odbiorca, adres, tel, osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
