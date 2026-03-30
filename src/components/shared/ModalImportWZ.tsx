@@ -603,21 +603,30 @@ function parseWZText(rawText: string): WZImportData {
     if (inlineM && parseFloat(inlineM[1].replace(',', '.')) > 0) {
       masa_kg = Math.ceil(parseFloat(inlineM[1].replace(',', '.')));
     } else {
-      // Collect standalone numbers from up to 3 lines before and lines after (up to RAZEM)
-      const candidates: number[] = [];
-      for (let i = Math.max(0, wagaLineIdx - 3); i < wagaLineIdx; i++) {
-        if (/^RAZEM/i.test(lines[i])) continue;
-        const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
-        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
-      }
+      // After label: prefer number with exactly 2 decimal places (weight format), else first
+      const afterNums: { val: number; dec: number }[] = [];
       for (let i = wagaLineIdx + 1; i < Math.min(wagaLineIdx + 5, lines.length); i++) {
         if (/^RAZEM/i.test(lines[i])) break;
-        const stripped = lines[i].replace(/\s/g, '');
-        const m = stripped.match(/^([\d,.]+)$/);
-        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
+        const s = lines[i].replace(/\s/g, '');
+        const m = s.match(/^([\d,.]+)$/);
+        if (m) {
+          const dec = m[1].includes(',') ? m[1].split(',')[1].length : 0;
+          afterNums.push({ val: parseFloat(m[1].replace(',', '.')), dec });
+        }
       }
-      if (candidates.length > 0) {
-        masa_kg = Math.ceil(Math.max(...candidates));
+      const w2d = afterNums.filter(c => c.dec === 2);
+      if (w2d.length >= 1) {
+        masa_kg = Math.ceil(Math.max(...w2d.map(c => c.val)));
+      } else if (afterNums.length > 0) {
+        masa_kg = Math.ceil(afterNums[0].val);
+      }
+      // Before label: last standalone number (skip RAZEM lines)
+      if (masa_kg === 0) {
+        for (let i = Math.max(0, wagaLineIdx - 3); i < wagaLineIdx; i++) {
+          if (/^RAZEM/i.test(lines[i])) continue;
+          const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
+          if (m) masa_kg = Math.ceil(parseFloat(m[1].replace(',', '.')));
+        }
       }
     }
   }

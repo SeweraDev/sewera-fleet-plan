@@ -216,18 +216,29 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     if (inlineM && parseFloat(inlineM[1].replace(',', '.')) > 0) {
       masa_kg = Math.ceil(parseFloat(inlineM[1].replace(',', '.')));
     } else {
-      const candidates: number[] = [];
-      for (let i = Math.max(0, wagaLineIdx - 3); i < wagaLineIdx; i++) {
-        if (/^RAZEM/i.test(lines[i])) continue;
-        const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
-        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
-      }
+      const afterNums: { val: number; dec: number }[] = [];
       for (let i = wagaLineIdx + 1; i < Math.min(wagaLineIdx + 5, lines.length); i++) {
         if (/^RAZEM/i.test(lines[i])) break;
-        const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
-        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
+        const s = lines[i].replace(/\s/g, '');
+        const m = s.match(/^([\d,.]+)$/);
+        if (m) {
+          const dec = m[1].includes(',') ? m[1].split(',')[1].length : 0;
+          afterNums.push({ val: parseFloat(m[1].replace(',', '.')), dec });
+        }
       }
-      if (candidates.length > 0) masa_kg = Math.ceil(Math.max(...candidates));
+      const w2d = afterNums.filter(c => c.dec === 2);
+      if (w2d.length >= 1) {
+        masa_kg = Math.ceil(Math.max(...w2d.map(c => c.val)));
+      } else if (afterNums.length > 0) {
+        masa_kg = Math.ceil(afterNums[0].val);
+      }
+      if (masa_kg === 0) {
+        for (let i = Math.max(0, wagaLineIdx - 3); i < wagaLineIdx; i++) {
+          if (/^RAZEM/i.test(lines[i])) continue;
+          const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
+          if (m) masa_kg = Math.ceil(parseFloat(m[1].replace(',', '.')));
+        }
+      }
     }
   }
 
