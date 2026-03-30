@@ -741,7 +741,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
           odbiorca: json.odbiorca || local.odbiorca,
           adres: json.adres_dostawy || local.adres,
           tel: json.osoba_kontaktowa || json.tel || local.tel,
-          osoba_kontaktowa: json.osoba_kontaktowa || null,
+          osoba_kontaktowa: json.osoba_kontaktowa || local.osoba_kontaktowa,
           masa_kg: json.masa_kg || local.masa_kg,
           ilosc_palet: json.ilosc_palet || local.ilosc_palet,
           objetosc_m3: json.objetosc_m3 || local.objetosc_m3,
