@@ -208,16 +208,25 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     }
   }
 
-  // Masa — value after label OR on preceding line (PDF table layout)
+  // Masa — search near "Waga netto razem:" (inline, before, or after)
   let masa_kg = 0;
-  const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
-  if (wagaM && parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) > 0) {
-    masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
-  } else {
-    const wagaIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
-    if (wagaIdx > 0) {
-      const prevNum = lines[wagaIdx - 1].replace(/\s/g, '').match(/^([\d,.]+)$/);
-      if (prevNum) masa_kg = Math.ceil(parseFloat(prevNum[1].replace(',', '.')) || 0);
+  const wagaLineIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
+  if (wagaLineIdx >= 0) {
+    const inlineM = lines[wagaLineIdx].match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
+    if (inlineM && parseFloat(inlineM[1].replace(',', '.')) > 0) {
+      masa_kg = Math.ceil(parseFloat(inlineM[1].replace(',', '.')));
+    } else {
+      const candidates: number[] = [];
+      if (wagaLineIdx > 0) {
+        const prev = lines[wagaLineIdx - 1].replace(/\s/g, '').match(/^([\d,.]+)$/);
+        if (prev) candidates.push(parseFloat(prev[1].replace(',', '.')));
+      }
+      for (let i = wagaLineIdx + 1; i < Math.min(wagaLineIdx + 5, lines.length); i++) {
+        if (/^RAZEM/i.test(lines[i])) break;
+        const m = lines[i].replace(/\s/g, '').match(/^([\d,.]+)$/);
+        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
+      }
+      if (candidates.length > 0) masa_kg = Math.ceil(Math.max(...candidates));
     }
   }
 

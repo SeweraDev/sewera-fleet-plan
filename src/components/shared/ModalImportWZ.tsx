@@ -531,14 +531,14 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 4. adres_dostawy — priority 1: "Adres dostawy" section
+  // 4. adres_dostawy — priority 1: "Adres dostawy" section (standalone or in longer line)
   let adres: string | null = null;
-  const adresIdx = lines.findIndex(l => /^Adres\s+dostawy$/i.test(l));
+  const adresIdx = lines.findIndex(l => /Adres\s+dostawy/i.test(l));
   if (adresIdx >= 0) {
     const addrParts: string[] = [];
     for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
       const l = lines[i];
-      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi)/i.test(l)) break;
+      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano)/i.test(l)) break;
       if (/^Budowa/i.test(l)) continue;
       if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
         addrParts.push(l);
@@ -546,7 +546,22 @@ function parseWZText(rawText: string): WZImportData {
     }
     if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
   }
-  // Priority 2: address from ODBIORCA block (line after odbiorca name)
+  // Priority 2: "Budowa" line as delivery location — address on lines after it
+  if (!adres) {
+    const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+    if (budowaIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
+        const l = lines[i];
+        if (/^(Os\.\s*kontaktowa|Tel\.|Magazyn|Termin|Nr\s+zam)/i.test(l)) break;
+        if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
+          addrParts.push(l);
+        }
+      }
+      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+    }
+  }
+  // Priority 3: address from ODBIORCA block (line after odbiorca name)
   if (!adres && odbiorca) {
     const odbIdx = lines.indexOf(odbiorca);
     if (odbIdx >= 0) {
@@ -559,34 +574,51 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 5. tel — ONLY from "Adres dostawy" section, NOT from footer (after "Wystawił:")
+  // 5. tel — from delivery section (near Budowa/Adres dostawy), NOT from footer
   let tel: string | null = null;
   const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
-  if (adresIdx >= 0) {
-    // Only search between "Adres dostawy" and either "Nr zam" or end of address section
-    const telEndIdx = Math.min(
-      lines.findIndex((l, i) => i > adresIdx && /Nr\s+zam|Uwagi|PALETA|Waga/i.test(l)),
+  // Search area: from Budowa or Adres dostawy to Magazyn/Waga/Uwagi
+  const telSearchStart = Math.max(
+    lines.findIndex(l => /^Budowa/i.test(l)),
+    adresIdx >= 0 ? adresIdx : 0
+  );
+  if (telSearchStart >= 0) {
+    const telEndIdx = lines.findIndex((l, i) => i > telSearchStart && /Nr\s+zam|Uwagi|PALETA|Waga|Magazyn|Lp\./i.test(l));
+    const effectiveEnd = Math.min(
+      telEndIdx >= 0 ? telEndIdx : telSearchStart + 10,
       wystawilIdx >= 0 ? wystawilIdx : lines.length
     );
-    const effectiveEnd = telEndIdx >= 0 ? telEndIdx : adresIdx + 10;
-    for (let i = adresIdx; i < effectiveEnd && i < lines.length; i++) {
+    for (let i = telSearchStart; i < effectiveEnd && i < lines.length; i++) {
       const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
       if (telM) { tel = telM[1].trim(); break; }
     }
   }
 
-  // 6. masa_kg — "Waga netto razem:" — value after label OR on preceding line
+  // 6. masa_kg — search near "Waga netto razem:" label (inline, before, or after)
   let masa_kg = 0;
-  const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
-  if (wagaM && parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) > 0) {
-    masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
-  } else {
-    // PDF table layout: value on line BEFORE "Waga netto razem:" label
-    const wagaIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
-    if (wagaIdx > 0) {
-      const prevLine = lines[wagaIdx - 1].replace(/\s/g, '');
-      const prevNum = prevLine.match(/^([\d,.]+)$/);
-      if (prevNum) masa_kg = Math.ceil(parseFloat(prevNum[1].replace(',', '.')) || 0);
+  const wagaLineIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
+  if (wagaLineIdx >= 0) {
+    // Try inline first (number on same line after label)
+    const inlineM = lines[wagaLineIdx].match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
+    if (inlineM && parseFloat(inlineM[1].replace(',', '.')) > 0) {
+      masa_kg = Math.ceil(parseFloat(inlineM[1].replace(',', '.')));
+    } else {
+      // Collect standalone numbers from line before and lines after (up to RAZEM)
+      const candidates: number[] = [];
+      if (wagaLineIdx > 0) {
+        const prev = lines[wagaLineIdx - 1].replace(/\s/g, '');
+        const m = prev.match(/^([\d,.]+)$/);
+        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
+      }
+      for (let i = wagaLineIdx + 1; i < Math.min(wagaLineIdx + 5, lines.length); i++) {
+        if (/^RAZEM/i.test(lines[i])) break;
+        const stripped = lines[i].replace(/\s/g, '');
+        const m = stripped.match(/^([\d,.]+)$/);
+        if (m) candidates.push(parseFloat(m[1].replace(',', '.')));
+      }
+      if (candidates.length > 0) {
+        masa_kg = Math.ceil(Math.max(...candidates));
+      }
     }
   }
 
