@@ -745,7 +745,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
       )}
       <div className="flex items-center gap-2">
         <Button onClick={parse} disabled={text.length === 0 || parsing} size="sm">
-          {parsing ? 'Analizuję...' : 'Parsuj tekst'}
+          {parsing ? 'Analizuję...' : 'Parsuj tekst v7'}
         </Button>
         <span className="text-xs text-muted-foreground">parser v5</span>
       </div>
