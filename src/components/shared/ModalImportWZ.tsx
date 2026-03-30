@@ -681,6 +681,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const hasPUA = Array.from(text).some(ch => { const cp = ch.codePointAt(0) ?? 0; return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000; });
 
   const parse = async () => {
+    console.log('DEBUG PARSE', text.length, text.slice(0, 20));
     if (text.length === 0) return;
     console.log('PARSE START', text.length);
     setParsing(true);
