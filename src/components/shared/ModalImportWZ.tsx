@@ -665,13 +665,20 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  console.log('[parseWZText v5] result:', {
-    numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line
+  let osoba_kontaktowa: string | null = null;
+  for (const line of lines) {
+    const osM = line.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)+)/i);
+    if (osM) { osoba_kontaktowa = osM[1].trim(); break; }
+  }
+
+  console.log('[parseWZText v7] result:', {
+    numer_wz, nr_zamowienia, odbiorca, adres, tel, osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
   });
 
   return {
     numer_wz, nr_zamowienia, odbiorca, adres, tel,
-    osoba_kontaktowa: null, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+    osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
     typ_dokumentu: 'WZ' as string | null, ma_adres_dostawy: false,
   };
 }
@@ -772,10 +779,12 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
             ['Nr zamówienia', result.nr_zamowienia],
             ['Odbiorca', result.odbiorca],
             ['Adres', result.adres],
+            ['Os. kontaktowa', result.osoba_kontaktowa],
             ['Telefon', result.tel],
             ['Masa kg', formatMasaKg(result.masa_kg)],
             ['Ilość palet', result.ilosc_palet?.toString()],
             ['Objętość m³', result.objetosc_m3?.toString()],
+            ['Uwagi', result.uwagi],
           ] as [string, string | undefined | null][]).map(([label, val]) => (
             <div key={label} className="flex items-center gap-2 text-sm">
               <span className="w-4">{val ? '✓' : '⚠️'}</span>
