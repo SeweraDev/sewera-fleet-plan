@@ -1,13 +1,13 @@
-import { useState, useRef, useCallback } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useRef, useCallback } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface WZImportData {
   numer_wz: string | null;
@@ -69,20 +69,20 @@ function ConfidenceBadge({ pewnosc, totalFields }: { pewnosc: number; totalField
   const fieldsFound = Math.round((pewnosc / 100) * 16);
   if (pewnosc >= 80) {
     return (
-      <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 p-2 rounded">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-sm font-medium">
         ✅ Odczytano {fieldsFound}/16 pól
       </div>
     );
   }
   if (pewnosc >= 50) {
     return (
-      <div className="flex items-center gap-2 text-sm text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 p-2 rounded">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 text-sm font-medium">
         ⚠️ Odczytano częściowo — sprawdź pola
       </div>
     );
   }
   return (
-    <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 p-2 rounded">
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-sm font-medium">
       ❌ Słaby odczyt — uzupełnij ręcznie
     </div>
   );
@@ -96,28 +96,32 @@ function PozycjePreview({ pozycje }: { pozycje: Pozycja[] }) {
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="w-full justify-start text-xs">
-          {open ? '▼' : '▶'} 📦 Pozycje z WZ ({pozycje.length} pozycji)
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-muted-foreground text-xs hover:text-foreground"
+        >
+          {open ? "▼" : "▶"} 📦 Pozycje z WZ ({pozycje.length} pozycji)
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="max-h-40 overflow-auto border rounded">
+        <div className="max-h-40 overflow-auto border rounded-md mt-1">
           <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-muted">
-                <th className="p-1 text-left">Kod</th>
-                <th className="p-1 text-left">Nazwa</th>
-                <th className="p-1 text-right">Ilość</th>
-                <th className="p-1 text-left">JM</th>
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1 text-left">Kod</th>
+                <th className="px-2 py-1 text-left">Nazwa</th>
+                <th className="px-2 py-1 text-right">Ilość</th>
+                <th className="px-2 py-1 text-left">JM</th>
               </tr>
             </thead>
             <tbody>
               {pozycje.map((p, i) => (
-                <tr key={i} className="border-t">
-                  <td className="p-1">{p.kod_towaru}</td>
-                  <td className="p-1">{p.nazwa_towaru}</td>
-                  <td className="p-1 text-right">{p.ilosc}</td>
-                  <td className="p-1">{p.jm}</td>
+                <tr key={i} className="border-t border-muted/50">
+                  <td className="px-2 py-1 font-mono text-muted-foreground">{p.kod_towaru}</td>
+                  <td className="px-2 py-1">{p.nazwa_towaru}</td>
+                  <td className="px-2 py-1 text-right">{p.ilosc}</td>
+                  <td className="px-2 py-1 text-muted-foreground">{p.jm}</td>
                 </tr>
               ))}
             </tbody>
@@ -136,103 +140,117 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
   const [formData, setFormData] = useState<WZImportData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFile = useCallback(async (file: File) => {
-    const name = file.name.toLowerCase();
-    if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')) {
-      setError('Rozpoznawanie tekstu ze zdjęć wymaga ręcznego uzupełnienia.');
-      setTimeout(onSwitchManual, 2000);
-      return;
-    }
-    if (!name.endsWith('.pdf')) {
-      setError('Nieobsługiwany format. Wymagany PDF.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Plik za duży (max 10 MB)');
-      return;
-    }
+  const handleFile = useCallback(
+    async (file: File) => {
+      const name = file.name.toLowerCase();
+      if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")) {
+        setError("Rozpoznawanie tekstu ze zdjęć wymaga ręcznego uzupełnienia.");
+        setTimeout(onSwitchManual, 2000);
+        return;
+      }
+      if (!name.endsWith(".pdf")) {
+        setError("Nieobsługiwany format. Wymagany PDF.");
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setError("Plik za duży (max 10 MB)");
+        return;
+      }
 
-    setParsing(true);
-    setError(null);
-    setResult(null);
-    setFormData(null);
+      setParsing(true);
+      setError(null);
+      setResult(null);
+      setFormData(null);
 
-    const fd = new FormData();
-    fd.append('file', file);
+      const fd = new FormData();
+      fd.append("file", file);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
-      {
-        method: 'POST',
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`, {
+        method: "POST",
         headers: { Authorization: `Bearer ${session?.access_token}` },
         body: fd,
+      });
+      const json: ParsedPdfResult = await res.json();
+      setParsing(false);
+
+      if (json.error) {
+        setError(json.error);
+        return;
       }
-    );
-    const json: ParsedPdfResult = await res.json();
-    setParsing(false);
 
-    if (json.error) {
-      setError(json.error);
-      return;
-    }
+      setResult(json);
 
-    setResult(json);
+      console.log("EDGE FUNCTION RESPONSE:", JSON.stringify(json));
+      const mapped: WZImportData = {
+        numer_wz: json.nr_wz || "",
+        nr_zamowienia: json.nr_zamowienia || "",
+        odbiorca: json.odbiorca || "",
+        adres: json.adres_dostawy || "",
+        tel: json.osoba_kontaktowa || json.tel || "",
+        osoba_kontaktowa: json.osoba_kontaktowa || "",
+        masa_kg: json.masa_kg || 0,
+        ilosc_palet: json.ilosc_palet || 0,
+        objetosc_m3: json.objetosc_m3 || 0,
+        uwagi: json.uwagi || "",
+        typ_dokumentu: (json as any).typ_dokumentu || "WZ",
+        ma_adres_dostawy: (json as any).ma_adres_dostawy || false,
+      };
 
-    console.log("EDGE FUNCTION RESPONSE:", JSON.stringify(json));
-    const mapped: WZImportData = {
-      numer_wz: json.nr_wz || '',
-      nr_zamowienia: json.nr_zamowienia || '',
-      odbiorca: json.odbiorca || '',
-      adres: json.adres_dostawy || '',
-      tel: json.osoba_kontaktowa || json.tel || '',
-      osoba_kontaktowa: json.osoba_kontaktowa || '',
-      masa_kg: json.masa_kg || 0,
-      ilosc_palet: json.ilosc_palet || 0,
-      objetosc_m3: json.objetosc_m3 || 0,
-      uwagi: json.uwagi || '',
-      typ_dokumentu: (json as any).typ_dokumentu || 'WZ',
-      ma_adres_dostawy: (json as any).ma_adres_dostawy || false,
-    };
+      setFormData(mapped);
+    },
+    [onSwitchManual],
+  );
 
-    setFormData(mapped);
-  }, [onSwitchManual]);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
-  }, [handleFile]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    },
+    [handleFile],
+  );
 
   const fields: { key: keyof WZImportData; label: string; type?: string }[] = [
-    { key: 'numer_wz', label: 'Nr WZ' },
-    { key: 'nr_zamowienia', label: 'Nr zamówienia' },
-    { key: 'odbiorca', label: 'Odbiorca' },
-    { key: 'adres', label: 'Adres dostawy' },
-    { key: 'tel', label: 'Telefon' },
-    { key: 'masa_kg', label: 'Masa kg' },
-    { key: 'ilosc_palet', label: 'Ilość palet', type: 'number' },
-    { key: 'objetosc_m3', label: 'Objętość m³', type: 'number' },
-    { key: 'uwagi', label: 'Uwagi' },
+    { key: "numer_wz", label: "Nr WZ" },
+    { key: "nr_zamowienia", label: "Nr zamówienia" },
+    { key: "odbiorca", label: "Odbiorca" },
+    { key: "adres", label: "Adres dostawy" },
+    { key: "tel", label: "Telefon" },
+    { key: "masa_kg", label: "Masa kg" },
+    { key: "ilosc_palet", label: "Ilość palet", type: "number" },
+    { key: "objetosc_m3", label: "Objętość m³", type: "number" },
+    { key: "uwagi", label: "Uwagi" },
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div
-        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+        className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
         onClick={() => fileRef.current?.click()}
-        onDragOver={e => e.preventDefault()}
+        onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
       >
-        <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-        <p className="text-sm font-medium">📄 Przeciągnij PDF lub kliknij aby wybrać</p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
+        />
+        <p className="text-sm font-medium text-muted-foreground">📄 Przeciągnij PDF lub kliknij aby wybrać</p>
         <p className="text-xs text-muted-foreground mt-1">PDF do 10 MB · Zdjęcia → formularz ręczny</p>
       </div>
 
       {parsing && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-          <p>Analizuję dokument...</p>
+        <div className="text-center py-4">
+          <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+          <p className="text-sm text-muted-foreground mt-2">Analizuję dokument...</p>
         </div>
       )}
 
@@ -243,26 +261,34 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
           <ConfidenceBadge pewnosc={result.pewnosc} totalFields={16} />
 
           <div className="space-y-2">
-            {fields.map(f => {
+            {fields.map((f) => {
               const val = formData[f.key];
-              const found = val != null && val !== '' && val !== 0;
+              const found = val != null && val !== "" && val !== 0;
               return (
                 <div key={f.key} className="flex items-center gap-2">
-                  <span className="w-4 text-center">{found ? '✓' : '⚠️'}</span>
+                  <span className="text-sm w-4">{found ? "✓" : "⚠️"}</span>
                   <Label className="text-xs w-28 shrink-0">{f.label}</Label>
                   <Input
-                    className="h-7 text-sm"
-                    value={String(val ?? '')}
-                    onChange={e => {
+                    className="h-8 text-sm flex-1"
+                    type={f.type || "text"}
+                    value={f.key === "masa_kg" && typeof val === "number" ? formatMasaKg(val) : (val?.toString() ?? "")}
+                    onChange={(e) => {
                       const raw = e.target.value;
-                      setFormData(prev => prev ? {
-                        ...prev,
-                        [f.key]: f.type === 'number'
-                          ? (raw ? Number(raw) : null)
-                          : f.key === 'masa_kg'
-                            ? (parseFloat(raw.replace(/\s/g, '').replace(',', '.')) || 0)
-                            : raw,
-                      } : prev);
+                      setFormData((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              [f.key]:
+                                f.type === "number"
+                                  ? raw
+                                    ? Number(raw)
+                                    : null
+                                  : f.key === "masa_kg"
+                                    ? parseFloat(raw.replace(/\s/g, "").replace(",", ".")) || 0
+                                    : raw,
+                            }
+                          : prev,
+                      );
                     }}
                   />
                 </div>
@@ -272,7 +298,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
           {/* Extra info from parser */}
           {(result.osoba_kontaktowa || result.tel2 || result.nazwa_budowy) && (
-            <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+            <div className="text-xs text-muted-foreground space-y-0.5 p-2 bg-muted/30 rounded">
               {result.osoba_kontaktowa && <p>👤 Kontakt: {result.osoba_kontaktowa}</p>}
               {result.tel2 && <p>📞 Tel. dodatkowy: {result.tel2}</p>}
               {result.nazwa_budowy && <p>🏗️ Budowa: {result.nazwa_budowy}</p>}
@@ -281,7 +307,10 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
           )}
 
           <PozycjePreview pozycje={result.pozycje || []} />
-          <Button onClick={() => onParsed(formData)} className="w-full">✅ Użyj tych danych</Button>
+
+          <Button onClick={() => onParsed(formData)} className="w-full">
+            ✅ Użyj tych danych
+          </Button>
         </div>
       )}
     </div>
@@ -298,7 +327,7 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
 
   const handleFile = useCallback(async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
-      setError('Plik za duży (max 10 MB)');
+      setError("Plik za duży (max 10 MB)");
       return;
     }
     setParsing(true);
@@ -306,17 +335,16 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
     setRows([]);
 
     const fd = new FormData();
-    fd.append('file', file);
+    fd.append("file", file);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-excel-plan`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-        body: fd,
-      }
-    );
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-excel-plan`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+      body: fd,
+    });
     const json = await res.json();
     setParsing(false);
 
@@ -327,8 +355,8 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
 
     // Flatten all zlecenia from all kursy into a flat WZ list
     const allWz: (WZImportData & { typ_pojazdu?: string })[] = [];
-    for (const kurs of (json.kursy || [])) {
-      for (const zl of (kurs.zlecenia || [])) {
+    for (const kurs of json.kursy || []) {
+      for (const zl of kurs.zlecenia || []) {
         allWz.push({
           numer_wz: zl.nr_wz,
           nr_zamowienia: null,
@@ -339,8 +367,8 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
           masa_kg: zl.masa_kg,
           ilosc_palet: null,
           objetosc_m3: null,
-          uwagi: [zl.rodzaj_dostawy, zl.uwagi].filter(Boolean).join('; ') || null,
-          typ_dokumentu: 'WZ',
+          uwagi: [zl.rodzaj_dostawy, zl.uwagi].filter(Boolean).join("; ") || null,
+          typ_dokumentu: "WZ",
           ma_adres_dostawy: false,
           typ_pojazdu: kurs.typ_pojazdu,
         });
@@ -357,53 +385,64 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div
-        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+        className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
         onClick={() => fileRef.current?.click()}
       >
-        <input ref={fileRef} type="file" accept=".xls,.xlsx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-        <p className="text-sm font-medium">📊 Wybierz plik Excel</p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xls,.xlsx"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
+        />
+        <p className="text-sm font-medium text-muted-foreground">📊 Wybierz plik Excel</p>
         <p className="text-xs text-muted-foreground mt-1">XLS, XLSX do 10 MB · Plan kursów z ERP</p>
       </div>
 
       {parsing && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-          <p>Analizuję arkusz...</p>
+        <div className="text-center py-4">
+          <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+          <p className="text-sm text-muted-foreground mt-2">Analizuję arkusz...</p>
         </div>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {rows.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <p className="text-sm font-medium">{rows.length} WZ znalezionych</p>
-          <div className="max-h-60 overflow-auto border rounded">
+          <div className="max-h-60 overflow-auto border rounded-md">
             <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-muted sticky top-0">
-                  <th className="p-1 w-8"></th>
-                  <th className="p-1 text-left">Nr WZ</th>
-                  <th className="p-1 text-left">Odbiorca</th>
-                  <th className="p-1 text-left">Adres</th>
-                  <th className="p-1 text-right">Kg</th>
-                  <th className="p-1 text-left">Typ</th>
+              <thead className="bg-muted/50 sticky top-0">
+                <tr>
+                  <th className="px-2 py-1 w-8"></th>
+                  <th className="px-2 py-1 text-left">Nr WZ</th>
+                  <th className="px-2 py-1 text-left">Odbiorca</th>
+                  <th className="px-2 py-1 text-left">Adres</th>
+                  <th className="px-2 py-1 text-right">Kg</th>
+                  <th className="px-2 py-1 text-left">Typ</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
                   <tr
                     key={i}
-                    className={`border-t cursor-pointer ${selected.has(i) ? 'bg-primary/10' : ''}`}
+                    className="border-t border-muted/50 cursor-pointer hover:bg-muted/30"
                     onClick={() => toggleRow(i)}
                   >
-                    <td className="p-1 text-center"><Checkbox checked={selected.has(i)} /></td>
-                    <td className="p-1">{r.numer_wz || '—'}</td>
-                    <td className="p-1">{r.odbiorca || '—'}</td>
-                    <td className="p-1">{r.adres || '—'}</td>
-                    <td className="p-1 text-right">{r.masa_kg ?? '—'}</td>
-                    <td className="p-1">{r.typ_pojazdu || '—'}</td>
+                    <td className="px-2 py-1">
+                      <Checkbox checked={selected.has(i)} />
+                    </td>
+                    <td className="px-2 py-1 font-mono">{r.numer_wz || "—"}</td>
+                    <td className="px-2 py-1 max-w-[120px] truncate">{r.odbiorca || "—"}</td>
+                    <td className="px-2 py-1 max-w-[120px] truncate">{r.adres || "—"}</td>
+                    <td className="px-2 py-1 text-right">{r.masa_kg ?? "—"}</td>
+                    <td className="px-2 py-1 text-muted-foreground">{r.typ_pojazdu || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -424,49 +463,75 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
 
 /* ─── decodePUA — dekoduje znaki PUA z PDF (generyczny: offset = Unicode codepoint) ─── */
 function decodePUA(text: string): string {
-  console.log('DECODE INPUT', text.length, Array.from(text).slice(0,3).map(c => c.codePointAt(0)?.toString(16)));
   // Windows-1250 mapping for 0x80-0x9F (control chars in Unicode, useful chars in Win-1250)
   const win1250: Record<number, string> = {
-    0x80:'€',0x82:'‚',0x84:'„',0x85:'…',0x86:'†',0x87:'‡',
-    0x89:'‰',0x8A:'Š',0x8B:'‹',0x8C:'Ś',0x8D:'Ť',0x8E:'Ž',0x8F:'Ź',
-    0x91:'\u2018',0x92:'\u2019',0x93:'\u201C',0x94:'\u201D',
-    0x95:'•',0x96:'–',0x97:'—',0x99:'™',
-    0x9A:'š',0x9B:'›',0x9C:'ś',0x9D:'ť',0x9E:'ž',0x9F:'ź',
+    0x80: "€",
+    0x82: "‚",
+    0x84: "„",
+    0x85: "…",
+    0x86: "†",
+    0x87: "‡",
+    0x89: "‰",
+    0x8a: "Š",
+    0x8b: "‹",
+    0x8c: "Ś",
+    0x8d: "Ť",
+    0x8e: "Ž",
+    0x8f: "Ź",
+    0x91: "\u2018",
+    0x92: "\u2019",
+    0x93: "\u201C",
+    0x94: "\u201D",
+    0x95: "•",
+    0x96: "–",
+    0x97: "—",
+    0x99: "™",
+    0x9a: "š",
+    0x9b: "›",
+    0x9c: "ś",
+    0x9d: "ť",
+    0x9e: "ž",
+    0x9f: "ź",
   };
-  const bases = [0xE000, 0xF000, 0x10000, 0x100000];
-  return Array.from(text).map(ch => {
-    const cp = ch.codePointAt(0) ?? 0;
-    for (const base of bases) {
-      const off = cp - base;
-      if (off >= 0x20 && off <= 0x24F) {
-        if (off >= 0x80 && off <= 0x9F) return win1250[off] ?? '';
-        return String.fromCodePoint(off);
+  const bases = [0xe000, 0xf000, 0x10000, 0x100000];
+  return Array.from(text)
+    .map((ch) => {
+      const cp = ch.codePointAt(0) ?? 0;
+      for (const base of bases) {
+        const off = cp - base;
+        if (off >= 0x20 && off <= 0x24f) {
+          if (off >= 0x80 && off <= 0x9f) return win1250[off] ?? "";
+          return String.fromCodePoint(off);
+        }
       }
-    }
-    if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0x10000) return '';
-    return ch;
-  }).join('');
+      if ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000) return "";
+      return ch;
+    })
+    .join("");
 }
 
 /* ─── cleanText — remove non-printable chars from PDF clipboard ─── */
 function cleanText(text: string): string {
   return text
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u215F\n\r\t]/g, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/(\n\s*){3,}/g, '\n\n');
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u215F\n\r\t]/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/(\n\s*){3,}/g, "\n\n");
 }
 
 /* ─── formatMasaKg — display with Polish thousands separator ─── */
 function formatMasaKg(masa: number | null | undefined): string {
-  if (!masa) return '';
-  return Math.ceil(masa).toLocaleString('pl-PL');
+  if (!masa) return "";
+  return Math.ceil(masa).toLocaleString("pl-PL");
 }
 
 /* ─── parseWZText — Ekonom WZ parser v5 ─── */
 function parseWZText(rawText: string): WZImportData {
   const text = cleanText(decodePUA(rawText));
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 
   // 1. nr_wz — handle WZ and WZS prefixes
   let numer_wz: string | null = null;
@@ -491,55 +556,87 @@ function parseWZText(rawText: string): WZImportData {
   let odbiorca: string | null = null;
   const SELLER_MARKERS = /SEWERA|KOŚCIUSZKI\s*326|NR\s*BDO:\s*000044503/i;
   const SKIP_PATTERNS = [
-    SELLER_MARKERS, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
-    /NIP:/i, /NR BDO:/i, /Adres\s+dostawy/i, /Waga\s+netto/i,
-    /Nr\s+zam/i, /PALETA/i, /Tel\./i, /Os\.\s*kontaktowa/i,
-    /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
-    /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
-    /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
-    /^\d+\.\s/, /Lp\./, /Kod\s+towaru/i, /Kod\s+EAN/i, /Nazwa\s+towaru/i, /Termin\s+zap/i, /Wydano\s+na/i, /Informacje/i, /^Cena\s/i, /^Netto$/i,
-    /^Wydruk/i, /Ekonom.*Proman/i, /^Strona\s+\d/i,
+    SELLER_MARKERS,
+    /ODDZIAŁ/i,
+    /^ul\./i,
+    /^al\./i,
+    /^os\./i,
+    /^pl\./i,
+    /NIP:/i,
+    /NR BDO:/i,
+    /Adres\s+dostawy/i,
+    /Waga\s+netto/i,
+    /Nr\s+zam/i,
+    /PALETA/i,
+    /Tel\./i,
+    /Os\.\s*kontaktowa/i,
+    /^\d{2}-\d{3}/,
+    /Katowice,\s*\d/,
+    /Uwagi/i,
+    /kontaktowa/i,
+    /Budowa/i,
+    /^\d+\s+(SZT|KG|M|OP|KPL)/i,
+    /Magazyn/i,
+    /^RAZEM/i,
+    /Wystawił/i,
+    /Na podstawie/i,
+    /Nr oferty/i,
+    /^\d+\.\s/,
+    /Lp\./,
+    /Kod\s+towaru/i,
+    /Kod\s+EAN/i,
+    /Nazwa\s+towaru/i,
+    /Termin\s+zap/i,
+    /Wydano\s+na/i,
+    /Informacje/i,
+    /^Cena\s/i,
+    /^Netto$/i,
   ];
 
   // Find SEWERA line index to skip the seller block
   let seweraIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (SELLER_MARKERS.test(lines[i])) { seweraIdx = i; break; }
+    if (SELLER_MARKERS.test(lines[i])) {
+      seweraIdx = i;
+      break;
+    }
   }
 
   // Search for odbiorca starting after SEWERA block
   const searchStart = seweraIdx >= 0 ? seweraIdx + 1 : 0;
   for (let i = searchStart; i < lines.length; i++) {
     const line = lines[i];
-    if (SKIP_PATTERNS.some(p => p.test(line))) continue;
+    if (SKIP_PATTERNS.some((p) => p.test(line))) continue;
+    // Skip product codes and manufacturer lines in parentheses
     if (/\(.*(?:SPÓŁKA|SP\.|S\.A\.|S\.C\.)/i.test(line)) continue;
     if (/^[A-Z]{1,3}-\d/.test(line)) continue;
-    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
-    const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const capsWords = line.split(/\s+/).filter((w) => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     if (hasLegalForm || capsWords >= 3) {
-      const parts: string[] = [line];
-      for (let j = i + 1; j < lines.length; j++) {
-        const next = lines[j];
-        if (/NIP|Adres\s+dostawy|^Budowa|Magazyn/i.test(next)) break;
-        if (SKIP_PATTERNS.some(p => p.test(next))) break;
-        // continuation of company name (e.g. KOMANDYTOWA)
-        const nextCaps = next.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
-        const isLegalCont = /SPÓŁKA|KOMANDYT|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(next);
-        const isAddr = /ul\.|al\.|os\.|pl\./i.test(next) || /\d{2}-\d{3}/.test(next);
-        if (isLegalCont || nextCaps >= 2 || isAddr) {
-          parts.push(next);
-        } else {
-          break;
+      // Zbierz nazwę + adres siedziby (kolejne linie: ul., kod pocztowy, NIP)
+      const parts = [line];
+      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+        const nl = lines[j];
+        if (/NIP:|NR BDO:|Nr\s+ewid|Adres\s+dostawy|Budowa|Magazyn|Informacje|Termin/i.test(nl)) break;
+        if (/ul\.|al\.|os\.|pl\./i.test(nl) || /^\d{2}-\d{3}/.test(nl)) {
+          parts.push(nl);
+          continue;
         }
+        // Kontynuacja nazwy firmy (np. "KOMANDYTOWA" na osobnej linii)
+        if (/^[A-ZĄĆĘŁŃÓŚŹŻ]{3,}$/i.test(nl)) {
+          parts.push(nl);
+          continue;
+        }
+        break;
       }
-      odbiorca = parts.join(', ');
+      odbiorca = parts.join(", ").replace(/,\s*,/g, ",");
       break;
     }
   }
 
   // 4. adres_dostawy
   let adres: string | null = null;
-  const adresIdx = lines.findIndex(l => /Adres\s+dostawy/i.test(l));
+  const adresIdx = lines.findIndex((l) => /Adres\s+dostawy/i.test(l));
 
   // Priority 1: lines AFTER "Adres dostawy" (standalone section)
   if (adresIdx >= 0) {
@@ -551,7 +648,7 @@ function parseWZText(rawText: string): WZImportData {
         addrParts.push(l);
       }
     }
-    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+    if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
   }
   // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout — address above header)
   if (!adres && adresIdx >= 0) {
@@ -560,14 +657,20 @@ function parseWZText(rawText: string): WZImportData {
       const l = lines[i];
       if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
       if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
-      if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
-      if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
+      if (/\d{2}-\d{3}/.test(l)) {
+        addrParts.unshift(l);
+        continue;
+      }
+      if (/ul\.|al\.|os\.|pl\./i.test(l)) {
+        addrParts.unshift(l);
+        break;
+      }
     }
-    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+    if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
   }
   // Priority 3: "Budowa" line as delivery location
   if (!adres) {
-    const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+    const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
     if (budowaIdx >= 0) {
       const addrParts: string[] = [];
       for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
@@ -577,67 +680,91 @@ function parseWZText(rawText: string): WZImportData {
           addrParts.push(l);
         }
       }
-      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+      if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
+    }
+  }
+  // Priority 4: adres siedziby firmy (fallback — kierowca wie gdzie jest odbiorca)
+  if (!adres && odbiorca) {
+    const odbIdx = lines.indexOf(odbiorca);
+    if (odbIdx >= 0) {
+      for (let i = odbIdx + 1; i < Math.min(odbIdx + 3, lines.length); i++) {
+        if (/ul\.|al\.|os\.|pl\./i.test(lines[i]) || /\d{2}-\d{3}/.test(lines[i])) {
+          adres = lines[i];
+          break;
+        }
+      }
     }
   }
 
   // 5. tel — search near delivery section (backward + forward from Adres dostawy / Budowa)
   let tel: string | null = null;
-  const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
-  const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+  const wystawilIdx = lines.findIndex((l) => /Wystawił/i.test(l));
+  const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
   const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
   if (deliveryAnchor >= 0) {
     // Search backward from anchor (PDF column layout: Tel. before Adres dostawy)
     for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
       if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
       const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
-      if (telM) { tel = telM[1].trim(); break; }
+      if (telM) {
+        tel = telM[1].trim();
+        break;
+      }
     }
     // Search forward from anchor
     if (!tel) {
       const telEndIdx = lines.findIndex((l, i) => i > deliveryAnchor && /Nr\s+zam|Uwagi|PALETA|Waga|Lp\./i.test(l));
       const effectiveEnd = Math.min(
         telEndIdx >= 0 ? telEndIdx : deliveryAnchor + 10,
-        wystawilIdx >= 0 ? wystawilIdx : lines.length
+        wystawilIdx >= 0 ? wystawilIdx : lines.length,
       );
       for (let i = deliveryAnchor; i < effectiveEnd && i < lines.length; i++) {
         const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
-        if (telM) { tel = telM[1].trim(); break; }
+        if (telM) {
+          tel = telM[1].trim();
+          break;
+        }
       }
     }
   }
 
   // 6. masa_kg — last standalone number before "RAZEM:" line
   let masa_kg = 0;
-  const razemIdx = lines.findIndex(l => /^RAZEM/i.test(l));
+  const razemIdx = lines.findIndex((l) => /^RAZEM/i.test(l));
   if (razemIdx > 0) {
     for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
-      const s = lines[i].replace(/\s/g, '');
+      const s = lines[i].replace(/\s/g, "");
       const m = s.match(/^([\d,.]+)$/);
-      if (m) { masa_kg = Math.ceil(parseFloat(m[1].replace(',', '.'))); break; }
+      if (m) {
+        masa_kg = Math.ceil(parseFloat(m[1].replace(",", ".")));
+        break;
+      }
     }
   }
   // Fallback: inline after "Waga netto razem:" label
   if (masa_kg === 0) {
     const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
-    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(',', '.')) || 0);
+    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(",", ".")) || 0);
   }
 
-  // 7. objetosc_m3
+  // 7. objetosc_m3 — only from summary lines, NOT from product descriptions
   let objetosc_m3 = 0;
   for (const line of lines) {
     if (/^\d+\.\s/.test(line) || /paczka|opak|wym\s/i.test(line)) continue;
     const objM = line.match(/^([\d.,]+)\s*m[³3]$/i);
-    if (objM) { objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0; break; }
+    if (objM) {
+      objetosc_m3 = parseFloat(objM[1].replace(",", ".")) || 0;
+      break;
+    }
   }
 
-  // 8. ilosc_palet — wpisywane ręcznie, auto-ekstrakcja wyłączona
+  // 8. ilosc_palet — wyłączone (wpisywane ręcznie przez użytkownika)
   const ilosc_palet = 0;
 
   // 9. uwagi — text after "Uwagi:" or "Uwagi dot. wysyłki:" up to "Na podstawie art."
   //    Skip "Nr zamówienia (systemowy):" and "Nr oferty:" lines
   let uwagi: string | null = null;
-  const uwagiIdx = lines.findIndex(l => /^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(l));
+  const uwagiIdx = lines.findIndex((l) => /^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(l));
   if (uwagiIdx >= 0) {
     const afterLines: string[] = [];
     for (let i = uwagiIdx + 1; i < lines.length; i++) {
@@ -648,59 +775,86 @@ function parseWZText(rawText: string): WZImportData {
       if (nr_zamowienia && l.trim() === nr_zamowienia) continue;
       afterLines.push(l);
     }
-    uwagi = afterLines.join('\n').trim() || null;
+    uwagi = afterLines.join("\n").trim() || null;
   }
 
   // 10. osoba_kontaktowa — regex on full text (PUA decode may concatenate lines)
   let osoba_kontaktowa: string | null = null;
   const contactEntries: string[] = [];
-  const osMatch = text.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)/i);
+  const osMatch = text.match(
+    /Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)/i,
+  );
   if (osMatch) {
     let entry = osMatch[1].trim();
     const afterOs = text.slice(text.indexOf(osMatch[0]) + osMatch[0].length);
     const telAfter = afterOs.match(/^[\s:]*Tel\.?\s*:?\s*([\d][\d\s\-]{7,})/i);
-    if (telAfter) entry += ' tel. ' + telAfter[1].replace(/[^\d]/g, ' ').trim().replace(/\s+/g, ' ');
+    if (telAfter) entry += " tel. " + telAfter[1].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
     contactEntries.push(entry);
-    const extras = [...afterOs.matchAll(/([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*:?\s*([\d][\d\s\-]{7,})/gi)];
+    // Additional contacts: "Name tel. number" after Os. kontaktowa section
+    const extras = [
+      ...afterOs.matchAll(
+        /([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*:?\s*([\d][\d\s\-]{7,})/gi,
+      ),
+    ];
     for (const m of extras) {
       const name = m[1].trim();
-      const phone = m[2].replace(/[^\d]/g, ' ').trim().replace(/\s+/g, ' ');
-      if (!contactEntries.some(e => e.includes(name))) contactEntries.push(name + ' tel. ' + phone);
+      const phone = m[2].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
+      if (!contactEntries.some((e) => e.includes(name))) contactEntries.push(name + " tel. " + phone);
     }
+    // "p. Name number" format
     const pExtras = [...afterOs.matchAll(/p\.\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)\s+([\d][\d\s\-]{7,})/gi)];
     for (const m of pExtras) {
       const name = m[1].trim();
-      const phone = m[2].replace(/[^\d]/g, ' ').trim().replace(/\s+/g, ' ');
-      if (!contactEntries.some(e => e.includes(name))) contactEntries.push(name + ' tel. ' + phone);
+      const phone = m[2].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
+      if (!contactEntries.some((e) => e.includes(name))) contactEntries.push(name + " tel. " + phone);
     }
   }
-  if (contactEntries.length) osoba_kontaktowa = contactEntries.join(', ');
+  if (contactEntries.length) osoba_kontaktowa = contactEntries.join(", ");
 
-  console.log('[parseWZText v7] result:', {
-    numer_wz, nr_zamowienia, odbiorca, adres, tel, osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+  console.log("[parseWZText v7] result:", {
+    numer_wz,
+    nr_zamowienia,
+    odbiorca,
+    adres,
+    tel,
+    osoba_kontaktowa,
+    masa_kg,
+    ilosc_palet,
+    objetosc_m3,
+    uwagi,
   });
 
   return {
-    numer_wz, nr_zamowienia, odbiorca, adres, tel,
-    osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
-    typ_dokumentu: 'WZ' as string | null, ma_adres_dostawy: false,
+    numer_wz,
+    nr_zamowienia,
+    odbiorca,
+    adres,
+    tel,
+    osoba_kontaktowa,
+    masa_kg,
+    ilosc_palet,
+    objetosc_m3,
+    uwagi,
+    typ_dokumentu: "WZ" as string | null,
+    ma_adres_dostawy: false,
   };
 }
 
 /* ─── Paste Tab ─── */
 function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const [parsing, setParsing] = useState(false);
   const [result, setResult] = useState<WZImportData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [decodedPreview, setDecodedPreview] = useState('');
+  const [decodedPreview, setDecodedPreview] = useState<string>("");
 
-  const hasPUA = Array.from(text).some(ch => { const cp = ch.codePointAt(0) ?? 0; return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000; });
+  const hasPUA = Array.from(text).some((ch) => {
+    const cp = ch.codePointAt(0) ?? 0;
+    return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000;
+  });
 
   const parse = async () => {
-    console.log('DEBUG PARSE', text.length, text.slice(0, 20));
     if (text.length === 0) return;
-    console.log('PARSE START', text.length);
     setParsing(true);
     setError(null);
     setResult(null);
@@ -708,22 +862,21 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     // Lokalny parser jako baza (działa zawsze, niezależnie od edge function)
     const decoded = decodePUA(text);
     setDecodedPreview(decoded.slice(0, 200));
-    console.log('[PasteTab v5] raw chars:', text.length, '| PUA:', hasPUA, '| decoded preview:', decoded.slice(0, 150));
+    console.log("[PasteTab v5] raw chars:", text.length, "| PUA:", hasPUA, "| decoded preview:", decoded.slice(0, 150));
     const local = parseWZText(text);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ text }),
-        }
-      );
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text }),
+      });
       const json: ParsedPdfResult = await res.json();
 
       if (!json.error) {
@@ -739,7 +892,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
           ilosc_palet: json.ilosc_palet || local.ilosc_palet,
           objetosc_m3: json.objetosc_m3 || local.objetosc_m3,
           uwagi: json.uwagi || local.uwagi,
-          typ_dokumentu: (json as any).typ_dokumentu || 'WZ',
+          typ_dokumentu: (json as any).typ_dokumentu || "WZ",
           ma_adres_dostawy: (json as any).ma_adres_dostawy ?? false,
         });
       } else {
@@ -755,24 +908,28 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   return (
     <div className="space-y-3">
       <Textarea
-        placeholder="Wklej skopiowany tekst z dokumentu WZ..."
-        className="min-h-[120px] text-sm"
+        className="min-h-[120px]"
+        placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres..."
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={(e) => setText(e.target.value)}
       />
       {hasPUA && (
-        <p className="text-xs text-blue-600 dark:text-blue-400">🔑 Wykryto znaki PUA (font PDF) — zostaną zdekodowane</p>
+        <p className="text-xs text-blue-600 dark:text-blue-400">
+          🔑 Wykryto znaki PUA (font PDF) — zostaną zdekodowane
+        </p>
       )}
       <div className="flex items-center gap-2">
         <Button onClick={parse} disabled={text.length === 0 || parsing} size="sm">
-          {parsing ? 'Analizuję...' : 'Parsuj tekst v7'}
+          {parsing ? "Analizuję..." : "Parsuj tekst"}
         </Button>
         <span className="text-xs text-muted-foreground">parser v5</span>
       </div>
       {decodedPreview && (
         <details className="text-xs text-muted-foreground">
           <summary className="cursor-pointer">Podgląd zdekodowanego tekstu</summary>
-          <pre className="whitespace-pre-wrap text-xs bg-muted p-2 rounded max-h-28 overflow-auto mt-1">{decodedPreview}</pre>
+          <pre className="whitespace-pre-wrap text-xs bg-muted p-2 rounded max-h-28 overflow-auto mt-1">
+            {decodedPreview}
+          </pre>
         </details>
       )}
 
@@ -780,25 +937,28 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 
       {result && (
         <div className="space-y-2 pt-2 border-t">
-          {([
-            ['Nr WZ', result.numer_wz],
-            ['Nr zamówienia', result.nr_zamowienia],
-            ['Odbiorca', result.odbiorca],
-            ['Adres', result.adres],
-            ['Os. kontaktowa', result.osoba_kontaktowa],
-            
-            ['Masa kg', formatMasaKg(result.masa_kg)],
-            ['Ilość palet', result.ilosc_palet?.toString()],
-            ['Objętość m³', result.objetosc_m3?.toString()],
-            ['Uwagi', result.uwagi],
-          ] as [string, string | undefined | null][]).map(([label, val]) => (
+          {(
+            [
+              ["Nr WZ", result.numer_wz],
+              ["Nr zamówienia", result.nr_zamowienia],
+              ["Odbiorca", result.odbiorca],
+              ["Adres", result.adres],
+              ["Os. kontaktowa", result.osoba_kontaktowa],
+              ["Masa kg", formatMasaKg(result.masa_kg)],
+              ["Ilość palet", result.ilosc_palet?.toString()],
+              ["Objętość m³", result.objetosc_m3?.toString()],
+              ["Uwagi", result.uwagi],
+            ] as [string, string | undefined | null][]
+          ).map(([label, val]) => (
             <div key={label} className="flex items-center gap-2 text-sm">
-              <span className="w-4">{val ? '✓' : '⚠️'}</span>
+              <span className="w-4">{val ? "✓" : "⚠️"}</span>
               <span className="text-muted-foreground w-28">{label}</span>
-              <span className="font-medium">{val || '—'}</span>
+              <span className="font-medium">{val || "—"}</span>
             </div>
           ))}
-          <Button onClick={() => onParsed(result)} className="w-full mt-2">✅ Użyj tych danych</Button>
+          <Button onClick={() => onParsed(result)} className="w-full mt-2">
+            ✅ Użyj tych danych
+          </Button>
         </div>
       )}
     </div>
@@ -808,33 +968,91 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 /* ─── Manual Tab ─── */
 function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [form, setForm] = useState<WZImportData>({
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', osoba_kontaktowa: null,
-    masa_kg: 0, ilosc_palet: null, objetosc_m3: null, uwagi: '', typ_dokumentu: 'WZ', ma_adres_dostawy: false,
+    numer_wz: "",
+    nr_zamowienia: "",
+    odbiorca: "",
+    adres: "",
+    tel: "",
+    osoba_kontaktowa: null,
+    masa_kg: 0,
+    ilosc_palet: null,
+    objetosc_m3: null,
+    uwagi: "",
+    typ_dokumentu: "WZ",
+    ma_adres_dostawy: false,
   });
 
   const update = (field: keyof WZImportData, val: string | number | null) =>
-    setForm(prev => ({ ...prev, [field]: val }));
+    setForm((prev) => ({ ...prev, [field]: val }));
 
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Nr WZ</Label><Input className="h-8 text-sm" value={form.numer_wz ?? ''} onChange={e => update('numer_wz', e.target.value)} /></div>
-        <div><Label className="text-xs">Nr zamówienia</Label><Input className="h-8 text-sm" value={form.nr_zamowienia ?? ''} onChange={e => update('nr_zamowienia', e.target.value)} /></div>
-        <div><Label className="text-xs">Odbiorca *</Label><Input className="h-8 text-sm" value={form.odbiorca ?? ''} onChange={e => update('odbiorca', e.target.value)} /></div>
-        <div><Label className="text-xs">Adres *</Label><Input className="h-8 text-sm" value={form.adres ?? ''} onChange={e => update('adres', e.target.value)} /></div>
-        <div><Label className="text-xs">Telefon</Label><Input className="h-8 text-sm" value={form.tel ?? ''} onChange={e => update('tel', e.target.value)} /></div>
-        <div><Label className="text-xs">Masa kg *</Label><Input className="h-8 text-sm" type="number" value={form.masa_kg ?? ''} onChange={e => update('masa_kg', Number(e.target.value))} /></div>
+        <div>
+          <Label className="text-xs">Nr WZ</Label>
+          <Input
+            className="h-8 text-sm"
+            value={form.numer_wz ?? ""}
+            onChange={(e) => update("numer_wz", e.target.value)}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Nr zamówienia</Label>
+          <Input
+            className="h-8 text-sm"
+            value={form.nr_zamowienia ?? ""}
+            onChange={(e) => update("nr_zamowienia", e.target.value)}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Odbiorca *</Label>
+          <Input
+            className="h-8 text-sm"
+            value={form.odbiorca ?? ""}
+            onChange={(e) => update("odbiorca", e.target.value)}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Adres *</Label>
+          <Input className="h-8 text-sm" value={form.adres ?? ""} onChange={(e) => update("adres", e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs">Telefon</Label>
+          <Input className="h-8 text-sm" value={form.tel ?? ""} onChange={(e) => update("tel", e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs">Masa kg *</Label>
+          <Input
+            className="h-8 text-sm"
+            type="number"
+            value={form.masa_kg ?? ""}
+            onChange={(e) => update("masa_kg", Number(e.target.value))}
+          />
+        </div>
         <div>
           <Label className="text-xs">Ilość palet</Label>
-          <Input className="h-8 text-sm" type="number" value={form.ilosc_palet ?? ''} onChange={e => update('ilosc_palet', e.target.value ? Number(e.target.value) : 0)} />
+          <Input
+            className="h-8 text-sm"
+            type="number"
+            value={form.ilosc_palet ?? ""}
+            onChange={(e) => update("ilosc_palet", e.target.value ? Number(e.target.value) : 0)}
+          />
           <p className="text-[10px] text-muted-foreground mt-0.5">Uzupełnij jeśli brak na dokumencie</p>
         </div>
         <div>
           <Label className="text-xs">Objętość m³</Label>
-          <Input className="h-8 text-sm" type="number" value={form.objetosc_m3 ?? ''} onChange={e => update('objetosc_m3', e.target.value ? Number(e.target.value) : 0)} />
+          <Input
+            className="h-8 text-sm"
+            type="number"
+            value={form.objetosc_m3 ?? ""}
+            onChange={(e) => update("objetosc_m3", e.target.value ? Number(e.target.value) : 0)}
+          />
           <p className="text-[10px] text-muted-foreground mt-0.5">Uzupełnij jeśli brak na dokumencie</p>
         </div>
-        <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={form.uwagi ?? ''} onChange={e => update('uwagi', e.target.value)} /></div>
+        <div className="col-span-2">
+          <Label className="text-xs">Uwagi</Label>
+          <Input className="h-8 text-sm" value={form.uwagi ?? ""} onChange={(e) => update("uwagi", e.target.value)} />
+        </div>
       </div>
       <Button onClick={() => onParsed(form)} disabled={!form.odbiorca && !form.adres} className="w-full">
         ✅ Użyj tych danych
@@ -845,17 +1063,23 @@ function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 
 /* ─── Main Modal ─── */
 export function ModalImportWZ({ isOpen, onClose, onImport, hideXls }: Props) {
-  const [activeTab, setActiveTab] = useState('pdf');
+  const [activeTab, setActiveTab] = useState("pdf");
 
-  const handleSingle = useCallback((d: WZImportData) => {
-    onImport([d]);
-    onClose();
-  }, [onImport, onClose]);
+  const handleSingle = useCallback(
+    (d: WZImportData) => {
+      onImport([d]);
+      onClose();
+    },
+    [onImport, onClose],
+  );
 
-  const handleMulti = useCallback((data: WZImportData[]) => {
-    onImport(data);
-    onClose();
-  }, [onImport, onClose]);
+  const handleMulti = useCallback(
+    (data: WZImportData[]) => {
+      onImport(data);
+      onClose();
+    },
+    [onImport, onClose],
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={() => onClose()}>
@@ -866,14 +1090,24 @@ export function ModalImportWZ({ isOpen, onClose, onImport, hideXls }: Props) {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full">
-            <TabsTrigger value="pdf" className="flex-1 text-xs">📄 PDF / Skan</TabsTrigger>
-            {!hideXls && <TabsTrigger value="xls" className="flex-1 text-xs">📊 XLS/XLSX</TabsTrigger>}
-            <TabsTrigger value="paste" className="flex-1 text-xs">📋 Wklej tekst</TabsTrigger>
-            <TabsTrigger value="manual" className="flex-1 text-xs">✏️ Ręcznie</TabsTrigger>
+            <TabsTrigger value="pdf" className="flex-1 text-xs">
+              📄 PDF / Skan
+            </TabsTrigger>
+            {!hideXls && (
+              <TabsTrigger value="xls" className="flex-1 text-xs">
+                📊 XLS/XLSX
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="paste" className="flex-1 text-xs">
+              📋 Wklej tekst
+            </TabsTrigger>
+            <TabsTrigger value="manual" className="flex-1 text-xs">
+              ✏️ Ręcznie
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="pdf">
-            <PdfTab onParsed={handleSingle} onSwitchManual={() => setActiveTab('manual')} />
+            <PdfTab onParsed={handleSingle} onSwitchManual={() => setActiveTab("manual")} />
           </TabsContent>
           {!hideXls && (
             <TabsContent value="xls">
@@ -891,4 +1125,4 @@ export function ModalImportWZ({ isOpen, onClose, onImport, hideXls }: Props) {
     </Dialog>
   );
 }
-// v7-rebuild
+// v6
