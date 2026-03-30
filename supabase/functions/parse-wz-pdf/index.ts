@@ -39,7 +39,8 @@ function decodePUA(text: string): string {
     [offset + 0x057]: "W", [offset + 0x058]: "X",
     [offset + 0x059]: "Y", [offset + 0x05a]: "Z",
     [offset + 0x05b]: "[", [offset + 0x05c]: "\\",
-    [offset + 0x05d]: "]", [offset + 0x05f]: "_",
+    [offset + 0x05d]: "]", [offset + 0x05e]: "^",
+    [offset + 0x05f]: "_", [offset + 0x060]: "`",
     [offset + 0x061]: "a", [offset + 0x062]: "b",
     [offset + 0x063]: "c", [offset + 0x064]: "d",
     [offset + 0x065]: "e", [offset + 0x066]: "f",
@@ -53,6 +54,8 @@ function decodePUA(text: string): string {
     [offset + 0x075]: "u", [offset + 0x076]: "v",
     [offset + 0x077]: "w", [offset + 0x078]: "x",
     [offset + 0x079]: "y", [offset + 0x07a]: "z",
+    [offset + 0x07b]: "{", [offset + 0x07c]: "|",
+    [offset + 0x07d]: "}", [offset + 0x07e]: "~",
     [offset + 0x100]: "Ą", [offset + 0x103]: "Ć",
     [offset + 0x104]: "Ę", [offset + 0x107]: "Ł",
     [offset + 0x10b]: "Ń", [offset + 0x10f]: "Ó",
@@ -83,7 +86,7 @@ function decodePUA(text: string): string {
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, "")
+    .replace(/[^\x20-\x7E\u00A0-\u024F\u2010-\u2027\u2030-\u205E\u20A0-\u20CF\n\r\t]/g, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/(\n\s*){3,}/g, "\n\n");
 }
