@@ -497,6 +497,7 @@ function parseWZText(rawText: string): WZImportData {
     /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
     /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
     /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
+    /^\d+\.\s/, /Lp\./, /Kod\s+towaru/i, /Kod\s+EAN/i, /Nazwa\s+towaru/i, /Termin\s+zap/i, /Wydano\s+na/i, /Informacje/i, /^Cena\s/i, /^Netto$/i,
   ];
 
   // Find SEWERA line index to skip the seller block
@@ -619,8 +620,11 @@ function parseWZText(rawText: string): WZImportData {
 
   // 7. objetosc_m3
   let objetosc_m3 = 0;
-  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
-  if (objM) objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0;
+  for (const line of lines) {
+    if (/^\d+\.\s/.test(line) || /paczka|opak|wym\s/i.test(line)) continue;
+    const objM = line.match(/^([\d.,]+)\s*m[³3]$/i);
+    if (objM) { objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0; break; }
+  }
 
   // 8. ilosc_palet
   let ilosc_palet = 0;
@@ -652,11 +656,25 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line
+  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line, with optional tel on same/next line
   let osoba_kontaktowa: string | null = null;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const osM = line.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)+)/i);
-    if (osM) { osoba_kontaktowa = osM[1].trim(); break; }
+    if (osM) {
+      let kontakt = osM[1].trim();
+      // Check same line for tel
+      const telSame = line.match(/Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
+      if (telSame) {
+        kontakt += ', tel. ' + telSame[1].trim();
+      } else if (i + 1 < lines.length) {
+        // Check next line for tel
+        const telNext = lines[i + 1].match(/^Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
+        if (telNext) kontakt += ', tel. ' + telNext[1].trim();
+      }
+      osoba_kontaktowa = kontakt;
+      break;
+    }
   }
 
   console.log('[parseWZText v7] result:', {
