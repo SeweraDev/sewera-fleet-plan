@@ -648,15 +648,15 @@ function parseWZText(rawText: string): WZImportData {
     if (palPattern) ilosc_palet = parseInt(palPattern[1]);
   }
 
-  // 9. uwagi — text after "Uwagi:" up to "Na podstawie art."
+  // 9. uwagi — text after "Uwagi:" or "Uwagi dot. wysyłki:" up to "Na podstawie art."
   //    Skip "Nr zamówienia (systemowy):" and "Nr oferty:" lines
   let uwagi: string | null = null;
-  const uwagiIdx = lines.findIndex(l => /^Uwagi\s*:/i.test(l));
+  const uwagiIdx = lines.findIndex(l => /^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(l));
   if (uwagiIdx >= 0) {
     const afterLines: string[] = [];
     for (let i = uwagiIdx + 1; i < lines.length; i++) {
       const l = lines[i];
-      if (/Na\s+podstawie\s+art/i.test(l)) break;
+      if (/Na\s+podstawie\s+art|^Wystawił/i.test(l)) break;
       if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
       if (/Nr\s+oferty/i.test(l)) continue;
       if (nr_zamowienia && l.trim() === nr_zamowienia) continue;
