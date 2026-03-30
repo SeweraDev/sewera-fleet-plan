@@ -575,11 +575,19 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 6. masa_kg — ONLY "Waga netto razem:", NEVER "RAZEM:" (that's item count!)
+  // 6. masa_kg — "Waga netto razem:" — value after label OR on preceding line
   let masa_kg = 0;
   const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
-  if (wagaM) {
+  if (wagaM && parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) > 0) {
     masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
+  } else {
+    // PDF table layout: value on line BEFORE "Waga netto razem:" label
+    const wagaIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
+    if (wagaIdx > 0) {
+      const prevLine = lines[wagaIdx - 1].replace(/\s/g, '');
+      const prevNum = prevLine.match(/^([\d,.]+)$/);
+      if (prevNum) masa_kg = Math.ceil(parseFloat(prevNum[1].replace(',', '.')) || 0);
+    }
   }
 
   // 7. objetosc_m3

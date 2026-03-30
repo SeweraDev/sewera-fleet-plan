@@ -233,7 +233,7 @@ function parseSeweraDoc(rawText: string) {
   // KROK 6: MASA
   let masaKg = 0;
 
-  if (!isPZ) {
+  {
     const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
     if (wagaIdx > -1) {
       const wagaLine = text.substring(wagaIdx, wagaIdx + 200);
@@ -241,24 +241,35 @@ function parseSeweraDoc(rawText: string) {
       if (inlineMatch) {
         masaKg = Math.ceil(parseFloat(inlineMatch[1].replace(/\s/g, "").replace(",", ".")) || 0);
       } else {
-        const fragment = wagaLine
-          .split("\n")
-          .map((l: string) => l.trim())
-          .filter(Boolean);
-        const kandydaci: number[] = [];
-        for (const fl of fragment) {
-          if (/^RAZEM:/i.test(fl)) break;
-          if (fl.includes(",") || fl.includes(".")) {
-            const n = parseFloat(fl.replace(/\s/g, "").replace(",", "."));
-            if (!isNaN(n) && n > 0) kandydaci.push(n);
-          }
+        // PDF table layout: value on line BEFORE "Waga netto razem:" label
+        const tLines = text.split("\n").map((l: string) => l.trim()).filter(Boolean);
+        const wIdx = tLines.findIndex((l: string) => /Waga\s+netto\s+razem/i.test(l));
+        if (wIdx > 0) {
+          const prevNum = tLines[wIdx - 1].replace(/\s/g, "").match(/^([\d,.]+)$/);
+          if (prevNum) masaKg = Math.ceil(parseFloat(prevNum[1].replace(",", ".")) || 0);
         }
-        if (kandydaci.length > 0) {
-          masaKg = Math.ceil(Math.max(...kandydaci));
+        // Fallback: search numbers after label
+        if (masaKg === 0) {
+          const fragment = wagaLine
+            .split("\n")
+            .map((l: string) => l.trim())
+            .filter(Boolean);
+          const kandydaci: number[] = [];
+          for (const fl of fragment) {
+            if (/^RAZEM:/i.test(fl)) break;
+            if (fl.includes(",") || fl.includes(".")) {
+              const n = parseFloat(fl.replace(/\s/g, "").replace(",", "."));
+              if (!isNaN(n) && n > 0) kandydaci.push(n);
+            }
+          }
+          if (kandydaci.length > 0) {
+            masaKg = Math.ceil(Math.max(...kandydaci));
+          }
         }
       }
     }
-  } else {
+  }
+  if (masaKg === 0 && isPZ) {
     const razIdx = text.search(/[\d ,]+Razem:|Razem:\s*[\d ,]+/i);
     if (razIdx > -1) {
       const before = text.substring(Math.max(0, razIdx - 200), razIdx);

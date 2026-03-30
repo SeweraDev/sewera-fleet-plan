@@ -208,10 +208,18 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     }
   }
 
-  // Masa
+  // Masa — value after label OR on preceding line (PDF table layout)
   let masa_kg = 0;
   const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
-  if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
+  if (wagaM && parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) > 0) {
+    masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
+  } else {
+    const wagaIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
+    if (wagaIdx > 0) {
+      const prevNum = lines[wagaIdx - 1].replace(/\s/g, '').match(/^([\d,.]+)$/);
+      if (prevNum) masa_kg = Math.ceil(parseFloat(prevNum[1].replace(',', '.')) || 0);
+    }
+  }
 
   // Palety
   let ilosc_palet = 0;
