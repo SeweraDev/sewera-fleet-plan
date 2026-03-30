@@ -531,9 +531,11 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 4. adres_dostawy — priority 1: "Adres dostawy" section (standalone or in longer line)
+  // 4. adres_dostawy
   let adres: string | null = null;
   const adresIdx = lines.findIndex(l => /Adres\s+dostawy/i.test(l));
+
+  // Priority 1: lines AFTER "Adres dostawy" (standalone section)
   if (adresIdx >= 0) {
     const addrParts: string[] = [];
     for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
@@ -546,7 +548,19 @@ function parseWZText(rawText: string): WZImportData {
     }
     if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
   }
-  // Priority 2: "Budowa" line as delivery location — address on lines after it
+  // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout — address above header)
+  if (!adres && adresIdx >= 0) {
+    const addrParts: string[] = [];
+    for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
+      const l = lines[i];
+      if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
+      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
+      if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
+      if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
+    }
+    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+  }
+  // Priority 3: "Budowa" line as delivery location
   if (!adres) {
     const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
     if (budowaIdx >= 0) {
@@ -561,7 +575,7 @@ function parseWZText(rawText: string): WZImportData {
       if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
     }
   }
-  // Priority 3: address from ODBIORCA block (line after odbiorca name)
+  // Priority 4: address from ODBIORCA block
   if (!adres && odbiorca) {
     const odbIdx = lines.indexOf(odbiorca);
     if (odbIdx >= 0) {
@@ -574,23 +588,29 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 5. tel — from delivery section (near Budowa/Adres dostawy), NOT from footer
+  // 5. tel — search near delivery section (backward + forward from Adres dostawy / Budowa)
   let tel: string | null = null;
   const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
-  // Search area: from Budowa or Adres dostawy to Magazyn/Waga/Uwagi
-  const telSearchStart = Math.max(
-    lines.findIndex(l => /^Budowa/i.test(l)),
-    adresIdx >= 0 ? adresIdx : 0
-  );
-  if (telSearchStart >= 0) {
-    const telEndIdx = lines.findIndex((l, i) => i > telSearchStart && /Nr\s+zam|Uwagi|PALETA|Waga|Magazyn|Lp\./i.test(l));
-    const effectiveEnd = Math.min(
-      telEndIdx >= 0 ? telEndIdx : telSearchStart + 10,
-      wystawilIdx >= 0 ? wystawilIdx : lines.length
-    );
-    for (let i = telSearchStart; i < effectiveEnd && i < lines.length; i++) {
+  const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+  const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
+  if (deliveryAnchor >= 0) {
+    // Search backward from anchor (PDF column layout: Tel. before Adres dostawy)
+    for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
+      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
       const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
       if (telM) { tel = telM[1].trim(); break; }
+    }
+    // Search forward from anchor
+    if (!tel) {
+      const telEndIdx = lines.findIndex((l, i) => i > deliveryAnchor && /Nr\s+zam|Uwagi|PALETA|Waga|Lp\./i.test(l));
+      const effectiveEnd = Math.min(
+        telEndIdx >= 0 ? telEndIdx : deliveryAnchor + 10,
+        wystawilIdx >= 0 ? wystawilIdx : lines.length
+      );
+      for (let i = deliveryAnchor; i < effectiveEnd && i < lines.length; i++) {
+        const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+        if (telM) { tel = telM[1].trim(); break; }
+      }
     }
   }
 
