@@ -69,20 +69,20 @@ function ConfidenceBadge({ pewnosc, totalFields }: { pewnosc: number; totalField
   const fieldsFound = Math.round((pewnosc / 100) * 16);
   if (pewnosc >= 80) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-sm font-medium">
+      <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 p-2 rounded">
         ✅ Odczytano {fieldsFound}/16 pól
       </div>
     );
   }
   if (pewnosc >= 50) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 text-sm font-medium">
+      <div className="flex items-center gap-2 text-sm text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 p-2 rounded">
         ⚠️ Odczytano częściowo — sprawdź pola
       </div>
     );
   }
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-sm font-medium">
+    <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 p-2 rounded">
       ❌ Słaby odczyt — uzupełnij ręcznie
     </div>
   );
@@ -96,28 +96,28 @@ function PozycjePreview({ pozycje }: { pozycje: Pozycja[] }) {
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground text-xs hover:text-foreground">
+        <Button variant="ghost" size="sm" className="w-full justify-start text-xs">
           {open ? '▼' : '▶'} 📦 Pozycje z WZ ({pozycje.length} pozycji)
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="max-h-40 overflow-auto border rounded-md mt-1">
+        <div className="max-h-40 overflow-auto border rounded">
           <table className="w-full text-xs">
-            <thead className="bg-muted/50 sticky top-0">
-              <tr>
-                <th className="px-2 py-1 text-left">Kod</th>
-                <th className="px-2 py-1 text-left">Nazwa</th>
-                <th className="px-2 py-1 text-right">Ilość</th>
-                <th className="px-2 py-1 text-left">JM</th>
+            <thead>
+              <tr className="bg-muted">
+                <th className="p-1 text-left">Kod</th>
+                <th className="p-1 text-left">Nazwa</th>
+                <th className="p-1 text-right">Ilość</th>
+                <th className="p-1 text-left">JM</th>
               </tr>
             </thead>
             <tbody>
               {pozycje.map((p, i) => (
-                <tr key={i} className="border-t border-muted/50">
-                  <td className="px-2 py-1 font-mono text-muted-foreground">{p.kod_towaru}</td>
-                  <td className="px-2 py-1">{p.nazwa_towaru}</td>
-                  <td className="px-2 py-1 text-right">{p.ilosc}</td>
-                  <td className="px-2 py-1 text-muted-foreground">{p.jm}</td>
+                <tr key={i} className="border-t">
+                  <td className="p-1">{p.kod_towaru}</td>
+                  <td className="p-1">{p.nazwa_towaru}</td>
+                  <td className="p-1 text-right">{p.ilosc}</td>
+                  <td className="p-1">{p.jm}</td>
                 </tr>
               ))}
             </tbody>
@@ -217,28 +217,22 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div
-        className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
+        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={() => fileRef.current?.click()}
         onDragOver={e => e.preventDefault()}
         onDrop={handleDrop}
       >
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg"
-          className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-        />
-        <p className="text-sm font-medium text-muted-foreground">📄 Przeciągnij PDF lub kliknij aby wybrać</p>
+        <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+        <p className="text-sm font-medium">📄 Przeciągnij PDF lub kliknij aby wybrać</p>
         <p className="text-xs text-muted-foreground mt-1">PDF do 10 MB · Zdjęcia → formularz ręczny</p>
       </div>
 
       {parsing && (
-        <div className="text-center py-4">
-          <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
-          <p className="text-sm text-muted-foreground mt-2">Analizuję dokument...</p>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+          <p>Analizuję dokument...</p>
         </div>
       )}
 
@@ -254,12 +248,11 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
               const found = val != null && val !== '' && val !== 0;
               return (
                 <div key={f.key} className="flex items-center gap-2">
-                  <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
+                  <span className="w-4 text-center">{found ? '✓' : '⚠️'}</span>
                   <Label className="text-xs w-28 shrink-0">{f.label}</Label>
                   <Input
-                    className="h-8 text-sm flex-1"
-                    type={f.type || 'text'}
-                    value={f.key === 'masa_kg' && typeof val === 'number' ? formatMasaKg(val) : (val?.toString() ?? '')}
+                    className="h-7 text-sm"
+                    value={String(val ?? '')}
                     onChange={e => {
                       const raw = e.target.value;
                       setFormData(prev => prev ? {
@@ -279,7 +272,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
           {/* Extra info from parser */}
           {(result.osoba_kontaktowa || result.tel2 || result.nazwa_budowy) && (
-            <div className="text-xs text-muted-foreground space-y-0.5 p-2 bg-muted/30 rounded">
+            <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
               {result.osoba_kontaktowa && <p>👤 Kontakt: {result.osoba_kontaktowa}</p>}
               {result.tel2 && <p>📞 Tel. dodatkowy: {result.tel2}</p>}
               {result.nazwa_budowy && <p>🏗️ Budowa: {result.nazwa_budowy}</p>}
@@ -288,7 +281,6 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
           )}
 
           <PozycjePreview pozycje={result.pozycje || []} />
-
           <Button onClick={() => onParsed(formData)} className="w-full">✅ Użyj tych danych</Button>
         </div>
       )}
@@ -365,59 +357,53 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div
-        className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
+        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={() => fileRef.current?.click()}
       >
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xls,.xlsx"
-          className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-        />
-        <p className="text-sm font-medium text-muted-foreground">📊 Wybierz plik Excel</p>
+        <input ref={fileRef} type="file" accept=".xls,.xlsx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+        <p className="text-sm font-medium">📊 Wybierz plik Excel</p>
         <p className="text-xs text-muted-foreground mt-1">XLS, XLSX do 10 MB · Plan kursów z ERP</p>
       </div>
 
       {parsing && (
-        <div className="text-center py-4">
-          <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
-          <p className="text-sm text-muted-foreground mt-2">Analizuję arkusz...</p>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+          <p>Analizuję arkusz...</p>
         </div>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {rows.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="text-sm font-medium">{rows.length} WZ znalezionych</p>
-          <div className="max-h-60 overflow-auto border rounded-md">
+          <div className="max-h-60 overflow-auto border rounded">
             <table className="w-full text-xs">
-              <thead className="bg-muted/50 sticky top-0">
-                <tr>
-                  <th className="px-2 py-1 w-8"></th>
-                  <th className="px-2 py-1 text-left">Nr WZ</th>
-                  <th className="px-2 py-1 text-left">Odbiorca</th>
-                  <th className="px-2 py-1 text-left">Adres</th>
-                  <th className="px-2 py-1 text-right">Kg</th>
-                  <th className="px-2 py-1 text-left">Typ</th>
+              <thead>
+                <tr className="bg-muted sticky top-0">
+                  <th className="p-1 w-8"></th>
+                  <th className="p-1 text-left">Nr WZ</th>
+                  <th className="p-1 text-left">Odbiorca</th>
+                  <th className="p-1 text-left">Adres</th>
+                  <th className="p-1 text-right">Kg</th>
+                  <th className="p-1 text-left">Typ</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
                   <tr
                     key={i}
-                    className="border-t border-muted/50 cursor-pointer hover:bg-muted/30"
+                    className={`border-t cursor-pointer ${selected.has(i) ? 'bg-primary/10' : ''}`}
                     onClick={() => toggleRow(i)}
                   >
-                    <td className="px-2 py-1"><Checkbox checked={selected.has(i)} /></td>
-                    <td className="px-2 py-1 font-mono">{r.numer_wz || '—'}</td>
-                    <td className="px-2 py-1 max-w-[120px] truncate">{r.odbiorca || '—'}</td>
-                    <td className="px-2 py-1 max-w-[120px] truncate">{r.adres || '—'}</td>
-                    <td className="px-2 py-1 text-right">{r.masa_kg ?? '—'}</td>
-                    <td className="px-2 py-1 text-muted-foreground">{r.typ_pojazdu || '—'}</td>
+                    <td className="p-1 text-center"><Checkbox checked={selected.has(i)} /></td>
+                    <td className="p-1">{r.numer_wz || '—'}</td>
+                    <td className="p-1">{r.odbiorca || '—'}</td>
+                    <td className="p-1">{r.adres || '—'}</td>
+                    <td className="p-1 text-right">{r.masa_kg ?? '—'}</td>
+                    <td className="p-1">{r.typ_pojazdu || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -436,44 +422,28 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   );
 }
 
-/* ─── decodePUA — dekoduje znaki PUA z PDF (identyczne jak edge function) ─── */
+/* ─── decodePUA — dekoduje znaki PUA z PDF (generyczny: offset = Unicode codepoint) ─── */
 function decodePUA(text: string): string {
-  const buildMap = (o: number): Record<number, string> => ({
-    [o+0x020]:' ',[o+0x021]:'!',[o+0x022]:'"',[o+0x023]:'#',
-    [o+0x024]:'$',[o+0x025]:'%',[o+0x026]:'&',[o+0x027]:"'",
-    [o+0x028]:'(',[o+0x029]:')',[o+0x02a]:'*',[o+0x02b]:'+',
-    [o+0x02c]:',',[o+0x02d]:'-',[o+0x02e]:'.',[o+0x02f]:'/',
-    [o+0x030]:'0',[o+0x031]:'1',[o+0x032]:'2',[o+0x033]:'3',
-    [o+0x034]:'4',[o+0x035]:'5',[o+0x036]:'6',[o+0x037]:'7',
-    [o+0x038]:'8',[o+0x039]:'9',[o+0x03a]:':',[o+0x03b]:';',
-    [o+0x03c]:'<',[o+0x03d]:'=',[o+0x03e]:'>',[o+0x03f]:'?',
-    [o+0x040]:'@',
-    [o+0x041]:'A',[o+0x042]:'B',[o+0x043]:'C',[o+0x044]:'D',
-    [o+0x045]:'E',[o+0x046]:'F',[o+0x047]:'G',[o+0x048]:'H',
-    [o+0x049]:'I',[o+0x04a]:'J',[o+0x04b]:'K',[o+0x04c]:'L',
-    [o+0x04d]:'M',[o+0x04e]:'N',[o+0x04f]:'O',[o+0x050]:'P',
-    [o+0x051]:'Q',[o+0x052]:'R',[o+0x053]:'S',[o+0x054]:'T',
-    [o+0x055]:'U',[o+0x056]:'V',[o+0x057]:'W',[o+0x058]:'X',
-    [o+0x059]:'Y',[o+0x05a]:'Z',[o+0x05b]:'[',[o+0x05c]:'\\',
-    [o+0x05d]:']',[o+0x05f]:'_',
-    [o+0x061]:'a',[o+0x062]:'b',[o+0x063]:'c',[o+0x064]:'d',
-    [o+0x065]:'e',[o+0x066]:'f',[o+0x067]:'g',[o+0x068]:'h',
-    [o+0x069]:'i',[o+0x06a]:'j',[o+0x06b]:'k',[o+0x06c]:'l',
-    [o+0x06d]:'m',[o+0x06e]:'n',[o+0x06f]:'o',[o+0x070]:'p',
-    [o+0x071]:'q',[o+0x072]:'r',[o+0x073]:'s',[o+0x074]:'t',
-    [o+0x075]:'u',[o+0x076]:'v',[o+0x077]:'w',[o+0x078]:'x',
-    [o+0x079]:'y',[o+0x07a]:'z',
-    [o+0x100]:'Ą',[o+0x103]:'Ć',[o+0x104]:'Ę',[o+0x107]:'Ł',
-    [o+0x10b]:'Ń',[o+0x10f]:'Ó',[o+0x112]:'Ś',[o+0x118]:'Ź',
-    [o+0x119]:'Ż',[o+0x141]:'ą',[o+0x143]:'ć',[o+0x144]:'ę',
-    [o+0x147]:'ł',[o+0x14b]:'ń',[o+0x14f]:'ó',[o+0x152]:'ś',
-    [o+0x158]:'ź',[o+0x159]:'ż',
-    [o+0x082]:'„',[o+0x093]:'–',[o+0x080]:'€',
-  });
-  const map = { ...buildMap(0xe000), ...buildMap(0xf000), ...buildMap(0x10000) };
+  // Windows-1250 mapping for 0x80-0x9F (control chars in Unicode, useful chars in Win-1250)
+  const win1250: Record<number, string> = {
+    0x80:'€',0x82:'‚',0x84:'„',0x85:'…',0x86:'†',0x87:'‡',
+    0x89:'‰',0x8A:'Š',0x8B:'‹',0x8C:'Ś',0x8D:'Ť',0x8E:'Ž',0x8F:'Ź',
+    0x91:'\u2018',0x92:'\u2019',0x93:'\u201C',0x94:'\u201D',
+    0x95:'•',0x96:'–',0x97:'—',0x99:'™',
+    0x9A:'š',0x9B:'›',0x9C:'ś',0x9D:'ť',0x9E:'ž',0x9F:'ź',
+  };
+  const bases = [0xE000, 0xF000, 0x10000];
   return Array.from(text).map(ch => {
     const cp = ch.codePointAt(0) ?? 0;
-    return map[cp] ?? ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000 ? '' : ch);
+    for (const base of bases) {
+      const off = cp - base;
+      if (off >= 0x20 && off <= 0x24F) {
+        if (off >= 0x80 && off <= 0x9F) return win1250[off] ?? '';
+        return String.fromCodePoint(off);
+      }
+    }
+    if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0x10000) return '';
+    return ch;
   }).join('');
 }
 
@@ -481,7 +451,7 @@ function decodePUA(text: string): string {
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, '')
+    .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u215F\n\r\t]/g, '')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/(\n\s*){3,}/g, '\n\n');
 }
@@ -497,11 +467,11 @@ function parseWZText(rawText: string): WZImportData {
   const text = cleanText(decodePUA(rawText));
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  // 1. nr_wz — always prefix with "WZ " if missing
+  // 1. nr_wz — handle WZ and WZS prefixes
   let numer_wz: string | null = null;
-  const wzM = text.match(/WZ\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  const wzM = text.match(/(WZS?)\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
   if (wzM) {
-    numer_wz = `WZ ${wzM[1]}`;
+    numer_wz = `${wzM[1]} ${wzM[2]}`;
   } else {
     const wzBare = text.match(/([A-Z]{2}\/\d{2,3}\/\d{2}\/\d{2}\/\d{5,})/);
     if (wzBare) numer_wz = `WZ ${wzBare[1]}`;
@@ -539,7 +509,7 @@ function parseWZText(rawText: string): WZImportData {
   for (let i = searchStart; i < lines.length; i++) {
     const line = lines[i];
     if (SKIP_PATTERNS.some(p => p.test(line))) continue;
-    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
     const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     if (hasLegalForm || capsWords >= 3) {
       odbiorca = line;
@@ -547,14 +517,16 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 4. adres_dostawy — priority 1: "Adres dostawy" section
+  // 4. adres_dostawy
   let adres: string | null = null;
-  const adresIdx = lines.findIndex(l => /^Adres\s+dostawy$/i.test(l));
+  const adresIdx = lines.findIndex(l => /Adres\s+dostawy/i.test(l));
+
+  // Priority 1: lines AFTER "Adres dostawy" (standalone section)
   if (adresIdx >= 0) {
     const addrParts: string[] = [];
     for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
       const l = lines[i];
-      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi)/i.test(l)) break;
+      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano)/i.test(l)) break;
       if (/^Budowa/i.test(l)) continue;
       if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
         addrParts.push(l);
@@ -562,7 +534,34 @@ function parseWZText(rawText: string): WZImportData {
     }
     if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
   }
-  // Priority 2: address from ODBIORCA block (line after odbiorca name)
+  // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout — address above header)
+  if (!adres && adresIdx >= 0) {
+    const addrParts: string[] = [];
+    for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
+      const l = lines[i];
+      if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
+      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
+      if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
+      if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
+    }
+    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+  }
+  // Priority 3: "Budowa" line as delivery location
+  if (!adres) {
+    const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+    if (budowaIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
+        const l = lines[i];
+        if (/^(Os\.\s*kontaktowa|Tel\.|Magazyn|Termin|Nr\s+zam)/i.test(l)) break;
+        if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
+          addrParts.push(l);
+        }
+      }
+      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
+    }
+  }
+  // Priority 4: address from ODBIORCA block
   if (!adres && odbiorca) {
     const odbIdx = lines.indexOf(odbiorca);
     if (odbIdx >= 0) {
@@ -575,27 +574,46 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 5. tel — ONLY from "Adres dostawy" section, NOT from footer (after "Wystawił:")
+  // 5. tel — search near delivery section (backward + forward from Adres dostawy / Budowa)
   let tel: string | null = null;
   const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
-  if (adresIdx >= 0) {
-    // Only search between "Adres dostawy" and either "Nr zam" or end of address section
-    const telEndIdx = Math.min(
-      lines.findIndex((l, i) => i > adresIdx && /Nr\s+zam|Uwagi|PALETA|Waga/i.test(l)),
-      wystawilIdx >= 0 ? wystawilIdx : lines.length
-    );
-    const effectiveEnd = telEndIdx >= 0 ? telEndIdx : adresIdx + 10;
-    for (let i = adresIdx; i < effectiveEnd && i < lines.length; i++) {
-      const telM = lines[i].match(/Tel\.?:?\s*([\d\s]{9,})/i);
+  const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
+  const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
+  if (deliveryAnchor >= 0) {
+    // Search backward from anchor (PDF column layout: Tel. before Adres dostawy)
+    for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
+      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
+      const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
       if (telM) { tel = telM[1].trim(); break; }
+    }
+    // Search forward from anchor
+    if (!tel) {
+      const telEndIdx = lines.findIndex((l, i) => i > deliveryAnchor && /Nr\s+zam|Uwagi|PALETA|Waga|Lp\./i.test(l));
+      const effectiveEnd = Math.min(
+        telEndIdx >= 0 ? telEndIdx : deliveryAnchor + 10,
+        wystawilIdx >= 0 ? wystawilIdx : lines.length
+      );
+      for (let i = deliveryAnchor; i < effectiveEnd && i < lines.length; i++) {
+        const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
+        if (telM) { tel = telM[1].trim(); break; }
+      }
     }
   }
 
-  // 6. masa_kg — ONLY "Waga netto razem:", NEVER "RAZEM:" (that's item count!)
+  // 6. masa_kg — last standalone number before "RAZEM:" line
   let masa_kg = 0;
-  const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s,.]+)/i);
-  if (wagaM) {
-    masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, '').replace(',', '.')) || 0);
+  const razemIdx = lines.findIndex(l => /^RAZEM/i.test(l));
+  if (razemIdx > 0) {
+    for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
+      const s = lines[i].replace(/\s/g, '');
+      const m = s.match(/^([\d,.]+)$/);
+      if (m) { masa_kg = Math.ceil(parseFloat(m[1].replace(',', '.'))); break; }
+    }
+  }
+  // Fallback: inline after "Waga netto razem:" label
+  if (masa_kg === 0) {
+    const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
+    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(',', '.')) || 0);
   }
 
   // 7. objetosc_m3
@@ -616,15 +634,15 @@ function parseWZText(rawText: string): WZImportData {
     if (palPattern) ilosc_palet = parseInt(palPattern[1]);
   }
 
-  // 9. uwagi — text after "Uwagi:" up to "Na podstawie art."
+  // 9. uwagi — text after "Uwagi:" or "Uwagi dot. wysyłki:" up to "Na podstawie art."
   //    Skip "Nr zamówienia (systemowy):" and "Nr oferty:" lines
   let uwagi: string | null = null;
-  const uwagiIdx = lines.findIndex(l => /^Uwagi\s*:/i.test(l));
+  const uwagiIdx = lines.findIndex(l => /^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(l));
   if (uwagiIdx >= 0) {
     const afterLines: string[] = [];
     for (let i = uwagiIdx + 1; i < lines.length; i++) {
       const l = lines[i];
-      if (/Na\s+podstawie\s+art/i.test(l)) break;
+      if (/Na\s+podstawie\s+art|^Wystawił/i.test(l)) break;
       if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
       if (/Nr\s+oferty/i.test(l)) continue;
       if (nr_zamowienia && l.trim() === nr_zamowienia) continue;
@@ -633,13 +651,20 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  console.log('[parseWZText v5] result:', {
-    numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line
+  let osoba_kontaktowa: string | null = null;
+  for (const line of lines) {
+    const osM = line.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)+)/i);
+    if (osM) { osoba_kontaktowa = osM[1].trim(); break; }
+  }
+
+  console.log('[parseWZText v7] result:', {
+    numer_wz, nr_zamowienia, odbiorca, adres, tel, osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
   });
 
   return {
     numer_wz, nr_zamowienia, odbiorca, adres, tel,
-    osoba_kontaktowa: null, masa_kg, ilosc_palet, objetosc_m3, uwagi,
+    osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
     typ_dokumentu: 'WZ' as string | null, ma_adres_dostawy: false,
   };
 }
@@ -650,7 +675,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   const [parsing, setParsing] = useState(false);
   const [result, setResult] = useState<WZImportData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [decodedPreview, setDecodedPreview] = useState<string>('');
+  const [decodedPreview, setDecodedPreview] = useState('');
 
   const hasPUA = Array.from(text).some(ch => { const cp = ch.codePointAt(0) ?? 0; return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000; });
 
@@ -710,8 +735,8 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   return (
     <div className="space-y-3">
       <Textarea
-        className="min-h-[120px]"
-        placeholder="Wklej tekst z dokumentu WZ — system wyciągnie nr WZ, odbiorcę, masę, adres..."
+        placeholder="Wklej skopiowany tekst z dokumentu WZ..."
+        className="min-h-[120px] text-sm"
         value={text}
         onChange={e => setText(e.target.value)}
       />
@@ -740,10 +765,12 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
             ['Nr zamówienia', result.nr_zamowienia],
             ['Odbiorca', result.odbiorca],
             ['Adres', result.adres],
+            ['Os. kontaktowa', result.osoba_kontaktowa],
             ['Telefon', result.tel],
             ['Masa kg', formatMasaKg(result.masa_kg)],
             ['Ilość palet', result.ilosc_palet?.toString()],
             ['Objętość m³', result.objetosc_m3?.toString()],
+            ['Uwagi', result.uwagi],
           ] as [string, string | undefined | null][]).map(([label, val]) => (
             <div key={label} className="flex items-center gap-2 text-sm">
               <span className="w-4">{val ? '✓' : '⚠️'}</span>
@@ -844,4 +871,4 @@ export function ModalImportWZ({ isOpen, onClose, onImport, hideXls }: Props) {
     </Dialog>
   );
 }
-// v6
+// v7
