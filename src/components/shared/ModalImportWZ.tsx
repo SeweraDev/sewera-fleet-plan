@@ -658,30 +658,30 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  // 10. osoba_kontaktowa — collect contacts from delivery section
+  // 10. osoba_kontaktowa — regex on full text (PUA decode may concatenate lines)
   let osoba_kontaktowa: string | null = null;
-  const contactParts: string[] = [];
-  for (const line of lines) {
-    const osM = line.match(/Os\.\s*kontaktowa[:\s]+(.+)/i);
-    if (osM) {
-      const rest = osM[1].trim();
-      const telInRest = rest.match(/(.+?)\s+tel\.?\s*([\d\s\-]{9,})/i);
-      if (telInRest) contactParts.push(telInRest[1].trim() + ' tel. ' + telInRest[2].trim());
-      else contactParts.push(rest);
+  const contactEntries: string[] = [];
+  const osMatch = text.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)/i);
+  if (osMatch) {
+    let entry = osMatch[1].trim();
+    const afterOs = text.slice(text.indexOf(osMatch[0]) + osMatch[0].length);
+    const telAfter = afterOs.match(/^[\s:]*Tel\.?\s*:?\s*([\d][\d\s\-]{7,})/i);
+    if (telAfter) entry += ' tel. ' + telAfter[1].replace(/[^\d]/g, ' ').trim().replace(/\s+/g, ' ');
+    contactEntries.push(entry);
+    const extras = [...afterOs.matchAll(/([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*:?\s*([\d][\d\s\-]{7,})/gi)];
+    for (const m of extras) {
+      const name = m[1].trim();
+      const phone = m[2].replace(/[^\d]/g, ' ').trim().replace(/\s+/g, ' ');
+      if (!contactEntries.some(e => e.includes(name))) contactEntries.push(name + ' tel. ' + phone);
     }
-    if (contactParts.length > 0 && /^Tel\.?\s*:?\s*([\d\s\-]{9,})/i.test(line) && !contactParts[contactParts.length-1].includes('tel.')) {
-      const m = line.match(/Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
-      if (m) contactParts[contactParts.length-1] += ' tel. ' + m[1].trim();
-    }
-    if (contactParts.length > 0) {
-      const extraM = line.match(/^([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*([\d\s\-]{9,})/i);
-      if (extraM && !/Os\.\s*kontaktowa/i.test(line)) contactParts.push(extraM[1].trim() + ' tel. ' + extraM[2].trim());
-      const pM = line.match(/^p\.\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)\s+([\d\s\-]{9,})/i);
-      if (pM) contactParts.push(pM[1].trim() + ' tel. ' + pM[2].trim());
-      if (/Magazyn|Lp\.|^\d+\.\s|Kod\s+towaru/i.test(line)) break;
+    const pExtras = [...afterOs.matchAll(/p\.\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)\s+([\d][\d\s\-]{7,})/gi)];
+    for (const m of pExtras) {
+      const name = m[1].trim();
+      const phone = m[2].replace(/[^\d]/g, ' ').trim().replace(/\s+/g, ' ');
+      if (!contactEntries.some(e => e.includes(name))) contactEntries.push(name + ' tel. ' + phone);
     }
   }
-  if (contactParts.length) osoba_kontaktowa = contactParts.join(', ');
+  if (contactEntries.length) osoba_kontaktowa = contactEntries.join(', ');
 
   console.log('[parseWZText v7] result:', {
     numer_wz, nr_zamowienia, odbiorca, adres, tel, osoba_kontaktowa, masa_kg, ilosc_palet, objetosc_m3, uwagi,
