@@ -510,6 +510,8 @@ function parseWZText(rawText: string): WZImportData {
     /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
     /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
     /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
+    /^\d+\.\s/, /Lp\./, /Kod\s+towaru/i, /Kod\s+EAN/i, /Nazwa\s+towaru/i,
+    /Termin\s+zap/i, /Wydano\s+na/i, /Informacje/i, /^Cena\s/i, /^Netto$/i,
   ];
 
   // Find SEWERA line index to skip the seller block
@@ -630,10 +632,13 @@ function parseWZText(rawText: string): WZImportData {
     if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(',', '.')) || 0);
   }
 
-  // 7. objetosc_m3
+  // 7. objetosc_m3 — only from summary lines, NOT from product descriptions
   let objetosc_m3 = 0;
-  const objM = text.match(/([\d.,]+)\s*m[³3]/i);
-  if (objM) objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0;
+  for (const line of lines) {
+    if (/^\d+\.\s/.test(line) || /paczka|opak|wym\s/i.test(line)) continue;
+    const objM = line.match(/^([\d.,]+)\s*m[³3]$/i);
+    if (objM) { objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0; break; }
+  }
 
   // 8. ilosc_palet
   let ilosc_palet = 0;
@@ -665,11 +670,23 @@ function parseWZText(rawText: string): WZImportData {
     uwagi = afterLines.join('\n').trim() || null;
   }
 
-  // 10. osoba_kontaktowa — from "Os. kontaktowa:" line
+  // 10. osoba_kontaktowa — name + phone from "Os. kontaktowa:" line or next Tel. line
   let osoba_kontaktowa: string | null = null;
-  for (const line of lines) {
-    const osM = line.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)+)/i);
-    if (osM) { osoba_kontaktowa = osM[1].trim(); break; }
+  for (let i = 0; i < lines.length; i++) {
+    const osM = lines[i].match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)+)/i);
+    if (osM) {
+      let name = osM[1].trim();
+      // Check for tel on same line (e.g., "Os. kontaktowa: Jan Kowalski tel. 123-456-789")
+      const telInline = lines[i].match(/tel\.?\s*([\d\s\-]{9,})/i);
+      if (telInline) { name += ' tel. ' + telInline[1].trim(); }
+      // Check next line for Tel.
+      else if (i + 1 < lines.length) {
+        const telNext = lines[i + 1].match(/^Tel\.?\s*:?\s*([\d\s\-]{9,})/i);
+        if (telNext) name += ' tel. ' + telNext[1].trim();
+      }
+      osoba_kontaktowa = name;
+      break;
+    }
   }
 
   console.log('[parseWZText v7] result:', {
