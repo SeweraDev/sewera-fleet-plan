@@ -628,18 +628,8 @@ function parseWZText(rawText: string): WZImportData {
     if (objM) { objetosc_m3 = parseFloat(objM[1].replace(',', '.')) || 0; break; }
   }
 
-  // 8. ilosc_palet
-  let ilosc_palet = 0;
-  for (const line of lines) {
-    if (/PALETA/i.test(line)) {
-      const palQty = line.match(/(\d+)\s*(?:SZT|szt)/i);
-      if (palQty) { ilosc_palet = parseInt(palQty[1]); break; }
-    }
-  }
-  if (!ilosc_palet) {
-    const palPattern = text.match(/paleta\s*=\s*(\d+)\s*szt/i);
-    if (palPattern) ilosc_palet = parseInt(palPattern[1]);
-  }
+  // 8. ilosc_palet — wpisywane ręcznie, auto-ekstrakcja wyłączona
+  const ilosc_palet = 0;
 
   // 9. uwagi — text after "Uwagi:" or "Uwagi dot. wysyłki:" up to "Na podstawie art."
   //    Skip "Nr zamówienia (systemowy):" and "Nr oferty:" lines
