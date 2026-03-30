@@ -481,11 +481,11 @@ function parseWZText(rawText: string): WZImportData {
   const text = cleanText(decodePUA(rawText));
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  // 1. nr_wz — always prefix with "WZ " if missing
+  // 1. nr_wz — handle WZ and WZS prefixes
   let numer_wz: string | null = null;
-  const wzM = text.match(/WZ\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  const wzM = text.match(/(WZS?)\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
   if (wzM) {
-    numer_wz = `WZ ${wzM[1]}`;
+    numer_wz = `${wzM[1]} ${wzM[2]}`;
   } else {
     const wzBare = text.match(/([A-Z]{2}\/\d{2,3}\/\d{2}\/\d{2}\/\d{5,})/);
     if (wzBare) numer_wz = `WZ ${wzBare[1]}`;
