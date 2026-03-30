@@ -108,7 +108,7 @@ function decodePUA(raw: string): string {
     0x95:'•',0x96:'–',0x97:'—',0x99:'™',
     0x9A:'š',0x9B:'›',0x9C:'ś',0x9D:'ť',0x9E:'ž',0x9F:'ź',
   };
-  const bases = [0xE000, 0xF000, 0x10000];
+  const bases = [0xE000, 0xF000, 0x10000, 0x100000];
   return Array.from(raw).map(ch => {
     const cp = ch.codePointAt(0) ?? 0;
     for (const base of bases) {
