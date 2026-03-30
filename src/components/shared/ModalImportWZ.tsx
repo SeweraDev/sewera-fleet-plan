@@ -681,6 +681,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
 
   const parse = async () => {
     if (text.length === 0) return;
+    console.log('PARSE START', text.length);
     setParsing(true);
     setError(null);
     setResult(null);
