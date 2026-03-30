@@ -793,7 +793,7 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
             ['Odbiorca', result.odbiorca],
             ['Adres', result.adres],
             ['Os. kontaktowa', result.osoba_kontaktowa],
-            ['Telefon', result.tel],
+            
             ['Masa kg', formatMasaKg(result.masa_kg)],
             ['Ilość palet', result.ilosc_palet?.toString()],
             ['Objętość m³', result.objetosc_m3?.toString()],
