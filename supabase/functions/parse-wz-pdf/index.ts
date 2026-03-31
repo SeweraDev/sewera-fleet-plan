@@ -9,24 +9,46 @@ const corsHeaders = {
 function decodePUA(text: string): string {
   // Windows-1250 mapping for 0x80-0x9F (control chars in Unicode, useful chars in Win-1250)
   const win1250: Record<number, string> = {
-    0x80: "€", 0x82: "‚", 0x84: "„", 0x85: "…", 0x86: "†", 0x87: "‡",
-    0x89: "‰", 0x8A: "Š", 0x8B: "‹", 0x8C: "Ś", 0x8D: "Ť", 0x8E: "Ž", 0x8F: "Ź",
-    0x91: "\u2018", 0x92: "\u2019", 0x93: "\u201C", 0x94: "\u201D",
-    0x95: "•", 0x96: "–", 0x97: "—", 0x99: "™",
-    0x9A: "š", 0x9B: "›", 0x9C: "ś", 0x9D: "ť", 0x9E: "ž", 0x9F: "ź",
+    0x80: "€",
+    0x82: "‚",
+    0x84: "„",
+    0x85: "…",
+    0x86: "†",
+    0x87: "‡",
+    0x89: "‰",
+    0x8a: "Š",
+    0x8b: "‹",
+    0x8c: "Ś",
+    0x8d: "Ť",
+    0x8e: "Ž",
+    0x8f: "Ź",
+    0x91: "\u2018",
+    0x92: "\u2019",
+    0x93: "\u201C",
+    0x94: "\u201D",
+    0x95: "•",
+    0x96: "–",
+    0x97: "—",
+    0x99: "™",
+    0x9a: "š",
+    0x9b: "›",
+    0x9c: "ś",
+    0x9d: "ť",
+    0x9e: "ž",
+    0x9f: "ź",
   };
-  const bases = [0xE000, 0xF000, 0x10000, 0x100000];
+  const bases = [0xe000, 0xf000, 0x10000, 0x100000];
   return Array.from(text)
     .map((ch) => {
       const cp = ch.codePointAt(0) ?? 0;
       for (const base of bases) {
         const off = cp - base;
-        if (off >= 0x20 && off <= 0x24F) {
-          if (off >= 0x80 && off <= 0x9F) return win1250[off] ?? "";
+        if (off >= 0x20 && off <= 0x24f) {
+          if (off >= 0x80 && off <= 0x9f) return win1250[off] ?? "";
           return String.fromCodePoint(off);
         }
       }
-      if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0x10000) return "";
+      if ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000) return "";
       return ch;
     })
     .join("");
@@ -233,7 +255,9 @@ function parseSeweraDoc(rawText: string) {
   // KROK 5B: os.kontaktowa — multi-kontakt regex na pełnym tekście (stop przed Wystawił)
   if (!osobaKontaktowa) {
     const contactEntries: string[] = [];
-    const osMatch = text.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)/i);
+    const osMatch = text.match(
+      /Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)/i,
+    );
     if (osMatch) {
       let entry = osMatch[1].trim();
       const afterOsFull = text.slice(text.indexOf(osMatch[0]) + osMatch[0].length);
@@ -242,7 +266,11 @@ function parseSeweraDoc(rawText: string) {
       const telAfter = afterOs.match(/^[\s:]*Tel\.?\s*:?\s*([\d][\d\s\-]{7,})/i);
       if (telAfter) entry += " tel. " + telAfter[1].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
       contactEntries.push(entry);
-      const extras = [...afterOs.matchAll(/([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*:?\s*([\d][\d\s\-]{7,})/gi)];
+      const extras = [
+        ...afterOs.matchAll(
+          /([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*:?\s*([\d][\d\s\-]{7,})/gi,
+        ),
+      ];
       for (const m of extras) {
         const name = m[1].trim();
         const phone = m[2].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
@@ -260,13 +288,19 @@ function parseSeweraDoc(rawText: string) {
 
   // KROK 6: MASA — last standalone number before "RAZEM:" line
   let masaKg = 0;
-  const massLines = text.split("\n").map((l: string) => l.trim()).filter(Boolean);
+  const massLines = text
+    .split("\n")
+    .map((l: string) => l.trim())
+    .filter(Boolean);
   const razemLineIdx = massLines.findIndex((l: string) => /^RAZEM/i.test(l));
   if (razemLineIdx > 0) {
     for (let mi = razemLineIdx - 1; mi >= Math.max(0, razemLineIdx - 5); mi--) {
       const s = massLines[mi].replace(/\s/g, "");
       const mm = s.match(/^([\d,.]+)$/);
-      if (mm) { masaKg = Math.ceil(parseFloat(mm[1].replace(",", ".")) || 0); break; }
+      if (mm) {
+        masaKg = Math.ceil(parseFloat(mm[1].replace(",", ".")) || 0);
+        break;
+      }
     }
   }
   // Fallback: inline after "Waga netto razem:"
