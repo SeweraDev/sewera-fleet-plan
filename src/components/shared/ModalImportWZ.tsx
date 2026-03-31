@@ -667,44 +667,40 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 4. adres_dostawy
+  // 4. adres_dostawy — ONLY set when document has explicit "Adres dostawy" or "Budowa" section
   let adres: string | null = null;
   const adresIdx = lines.findIndex((l) => /Adres\s+dostawy/i.test(l));
+  const hasBudowa = lines.some((l) => /^Budowa/i.test(l));
+  const hasDeliverySection = adresIdx >= 0 || hasBudowa;
 
-  // Priority 1: lines AFTER "Adres dostawy" (standalone section)
-  if (adresIdx >= 0) {
-    const addrParts: string[] = [];
-    for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
-      const l = lines[i];
-      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano)/i.test(l)) break;
-      if (/^Budowa/i.test(l) || /ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
-        addrParts.push(l);
+  if (hasDeliverySection) {
+    // Priority 1: lines AFTER "Adres dostawy" header
+    if (adresIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
+        const l = lines[i];
+        if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano|Lp\.)/i.test(l)) break;
+        if (/^Budowa/i.test(l) || /ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
+          addrParts.push(l);
+        }
       }
+      if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
-    if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
-  }
-  // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout — address above header)
-  if (!adres && adresIdx >= 0) {
-    const addrParts: string[] = [];
-    for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
-      const l = lines[i];
-      if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
-      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
-      if (/\d{2}-\d{3}/.test(l)) {
-        addrParts.unshift(l);
-        continue;
+    // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout)
+    if (!adres && adresIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
+        const l = lines[i];
+        if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
+        if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
+        if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
+        if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
       }
-      if (/ul\.|al\.|os\.|pl\./i.test(l)) {
-        addrParts.unshift(l);
-        break;
-      }
+      if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
-    if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
-  }
-  // Priority 3: "Budowa" line as delivery location
-  if (!adres) {
-    const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
-    if (budowaIdx >= 0) {
+    // Priority 3: "Budowa" line as delivery location
+    if (!adres && hasBudowa) {
+      const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
       const addrParts: string[] = [];
       for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
         const l = lines[i];
@@ -715,10 +711,10 @@ function parseWZText(rawText: string): WZImportData {
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
-  }
-  // Deduplication: if adres is already contained in odbiorca, it's the registered address — clear it
-  if (adres && odbiorca && odbiorca.includes(adres)) {
-    adres = null;
+    // Final guard: if adres duplicates odbiorca address, clear it
+    if (adres && odbiorca && odbiorca.includes(adres)) {
+      adres = null;
+    }
   }
 
   // 5. tel — search near delivery section (backward + forward from Adres dostawy / Budowa)

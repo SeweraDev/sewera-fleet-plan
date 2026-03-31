@@ -177,46 +177,53 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
   }
 
   // Adres dostawy
+  // Adres dostawy — ONLY when document has explicit "Adres dostawy" or "Budowa" section
   let adres: string | undefined;
   const adresIdx = lines.findIndex(l => /Adres\s+dostawy/i.test(l));
-  if (adresIdx >= 0) {
-    const addrParts: string[] = [];
-    for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
-      const l = lines[i];
-      if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano)/i.test(l)) break;
-      if (/^Budowa/i.test(l)) continue;
-      if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
-        addrParts.push(l);
+  const hasBudowa = lines.some(l => /^Budowa/i.test(l));
+  const hasDeliverySection = adresIdx >= 0 || hasBudowa;
+
+  if (hasDeliverySection) {
+    if (adresIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
+        const l = lines[i];
+        if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano|Lp\.)/i.test(l)) break;
+        if (/^Budowa/i.test(l) || /ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
+          addrParts.push(l);
+        }
       }
+      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
     }
-    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
-  }
-  if (!adres && adresIdx >= 0) {
-    const addrParts: string[] = [];
-    for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
-      const l = lines[i];
-      if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
-      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
-      if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
-      if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
+    if (!adres && adresIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
+        const l = lines[i];
+        if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
+        if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
+        if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
+        if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
+      }
+      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
     }
-    if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
-  }
-  if (!adres) {
-    const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
-    if (budowaIdx >= 0) {
+    if (!adres && hasBudowa) {
+      const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
       const addrParts: string[] = [];
       for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
         const l = lines[i];
-        if (/^(Os\.\s*kontaktowa|Tel\.|Magazyn|Termin)/i.test(l)) break;
+        if (/^(Os\.\s*kontaktowa|Tel\.|Magazyn|Termin|Nr\s+zam)/i.test(l)) break;
         if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
           addrParts.push(l);
         }
       }
       if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
     }
+    // Guard: if adres duplicates odbiorca address, clear it
+    if (adres && odbiorca && odbiorca.includes(adres)) {
+      adres = undefined;
+    }
   }
-  // Deduplication: if adres is already contained in odbiorca, it's the registered address — clear it
+  // No "Adres dostawy" / "Budowa" section → adres stays undefined
   if (adres && odbiorca && odbiorca.includes(adres)) {
     adres = undefined;
   }
