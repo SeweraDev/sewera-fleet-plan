@@ -23,20 +23,24 @@ Format:
 ## 🔴 AKTYWNE
 
 ### BUG-001 — Błędne dane w zleceniu ZL-MMVWSC9C
-**Status:** 🔴 Aktywny
+**Status:** 🟡 W trakcie (SQL fix przygotowany)
 **Gdzie:** DyspozytoPage — zakładka Zlecenia
 **Opis:** Zlecenie ma wpisane dane sprzedawcy zamiast odbiorcy.
 Odbiorca: SEWERA POLSKA CHEMIA (błąd) zamiast MAXIMUS ZBH MUC
 Adres: ul. Kościuszki 326 (błąd) zamiast ul. Wincentego Pola 38
 Masa: 25 kg (błąd) zamiast 375 kg
-**Fix:** Ręcznie przez dyspozytora → ✏️ edytuj zlecenie:
-  Odbiorca: Przedsiębiorstwo Maximus ZBH Muc Sp.K.
-  Adres: ul. Wincentego Pola 38, 40-596 Katowice
-  Telefon: 509 013 198
-  Masa: 375 kg
-  Nr WZ: WZ KK/112/26/03/0005324
-  Nr zamówienia: T7/KK/2026/03/00122
-  Uwagi: domówienie
+**Fix SQL (uruchom w Supabase SQL Editor):**
+```sql
+UPDATE zlecenia_wz
+SET odbiorca = 'Przedsiębiorstwo Maximus ZBH Muc Sp.K.',
+    adres = 'ul. Wincentego Pola 38, 40-596 Katowice',
+    tel = '509 013 198',
+    masa_kg = 375,
+    numer_wz = 'WZ KK/112/26/03/0005324',
+    nr_zamowienia = 'T7/KK/2026/03/00122',
+    uwagi = 'domówienie'
+WHERE zlecenie_id = (SELECT id FROM zlecenia WHERE numer = 'ZL-MMVWSC9C');
+```
 
 ---
 

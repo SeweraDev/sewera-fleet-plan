@@ -69,8 +69,8 @@ Możliwe kierunki:
 
 ## ZNANE PROBLEMY DO NAPRAWY
 
-- [ ] Odbiorca w zleceniu ZL-MMVWSC9C jest błędny
-  (wpisano sprzedawcę zamiast odbiorcy)
-  Fix ręczny: dyspozytor → ✏️ edytuj zlecenie
-- [ ] Edge function parse-wz-pdf na Supabase wymaga redeployu z nowym decodePUA (baza 0x100000)
-- [ ] Lovable 2-way sync z GitHub nie działa (gitsync 403) — zmiany wklejane ręcznie
+- [ ] **Edge function parse-wz-pdf** — wymaga redeployu na Supabase
+  Kod OK (baza 0x100000 w repo). Uruchom: `npx supabase functions deploy parse-wz-pdf --project-ref nnjsfeipkuesdxfljgul`
+- [ ] **BUG-001: Zlecenie ZL-MMVWSC9C** — błędne dane (sprzedawca zamiast odbiorcy)
+  Fix: SQL UPDATE w Supabase SQL Editor (patrz BUGS.md)
+- [ ] **Lovable gitsync 403** — reconnect GitHub w Lovable Dashboard → Settings → GitHub Integration
