@@ -161,7 +161,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
   useEffect(() => {
     refetch();
     const channel = supabase
-      .channel('dyspozytor-kursy')
+      .channel(`dyspozytor-kursy-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kursy' }, () => refetch())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kurs_przystanki' }, () => refetch())
       .subscribe();

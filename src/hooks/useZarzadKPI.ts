@@ -311,7 +311,7 @@ export function useZarzadKPI() {
 
     // Realtime subscription on kursy
     const channel = supabase
-      .channel('zarzad-kursy')
+      .channel(`zarzad-kursy-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kursy' }, () => {
         fetchAll();
       })
