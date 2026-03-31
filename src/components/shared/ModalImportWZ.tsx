@@ -404,7 +404,8 @@ const XLS_TYP_MAP: Record<string, string | null> = {
 };
 
 function matchXlsHeader(h: string): string | null {
-  const t = (h || "").trim();
+  // Normalize: collapse all whitespace/newlines to single space
+  const t = (h || "").replace(/[\s\n\r]+/g, " ").trim();
   for (const hp of XLS_HEADER_PATTERNS) {
     for (const p of hp.patterns) { if (p.test(t)) return hp.field; }
   }
