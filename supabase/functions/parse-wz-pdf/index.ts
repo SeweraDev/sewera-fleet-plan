@@ -7,75 +7,49 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 function decodePUA(text: string): string {
-  const buildMap = (offset: number): Record<number, string> => ({
-    [offset + 0x020]: " ", [offset + 0x021]: "!",
-    [offset + 0x022]: '"', [offset + 0x023]: "#",
-    [offset + 0x024]: "$", [offset + 0x025]: "%",
-    [offset + 0x026]: "&", [offset + 0x027]: "'",
-    [offset + 0x028]: "(", [offset + 0x029]: ")",
-    [offset + 0x02a]: "*", [offset + 0x02b]: "+",
-    [offset + 0x02c]: ",", [offset + 0x02d]: "-",
-    [offset + 0x02e]: ".", [offset + 0x02f]: "/",
-    [offset + 0x030]: "0", [offset + 0x031]: "1",
-    [offset + 0x032]: "2", [offset + 0x033]: "3",
-    [offset + 0x034]: "4", [offset + 0x035]: "5",
-    [offset + 0x036]: "6", [offset + 0x037]: "7",
-    [offset + 0x038]: "8", [offset + 0x039]: "9",
-    [offset + 0x03a]: ":", [offset + 0x03b]: ";",
-    [offset + 0x03c]: "<", [offset + 0x03d]: "=",
-    [offset + 0x03e]: ">", [offset + 0x03f]: "?",
-    [offset + 0x040]: "@",
-    [offset + 0x041]: "A", [offset + 0x042]: "B",
-    [offset + 0x043]: "C", [offset + 0x044]: "D",
-    [offset + 0x045]: "E", [offset + 0x046]: "F",
-    [offset + 0x047]: "G", [offset + 0x048]: "H",
-    [offset + 0x049]: "I", [offset + 0x04a]: "J",
-    [offset + 0x04b]: "K", [offset + 0x04c]: "L",
-    [offset + 0x04d]: "M", [offset + 0x04e]: "N",
-    [offset + 0x04f]: "O", [offset + 0x050]: "P",
-    [offset + 0x051]: "Q", [offset + 0x052]: "R",
-    [offset + 0x053]: "S", [offset + 0x054]: "T",
-    [offset + 0x055]: "U", [offset + 0x056]: "V",
-    [offset + 0x057]: "W", [offset + 0x058]: "X",
-    [offset + 0x059]: "Y", [offset + 0x05a]: "Z",
-    [offset + 0x05b]: "[", [offset + 0x05c]: "\\",
-    [offset + 0x05d]: "]", [offset + 0x05f]: "_",
-    [offset + 0x061]: "a", [offset + 0x062]: "b",
-    [offset + 0x063]: "c", [offset + 0x064]: "d",
-    [offset + 0x065]: "e", [offset + 0x066]: "f",
-    [offset + 0x067]: "g", [offset + 0x068]: "h",
-    [offset + 0x069]: "i", [offset + 0x06a]: "j",
-    [offset + 0x06b]: "k", [offset + 0x06c]: "l",
-    [offset + 0x06d]: "m", [offset + 0x06e]: "n",
-    [offset + 0x06f]: "o", [offset + 0x070]: "p",
-    [offset + 0x071]: "q", [offset + 0x072]: "r",
-    [offset + 0x073]: "s", [offset + 0x074]: "t",
-    [offset + 0x075]: "u", [offset + 0x076]: "v",
-    [offset + 0x077]: "w", [offset + 0x078]: "x",
-    [offset + 0x079]: "y", [offset + 0x07a]: "z",
-    [offset + 0x100]: "Ą", [offset + 0x103]: "Ć",
-    [offset + 0x104]: "Ę", [offset + 0x107]: "Ł",
-    [offset + 0x10b]: "Ń", [offset + 0x10f]: "Ó",
-    [offset + 0x112]: "Ś", [offset + 0x118]: "Ź",
-    [offset + 0x119]: "Ż", [offset + 0x141]: "ą",
-    [offset + 0x143]: "ć", [offset + 0x144]: "ę",
-    [offset + 0x147]: "ł", [offset + 0x14b]: "ń",
-    [offset + 0x14f]: "ó", [offset + 0x152]: "ś",
-    [offset + 0x158]: "ź", [offset + 0x159]: "ż",
-    [offset + 0x082]: "„", [offset + 0x093]: "\u2013",
-    [offset + 0x080]: "€", [offset + 0x002]: "ƒ",
-  });
-
-  const map: Record<number, string> = {
-    ...buildMap(0xe000),
-    ...buildMap(0xf000),
-    ...buildMap(0x10000),
+  // Windows-1250 mapping for 0x80-0x9F (control chars in Unicode, useful chars in Win-1250)
+  const win1250: Record<number, string> = {
+    0x80: "€",
+    0x82: "‚",
+    0x84: "„",
+    0x85: "…",
+    0x86: "†",
+    0x87: "‡",
+    0x89: "‰",
+    0x8a: "Š",
+    0x8b: "‹",
+    0x8c: "Ś",
+    0x8d: "Ť",
+    0x8e: "Ž",
+    0x8f: "Ź",
+    0x91: "\u2018",
+    0x92: "\u2019",
+    0x93: "\u201C",
+    0x94: "\u201D",
+    0x95: "•",
+    0x96: "–",
+    0x97: "—",
+    0x99: "™",
+    0x9a: "š",
+    0x9b: "›",
+    0x9c: "ś",
+    0x9d: "ť",
+    0x9e: "ž",
+    0x9f: "ź",
   };
-
+  const bases = [0xe000, 0xf000, 0x10000, 0x100000];
   return Array.from(text)
     .map((ch) => {
       const cp = ch.codePointAt(0) ?? 0;
-      return map[cp] ?? ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000 ? "" : ch);
+      for (const base of bases) {
+        const off = cp - base;
+        if (off >= 0x20 && off <= 0x24f) {
+          if (off >= 0x80 && off <= 0x9f) return win1250[off] ?? "";
+          return String.fromCodePoint(off);
+        }
+      }
+      if ((cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000) return "";
+      return ch;
     })
     .join("");
 }
@@ -83,7 +57,7 @@ function decodePUA(text: string): string {
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, "")
+    .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u215F\n\r\t]/g, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/(\n\s*){3,}/g, "\n\n");
 }
@@ -281,7 +255,7 @@ function parseSeweraDoc(rawText: string) {
   // KROK 6: MASA
   let masaKg = 0;
 
-  if (!isPZ) {
+  {
     const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
     if (wagaIdx > -1) {
       const wagaLine = text.substring(wagaIdx, wagaIdx + 200);
@@ -289,24 +263,38 @@ function parseSeweraDoc(rawText: string) {
       if (inlineMatch) {
         masaKg = Math.ceil(parseFloat(inlineMatch[1].replace(/\s/g, "").replace(",", ".")) || 0);
       } else {
-        const fragment = wagaLine
+        // PDF table layout: value on line BEFORE "Waga netto razem:" label
+        const tLines = text
           .split("\n")
           .map((l: string) => l.trim())
           .filter(Boolean);
-        const kandydaci: number[] = [];
-        for (const fl of fragment) {
-          if (/^RAZEM:/i.test(fl)) break;
-          if (fl.includes(",") || fl.includes(".")) {
-            const n = parseFloat(fl.replace(/\s/g, "").replace(",", "."));
-            if (!isNaN(n) && n > 0) kandydaci.push(n);
-          }
+        const wIdx = tLines.findIndex((l: string) => /Waga\s+netto\s+razem/i.test(l));
+        if (wIdx > 0) {
+          const prevNum = tLines[wIdx - 1].replace(/\s/g, "").match(/^([\d,.]+)$/);
+          if (prevNum) masaKg = Math.ceil(parseFloat(prevNum[1].replace(",", ".")) || 0);
         }
-        if (kandydaci.length > 0) {
-          masaKg = Math.ceil(Math.max(...kandydaci));
+        // Fallback: search numbers after label
+        if (masaKg === 0) {
+          const fragment = wagaLine
+            .split("\n")
+            .map((l: string) => l.trim())
+            .filter(Boolean);
+          const kandydaci: number[] = [];
+          for (const fl of fragment) {
+            if (/^RAZEM:/i.test(fl)) break;
+            if (fl.includes(",") || fl.includes(".")) {
+              const n = parseFloat(fl.replace(/\s/g, "").replace(",", "."));
+              if (!isNaN(n) && n > 0) kandydaci.push(n);
+            }
+          }
+          if (kandydaci.length > 0) {
+            masaKg = Math.ceil(Math.max(...kandydaci));
+          }
         }
       }
     }
-  } else {
+  }
+  if (masaKg === 0 && isPZ) {
     const razIdx = text.search(/[\d ,]+Razem:|Razem:\s*[\d ,]+/i);
     if (razIdx > -1) {
       const before = text.substring(Math.max(0, razIdx - 200), razIdx);
