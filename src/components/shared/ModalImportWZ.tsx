@@ -716,8 +716,10 @@ function parseWZText(rawText: string): WZImportData {
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
   }
-  // Priority 4 REMOVED — nie wstawiamy adresu siedziby jako adres dostawy
-  // Jeśli dokument nie ma pola "Adres dostawy" / "Budowa", adres zostaje pusty
+  // Deduplication: if adres is already contained in odbiorca, it's the registered address — clear it
+  if (adres && odbiorca && odbiorca.includes(adres)) {
+    adres = null;
+  }
 
   // 5. tel — search near delivery section (backward + forward from Adres dostawy / Budowa)
   let tel: string | null = null;

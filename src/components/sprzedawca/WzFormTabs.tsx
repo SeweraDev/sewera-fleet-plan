@@ -216,6 +216,11 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
       if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
     }
   }
+  // Deduplication: if adres is already contained in odbiorca, it's the registered address — clear it
+  if (adres && odbiorca && odbiorca.includes(adres)) {
+    adres = undefined;
+  }
+
   // Telefon
   let tel: string | undefined;
   const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
