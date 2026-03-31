@@ -173,7 +173,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
         headers: { Authorization: `Bearer ${session?.access_token}` },
         body: fd,
       });
-      const json: ParsedPdfResult = await res.json();
+      const json: ParsedPdfResult & { cleaned_text?: string } = await res.json();
       setParsing(false);
 
       if (json.error) {
@@ -183,21 +183,29 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
       setResult(json);
 
-      console.log("EDGE FUNCTION RESPONSE:", JSON.stringify(json));
-      const mapped: WZImportData = {
-        numer_wz: json.nr_wz || "",
-        nr_zamowienia: json.nr_zamowienia || "",
-        odbiorca: json.odbiorca || "",
-        adres: json.adres_dostawy || "",
-        tel: json.osoba_kontaktowa || json.tel || "",
-        osoba_kontaktowa: json.osoba_kontaktowa || "",
-        masa_kg: json.masa_kg || 0,
-        ilosc_palet: json.ilosc_palet || 0,
-        objetosc_m3: json.objetosc_m3 || 0,
-        uwagi: json.uwagi || "",
-        typ_dokumentu: (json as any).typ_dokumentu || "WZ",
-        ma_adres_dostawy: (json as any).ma_adres_dostawy || false,
-      };
+      // Use local parseWZText on cleaned_text from edge function (same parser as PasteTab)
+      let mapped: WZImportData;
+      if (json.cleaned_text) {
+        mapped = parseWZText(json.cleaned_text);
+        console.log("[PdfTab] parsed with local parseWZText from cleaned_text");
+      } else {
+        // Fallback: use edge function results directly (old edge function without cleaned_text)
+        mapped = {
+          numer_wz: json.nr_wz || "",
+          nr_zamowienia: json.nr_zamowienia || "",
+          odbiorca: json.odbiorca || "",
+          adres: json.adres_dostawy || "",
+          tel: json.osoba_kontaktowa || json.tel || "",
+          osoba_kontaktowa: json.osoba_kontaktowa || "",
+          masa_kg: json.masa_kg || 0,
+          ilosc_palet: json.ilosc_palet || 0,
+          objetosc_m3: json.objetosc_m3 || 0,
+          uwagi: json.uwagi || "",
+          typ_dokumentu: (json as any).typ_dokumentu || "WZ",
+          ma_adres_dostawy: (json as any).ma_adres_dostawy || false,
+        };
+        console.log("[PdfTab] fallback: used edge function response directly");
+      }
 
       setFormData(mapped);
     },

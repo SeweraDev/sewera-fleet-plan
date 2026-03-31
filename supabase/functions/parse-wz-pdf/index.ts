@@ -393,7 +393,7 @@ serve(async (req) => {
 
     const result = parseSeweraDoc(afterClean);
 
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ ...result, cleaned_text: afterClean }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
