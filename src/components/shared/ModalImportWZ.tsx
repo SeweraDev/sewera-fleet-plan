@@ -166,15 +166,35 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       setFormData(null);
 
       try {
-        // Client-side PDF text extraction (no edge function needed)
+        // Client-side PDF text extraction — preserve line structure via Y-position tracking
         const arrayBuffer = await file.arrayBuffer();
         const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
         const pages: string[] = [];
         for (let i = 1; i <= pdfDoc.numPages; i++) {
           const page = await pdfDoc.getPage(i);
           const content = await page.getTextContent();
-          const pageText = content.items.map((item: any) => item.str).join(" ");
-          pages.push(pageText);
+          const lines: string[] = [];
+          let currentLine = "";
+          let lastY: number | null = null;
+          for (const item of content.items as any[]) {
+            if (!item.str && item.str !== "") continue;
+            const y = item.transform ? item.transform[5] : null;
+            if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) {
+              // Y position changed — new line
+              if (currentLine.trim()) lines.push(currentLine.trim());
+              currentLine = item.str;
+            } else {
+              currentLine += (currentLine && item.str && !currentLine.endsWith(" ") ? " " : "") + item.str;
+            }
+            if (y !== null) lastY = y;
+            if (item.hasEOL) {
+              if (currentLine.trim()) lines.push(currentLine.trim());
+              currentLine = "";
+              lastY = null;
+            }
+          }
+          if (currentLine.trim()) lines.push(currentLine.trim());
+          pages.push(lines.join("\n"));
         }
         const rawText = pages.join("\n");
 
@@ -185,6 +205,7 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
         }
 
         // Same pipeline as PasteTab: decodePUA → cleanText → parseWZText
+        console.log("[PdfTab] extracted text:\n", rawText.substring(0, 500));
         const mapped = parseWZText(rawText);
         console.log("[PdfTab] parsed client-side with parseWZText (identical to PasteTab)");
 
