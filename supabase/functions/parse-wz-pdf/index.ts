@@ -230,56 +230,49 @@ function parseSeweraDoc(rawText: string) {
 
   if (!adresDostawy) adresDostawy = adresNabywcy;
 
-  // KROK 6: MASA
-  let masaKg = 0;
-
-  {
-    const wagaIdx = text.search(/Waga\s+netto\s+razem:/i);
-    if (wagaIdx > -1) {
-      const wagaLine = text.substring(wagaIdx, wagaIdx + 200);
-      const inlineMatch = wagaLine.match(/Waga\s+netto\s+razem:\s*([\d][\d ,]*[,.]\d+)/i);
-      if (inlineMatch) {
-        masaKg = Math.ceil(parseFloat(inlineMatch[1].replace(/\s/g, "").replace(",", ".")) || 0);
-      } else {
-        // PDF table layout: value on line BEFORE "Waga netto razem:" label
-        const tLines = text.split("\n").map((l: string) => l.trim()).filter(Boolean);
-        const wIdx = tLines.findIndex((l: string) => /Waga\s+netto\s+razem/i.test(l));
-        if (wIdx > 0) {
-          const prevNum = tLines[wIdx - 1].replace(/\s/g, "").match(/^([\d,.]+)$/);
-          if (prevNum) masaKg = Math.ceil(parseFloat(prevNum[1].replace(",", ".")) || 0);
-        }
-        // Fallback: search numbers after label
-        if (masaKg === 0) {
-          const fragment = wagaLine
-            .split("\n")
-            .map((l: string) => l.trim())
-            .filter(Boolean);
-          const kandydaci: number[] = [];
-          for (const fl of fragment) {
-            if (/^RAZEM:/i.test(fl)) break;
-            if (fl.includes(",") || fl.includes(".")) {
-              const n = parseFloat(fl.replace(/\s/g, "").replace(",", "."));
-              if (!isNaN(n) && n > 0) kandydaci.push(n);
-            }
-          }
-          if (kandydaci.length > 0) {
-            masaKg = Math.ceil(Math.max(...kandydaci));
-          }
-        }
+  // KROK 5B: os.kontaktowa — multi-kontakt regex na pełnym tekście (stop przed Wystawił)
+  if (!osobaKontaktowa) {
+    const contactEntries: string[] = [];
+    const osMatch = text.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)/i);
+    if (osMatch) {
+      let entry = osMatch[1].trim();
+      const afterOsFull = text.slice(text.indexOf(osMatch[0]) + osMatch[0].length);
+      const stopIdx = afterOsFull.search(/Wystawił|Na\s+podstawie|Lp\.\s|Magazyn\s+wydaj/i);
+      const afterOs = stopIdx > -1 ? afterOsFull.slice(0, stopIdx) : afterOsFull;
+      const telAfter = afterOs.match(/^[\s:]*Tel\.?\s*:?\s*([\d][\d\s\-]{7,})/i);
+      if (telAfter) entry += " tel. " + telAfter[1].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
+      contactEntries.push(entry);
+      const extras = [...afterOs.matchAll(/([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*:?\s*([\d][\d\s\-]{7,})/gi)];
+      for (const m of extras) {
+        const name = m[1].trim();
+        const phone = m[2].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
+        if (!contactEntries.some((e: string) => e.includes(name))) contactEntries.push(name + " tel. " + phone);
       }
+      const pExtras = [...afterOs.matchAll(/p\.\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)\s+([\d][\d\s\-]{7,})/gi)];
+      for (const m of pExtras) {
+        const name = m[1].trim();
+        const phone = m[2].replace(/[^\d]/g, " ").trim().replace(/\s+/g, " ");
+        if (!contactEntries.some((e: string) => e.includes(name))) contactEntries.push(name + " tel. " + phone);
+      }
+      if (contactEntries.length) osobaKontaktowa = contactEntries.join(", ");
     }
   }
-  if (masaKg === 0 && isPZ) {
-    const razIdx = text.search(/[\d ,]+Razem:|Razem:\s*[\d ,]+/i);
-    if (razIdx > -1) {
-      const before = text.substring(Math.max(0, razIdx - 200), razIdx);
-      const numery = [...before.matchAll(/([\d ]*\d[,]\d+)/g)]
-        .map((m: RegExpMatchArray) => m[1].replace(/\s/g, "").replace(",", "."))
-        .filter((n: string) => parseFloat(n) > 0);
-      if (numery.length >= 1) {
-        masaKg = Math.ceil(parseFloat(numery[numery.length - 1]) || 0);
-      }
+
+  // KROK 6: MASA — last standalone number before "RAZEM:" line
+  let masaKg = 0;
+  const massLines = text.split("\n").map((l: string) => l.trim()).filter(Boolean);
+  const razemLineIdx = massLines.findIndex((l: string) => /^RAZEM/i.test(l));
+  if (razemLineIdx > 0) {
+    for (let mi = razemLineIdx - 1; mi >= Math.max(0, razemLineIdx - 5); mi--) {
+      const s = massLines[mi].replace(/\s/g, "");
+      const mm = s.match(/^([\d,.]+)$/);
+      if (mm) { masaKg = Math.ceil(parseFloat(mm[1].replace(",", ".")) || 0); break; }
     }
+  }
+  // Fallback: inline after "Waga netto razem:"
+  if (masaKg === 0) {
+    const wagaInline = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
+    if (wagaInline) masaKg = Math.ceil(parseFloat(wagaInline[1].replace(",", ".")) || 0);
   }
 
   // KROK 7: Uwagi
@@ -306,11 +299,11 @@ function parseSeweraDoc(rawText: string) {
     typ_dokumentu: typDokumentu,
     nr_wz: nrDokumentu,
     nr_zamowienia: nrZam,
-    odbiorca: nabywca,
+    odbiorca: [nabywca, adresNabywcy].filter(Boolean).join(", "),
     adres_dostawy: adresDostawy,
     ma_adres_dostawy: maAdresDostawy,
     osoba_kontaktowa: osobaKontaktowa,
-    tel: osobaKontaktowa,
+    tel: null,
     masa_kg: masaKg,
     ilosc_palet: 0,
     objetosc_m3: 0,
