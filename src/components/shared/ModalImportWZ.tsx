@@ -8,6 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
+import * as pdfjsLib from "pdfjs-dist";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 export interface WZImportData {
   numer_wz: string | null;
@@ -162,52 +165,53 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       setResult(null);
       setFormData(null);
 
-      const fd = new FormData();
-      fd.append("file", file);
+      try {
+        // Client-side PDF text extraction (no edge function needed)
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+        const pages: string[] = [];
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map((item: any) => item.str).join(" ");
+          pages.push(pageText);
+        }
+        const rawText = pages.join("\n");
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-        body: fd,
-      });
-      const json: ParsedPdfResult & { cleaned_text?: string } = await res.json();
+        if (!rawText || rawText.trim().length < 10) {
+          setParsing(false);
+          setError("Nie można odczytać PDF — plik może być zeskanowanym obrazem");
+          return;
+        }
+
+        // Same pipeline as PasteTab: decodePUA → cleanText → parseWZText
+        const mapped = parseWZText(rawText);
+        console.log("[PdfTab] parsed client-side with parseWZText (identical to PasteTab)");
+
+        setResult({
+          nr_wz: mapped.numer_wz,
+          nr_zamowienia: mapped.nr_zamowienia,
+          odbiorca_nazwa: mapped.odbiorca,
+          odbiorca: mapped.odbiorca,
+          odbiorca_adres_siedziby: null,
+          adres_dostawy: mapped.adres,
+          nazwa_budowy: null,
+          osoba_kontaktowa: mapped.osoba_kontaktowa,
+          tel: mapped.tel,
+          tel2: null,
+          masa_kg: mapped.masa_kg,
+          ilosc_palet: mapped.ilosc_palet,
+          objetosc_m3: mapped.objetosc_m3,
+          uwagi: mapped.uwagi,
+          pozycje: [],
+          pewnosc: 80,
+        } as ParsedPdfResult);
+
+        setFormData(mapped);
+      } catch (err) {
+        setError("Błąd odczytu PDF: " + (err as Error).message);
+      }
       setParsing(false);
-
-      if (json.error) {
-        setError(json.error);
-        return;
-      }
-
-      setResult(json);
-
-      // Use local parseWZText on cleaned_text from edge function (same parser as PasteTab)
-      let mapped: WZImportData;
-      if (json.cleaned_text) {
-        mapped = parseWZText(json.cleaned_text);
-        console.log("[PdfTab] parsed with local parseWZText from cleaned_text");
-      } else {
-        // Fallback: use edge function results directly (old edge function without cleaned_text)
-        mapped = {
-          numer_wz: json.nr_wz || "",
-          nr_zamowienia: json.nr_zamowienia || "",
-          odbiorca: json.odbiorca || "",
-          adres: json.adres_dostawy || "",
-          tel: json.osoba_kontaktowa || json.tel || "",
-          osoba_kontaktowa: json.osoba_kontaktowa || "",
-          masa_kg: json.masa_kg || 0,
-          ilosc_palet: json.ilosc_palet || 0,
-          objetosc_m3: json.objetosc_m3 || 0,
-          uwagi: json.uwagi || "",
-          typ_dokumentu: (json as any).typ_dokumentu || "WZ",
-          ma_adres_dostawy: (json as any).ma_adres_dostawy || false,
-        };
-        console.log("[PdfTab] fallback: used edge function response directly");
-      }
-
-      setFormData(mapped);
     },
     [onSwitchManual],
   );
