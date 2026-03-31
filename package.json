@@ -63,6 +63,8 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
     "pdfjs-dist": "^4.9.155",
+    "tesseract.js": "^5.1.1",
+    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {

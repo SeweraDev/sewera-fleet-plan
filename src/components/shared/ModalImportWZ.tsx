@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { supabase } from "@/integrations/supabase/client";
 import * as pdfjsLib from "pdfjs-dist";
+import * as XLSX from "xlsx";
+import Tesseract from "tesseract.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
@@ -146,13 +147,9 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
   const handleFile = useCallback(
     async (file: File) => {
       const name = file.name.toLowerCase();
-      if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")) {
-        setError("Rozpoznawanie tekstu ze zdjęć wymaga ręcznego uzupełnienia.");
-        setTimeout(onSwitchManual, 2000);
-        return;
-      }
-      if (!name.endsWith(".pdf")) {
-        setError("Nieobsługiwany format. Wymagany PDF.");
+      const isImage = name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg");
+      if (!isImage && !name.endsWith(".pdf")) {
+        setError("Nieobsługiwany format. Wymagany PDF lub zdjęcie (PNG/JPG).");
         return;
       }
       if (file.size > 10 * 1024 * 1024) {
@@ -166,6 +163,43 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       setFormData(null);
 
       try {
+        // OCR branch: images (PNG/JPG)
+        if (isImage) {
+          const { data: { text: ocrText } } = await Tesseract.recognize(file, "pol", {
+            logger: (m: any) => {
+              if (m.status === "recognizing text") {
+                setError(`Rozpoznawanie tekstu: ${Math.round((m.progress || 0) * 100)}%`);
+              } else if (m.status === "loading language traineddata") {
+                setError("Pobieranie modelu OCR (pierwszy raz)...");
+              }
+            },
+          });
+          setError(null);
+
+          if (!ocrText || ocrText.trim().length < 20) {
+            setParsing(false);
+            setError("Nie udało się rozpoznać tekstu ze zdjęcia. Uzupełnij ręcznie.");
+            setTimeout(onSwitchManual, 3000);
+            return;
+          }
+
+          console.log("[PdfTab OCR] extracted text:\n", ocrText.substring(0, 500));
+          const mapped = parseWZText(ocrText);
+
+          setResult({
+            nr_wz: mapped.numer_wz, nr_zamowienia: mapped.nr_zamowienia,
+            odbiorca_nazwa: mapped.odbiorca, odbiorca: mapped.odbiorca,
+            odbiorca_adres_siedziby: null, adres_dostawy: mapped.adres,
+            nazwa_budowy: null, osoba_kontaktowa: mapped.osoba_kontaktowa,
+            tel: mapped.tel, tel2: null, masa_kg: mapped.masa_kg,
+            ilosc_palet: mapped.ilosc_palet, objetosc_m3: mapped.objetosc_m3,
+            uwagi: mapped.uwagi, pozycje: [], pewnosc: 60,
+          } as ParsedPdfResult);
+          setFormData(mapped);
+          setParsing(false);
+          return;
+        }
+
         // Client-side PDF text extraction — preserve line structure via Y-position tracking
         const arrayBuffer = await file.arrayBuffer();
         const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
@@ -276,8 +310,8 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
             if (f) handleFile(f);
           }}
         />
-        <p className="text-sm font-medium text-muted-foreground">📄 Przeciągnij PDF lub kliknij aby wybrać</p>
-        <p className="text-xs text-muted-foreground mt-1">PDF do 10 MB · Zdjęcia → formularz ręczny</p>
+        <p className="text-sm font-medium text-muted-foreground">📄 Przeciągnij PDF lub zdjęcie, lub kliknij aby wybrać</p>
+        <p className="text-xs text-muted-foreground mt-1">PDF do 10 MB · Zdjęcia PNG/JPG (OCR)</p>
       </div>
 
       {parsing && (
@@ -350,7 +384,34 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
   );
 }
 
-/* ─── XLS Tab (uses parse-excel-plan Edge Function) ─── */
+/* ─── XLS Header mapping ─── */
+const XLS_HEADER_PATTERNS: { patterns: RegExp[]; field: string }[] = [
+  { patterns: [/^kierowca$/i, /^kier$/i], field: "kierowca" },
+  { patterns: [/^kurs$/i], field: "kurs" },
+  { patterns: [/^nazwa\s*kontrahenta$/i, /^kontrahent$/i], field: "odbiorca" },
+  { patterns: [/^miejscowo/i, /^miasto$/i], field: "miasto" },
+  { patterns: [/^ulica$/i, /^adres$/i], field: "ulica" },
+  { patterns: [/^nr\s*wz$/i, /^wz$/i], field: "nr_wz" },
+  { patterns: [/^masa$/i, /^waga$/i], field: "masa" },
+  { patterns: [/^typ\s*samochodu$/i, /^rodzaj\s*samochodu$/i, /^klasyfikacja$/i, /^typ$/i], field: "typ" },
+  { patterns: [/^rodzaj\s*dostawy$/i], field: "rodzaj_dostawy" },
+  { patterns: [/^uwagi/i], field: "uwagi" },
+];
+
+const XLS_TYP_MAP: Record<string, string | null> = {
+  A: null, B: "Dostawczy 1,2t", C: "Winda 1,8t", D: "Winda 6,3t",
+  E: "Winda MAX 15,8t", F: "HDS 11,7t", G: "HDS 11,7t", H: "HDS 8,9t", I: "HDS 8,9t",
+};
+
+function matchXlsHeader(h: string): string | null {
+  const t = (h || "").trim();
+  for (const hp of XLS_HEADER_PATTERNS) {
+    for (const p of hp.patterns) { if (p.test(t)) return hp.field; }
+  }
+  return null;
+}
+
+/* ─── XLS Tab (client-side parsing with SheetJS) ─── */
 function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
@@ -367,48 +428,90 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
     setError(null);
     setRows([]);
 
-    const fd = new FormData();
-    fd.append("file", file);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-excel-plan`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-      body: fd,
-    });
-    const json = await res.json();
-    setParsing(false);
+      if (rawRows.length < 2) { setError("Plik jest pusty"); setParsing(false); return; }
 
-    if (json.error) {
-      setError(json.error);
-      return;
-    }
+      // Find header row (first row with >= 3 recognized headers)
+      let headerIdx = -1;
+      const colMap = new Map<number, string>();
+      for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+        const tempMap = new Map<number, string>();
+        for (let j = 0; j < (rawRows[i]?.length || 0); j++) {
+          const field = matchXlsHeader(String(rawRows[i][j] || ""));
+          if (field) tempMap.set(j, field);
+        }
+        if (tempMap.size >= 3) {
+          headerIdx = i;
+          tempMap.forEach((v, k) => colMap.set(k, v));
+          break;
+        }
+      }
 
-    // Flatten all zlecenia from all kursy into a flat WZ list
-    const allWz: (WZImportData & { typ_pojazdu?: string })[] = [];
-    for (const kurs of json.kursy || []) {
-      for (const zl of kurs.zlecenia || []) {
+      if (headerIdx === -1) { setError("Nie rozpoznano nagłówków kolumn"); setParsing(false); return; }
+
+      const fieldCol: Record<string, number> = {};
+      colMap.forEach((field, idx) => { fieldCol[field] = idx; });
+      const get = (row: any[], field: string): string => {
+        const idx = fieldCol[field]; return idx !== undefined ? String(row[idx] ?? "").trim() : "";
+      };
+      const getNum = (row: any[], field: string): number | null => {
+        const v = get(row, field); if (!v) return null;
+        const n = parseFloat(v.replace(/\s/g, "").replace(",", "."));
+        return isNaN(n) ? null : Math.ceil(n);
+      };
+
+      // Parse rows into flat WZ list
+      const allWz: (WZImportData & { typ_pojazdu?: string })[] = [];
+      let currentTyp: string | null = null;
+
+      for (let i = headerIdx + 1; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.every((c: any) => !c && c !== 0)) continue;
+
+        const nrWz = get(row, "nr_wz");
+        const odbiorca = get(row, "odbiorca");
+        const masa = getNum(row, "masa");
+        const typKod = get(row, "typ").toUpperCase().trim().charAt(0);
+
+        if (!nrWz && !odbiorca && masa !== null) continue; // summary row
+        if (!nrWz && !odbiorca) continue;
+
+        if (typKod && XLS_TYP_MAP[typKod] !== undefined) currentTyp = XLS_TYP_MAP[typKod];
+
+        const miasto = get(row, "miasto");
+        const ulica = get(row, "ulica");
+        const rodzajDostawy = get(row, "rodzaj_dostawy");
+        const uwagi = get(row, "uwagi");
+
         allWz.push({
-          numer_wz: zl.nr_wz,
+          numer_wz: nrWz || null,
           nr_zamowienia: null,
-          odbiorca: zl.odbiorca,
-          adres: zl.adres_pelny,
+          odbiorca: odbiorca || null,
+          adres: [ulica, miasto].filter(Boolean).join(", ") || null,
           tel: null,
           osoba_kontaktowa: null,
-          masa_kg: zl.masa_kg,
+          masa_kg: masa,
           ilosc_palet: null,
           objetosc_m3: null,
-          uwagi: [zl.rodzaj_dostawy, zl.uwagi].filter(Boolean).join("; ") || null,
+          uwagi: [rodzajDostawy, uwagi].filter(Boolean).join("; ") || null,
           typ_dokumentu: "WZ",
           ma_adres_dostawy: false,
-          typ_pojazdu: kurs.typ_pojazdu,
+          typ_pojazdu: currentTyp,
         });
       }
+
+      console.log("[XlsTab] parsed client-side:", allWz.length, "WZ rows");
+      setRows(allWz);
+      setSelected(new Set(allWz.map((_, i) => i)));
+    } catch (err) {
+      setError("Błąd odczytu pliku: " + (err as Error).message);
     }
-    setRows(allWz);
-    setSelected(new Set(allWz.map((_, i) => i)));
+    setParsing(false);
   }, []);
 
   const toggleRow = (i: number) => {
