@@ -914,55 +914,19 @@ function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
     return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000;
   });
 
-  const parse = async () => {
+  const parse = () => {
     if (text.length === 0) return;
     setParsing(true);
     setError(null);
     setResult(null);
 
-    // Lokalny parser jako baza (działa zawsze, niezależnie od edge function)
     const decoded = decodePUA(text);
     setDecodedPreview(decoded.slice(0, 200));
-    console.log("[PasteTab v5] raw chars:", text.length, "| PUA:", hasPUA, "| decoded preview:", decoded.slice(0, 150));
+    console.log("[PasteTab v8] raw chars:", text.length, "| PUA:", hasPUA, "| decoded preview:", decoded.slice(0, 150));
+
+    // Only local parser — no edge function (edge function has stale parseSeweraDoc)
     const local = parseWZText(text);
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text }),
-      });
-      const json: ParsedPdfResult = await res.json();
-
-      if (!json.error) {
-        // Merge: edge function uzupełnia to czego lokalny parser nie znalazł
-        setResult({
-          numer_wz: json.nr_wz || local.numer_wz,
-          nr_zamowienia: json.nr_zamowienia || local.nr_zamowienia,
-          odbiorca: json.odbiorca || local.odbiorca,
-          adres: json.adres_dostawy || local.adres,
-          tel: json.osoba_kontaktowa || json.tel || local.tel,
-          osoba_kontaktowa: json.osoba_kontaktowa || local.osoba_kontaktowa,
-          masa_kg: json.masa_kg || local.masa_kg,
-          ilosc_palet: json.ilosc_palet || local.ilosc_palet,
-          objetosc_m3: json.objetosc_m3 || local.objetosc_m3,
-          uwagi: json.uwagi || local.uwagi,
-          typ_dokumentu: (json as any).typ_dokumentu || "WZ",
-          ma_adres_dostawy: (json as any).ma_adres_dostawy ?? false,
-        });
-      } else {
-        setResult(local);
-      }
-    } catch {
-      // Brak połączenia — użyj lokalnego parsera
-      setResult(local);
-    }
+    setResult(local);
     setParsing(false);
   };
 
