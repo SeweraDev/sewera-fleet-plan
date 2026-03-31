@@ -132,14 +132,10 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     .replace(/(\n\s*){3,}/g, '\n\n');
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-  // Nr WZ
+  // Nr WZ — ONLY match WZ, WZS, or PZ prefixed document numbers
   let numer_wz: string | undefined;
-  const wzM = text.match(/WZ\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
-  if (wzM) numer_wz = `WZ ${wzM[1]}`;
-  else {
-    const wzBare = text.match(/([A-Z]{2}\/\d{2,3}\/\d{2}\/\d{2}\/\d{5,})/);
-    if (wzBare) numer_wz = `WZ ${wzBare[1]}`;
-  }
+  const wzM = text.match(/(WZS?|PZ)\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  if (wzM) numer_wz = `${wzM[1]} ${wzM[2]}`;
 
   // Nr zamówienia
   let nr_zamowienia: string | undefined;
@@ -173,9 +169,11 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     if (SKIP_PATTERNS.some(p => p.test(line))) continue;
     if (/\(.*(?:SPÓŁKA|SP\.|S\.A\.|S\.C\.)/i.test(line)) continue;
     if (/^[A-Z]{1,3}-\d/.test(line)) continue;
-    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\.|KOMANDYT/i.test(line);
     const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
-    if (hasLegalForm || capsWords >= 3) { odbiorca = line; break; }
+    const hasInitials = /\b[A-Z]\.[A-Z]\.?\b/.test(line);
+    const allCapsName = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}$/.test(w)).length >= 2;
+    if (hasLegalForm || capsWords >= 3 || (hasInitials && allCapsName)) { odbiorca = line; break; }
   }
 
   // Adres dostawy
@@ -218,17 +216,6 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
       if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
     }
   }
-  if (!adres && odbiorca) {
-    const odbIdx = lines.indexOf(odbiorca);
-    if (odbIdx >= 0) {
-      for (let i = odbIdx + 1; i < Math.min(odbIdx + 3, lines.length); i++) {
-        if (/ul\.|al\.|os\.|pl\./i.test(lines[i]) || /\d{2}-\d{3}/.test(lines[i])) {
-          adres = lines[i]; break;
-        }
-      }
-    }
-  }
-
   // Telefon
   let tel: string | undefined;
   const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
