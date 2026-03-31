@@ -643,9 +643,12 @@ function parseWZText(rawText: string): WZImportData {
     // Skip product codes and manufacturer lines in parentheses
     if (/\(.*(?:SPÓŁKA|SP\.|S\.A\.|S\.C\.)/i.test(line)) continue;
     if (/^[A-Z]{1,3}-\d/.test(line)) continue;
-    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.|S\.C\.|Sp\.\s*z\s*o\.o\./i.test(line);
+    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\.|KOMANDYT/i.test(line);
     const capsWords = line.split(/\s+/).filter((w) => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
-    if (hasLegalForm || capsWords >= 3) {
+    // Match company-like names: initials with dots (P.A, P.H.U.), mixed case brand names
+    const hasInitials = /\b[A-Z]\.[A-Z]\.?\b/.test(line);
+    const allCapsName = line.split(/\s+/).filter((w) => /^[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}$/.test(w)).length >= 2;
+    if (hasLegalForm || capsWords >= 3 || (hasInitials && allCapsName)) {
       // Zbierz nazwę + adres siedziby (kolejne linie: ul., kod pocztowy, NIP)
       const parts = [line];
       for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
@@ -761,8 +764,10 @@ function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 6. masa_kg — last standalone number before "RAZEM:" line
+  // 6. masa_kg — multiple strategies
   let masa_kg = 0;
+
+  // Strategy A: last standalone number before "RAZEM:" line
   const razemIdx = lines.findIndex((l) => /^RAZEM/i.test(l));
   if (razemIdx > 0) {
     for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
@@ -774,10 +779,44 @@ function parseWZText(rawText: string): WZImportData {
       }
     }
   }
-  // Fallback: inline after "Waga netto razem:" label
+
+  // Strategy B: "Waga netto razem:" inline
   if (masa_kg === 0) {
     const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
     if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(",", ".")) || 0);
+  }
+
+  // Strategy C: "RAZEM:" on same line with number (e.g. "RAZEM: 1 700,00")
+  if (masa_kg === 0) {
+    const razemInline = text.match(/RAZEM[:\s]+([\d\s]+[,.][\d]+)/i);
+    if (razemInline) {
+      masa_kg = Math.ceil(parseFloat(razemInline[1].replace(/\s/g, "").replace(",", ".")) || 0);
+    }
+  }
+
+  // Strategy D: number on RAZEM line itself (e.g. "RAZEM 1700,00 kg" or "RAZEM: 63,60")
+  if (masa_kg === 0 && razemIdx >= 0) {
+    const razemLine = lines[razemIdx];
+    const razemNum = razemLine.match(/RAZEM[:\s]*([\d\s]+[\d,.]+)\s*(?:kg)?/i);
+    if (razemNum) {
+      masa_kg = Math.ceil(parseFloat(razemNum[1].replace(/\s/g, "").replace(",", ".")) || 0);
+    }
+  }
+
+  // Strategy E: last big number (>10) in the document before footer
+  if (masa_kg === 0) {
+    const footerIdx = lines.findIndex((l) => /Wystawił|Na\s+podstawie/i.test(l));
+    const searchEnd = footerIdx > 0 ? footerIdx : lines.length;
+    for (let i = searchEnd - 1; i >= Math.max(0, searchEnd - 20); i--) {
+      const numM = lines[i].match(/([\d\s]+[,.][\d]{2})\s*(?:kg)?$/);
+      if (numM) {
+        const val = parseFloat(numM[1].replace(/\s/g, "").replace(",", "."));
+        if (val > 10) {
+          masa_kg = Math.ceil(val);
+          break;
+        }
+      }
+    }
   }
 
   // 7. objetosc_m3 — only from summary lines, NOT from product descriptions
@@ -847,6 +886,7 @@ function parseWZText(rawText: string): WZImportData {
   }
   if (contactEntries.length) osoba_kontaktowa = contactEntries.join(", ");
 
+  console.log("[parseWZText v7] debug masa:", { razemIdx, razemLine: razemIdx >= 0 ? lines[razemIdx] : null, prevLines: razemIdx > 0 ? lines.slice(Math.max(0, razemIdx - 3), razemIdx) : [] });
   console.log("[parseWZText v7] result:", {
     numer_wz,
     nr_zamowienia,
