@@ -678,11 +678,14 @@ function parseWZText(rawText: string): WZImportData {
   const osMatch = text.match(/Os\.\s*kontaktowa[:\s]+([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)/i);
   if (osMatch) {
     let entry = osMatch[1].trim();
-    const afterOs = text.slice(text.indexOf(osMatch[0]) + osMatch[0].length);
+    const afterOsFull = text.slice(text.indexOf(osMatch[0]) + osMatch[0].length);
+    // Ogranicz do sekcji dostawy — stop przed Wystawił/footer/produktami
+    const stopIdx = afterOsFull.search(/Wystawił|Na\s+podstawie|Lp\.\s|Magazyn\s+wydaj/i);
+    const afterOs = stopIdx > -1 ? afterOsFull.slice(0, stopIdx) : afterOsFull;
     const telAfter = afterOs.match(/^[\s:]*Tel\.?\s*:?\s*([\d][\d\s\-]{7,})/i);
     if (telAfter) entry += ' tel. ' + telAfter[1].replace(/[^\d]/g, ' ').trim().replace(/\s+/g, ' ');
     contactEntries.push(entry);
-    // Additional contacts: "Name tel. number" after Os. kontaktowa section
+    // Additional contacts: "Name tel. number" — only in delivery section
     const extras = [...afterOs.matchAll(/([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż\-]+)\s+tel\.?\s*:?\s*([\d][\d\s\-]{7,})/gi)];
     for (const m of extras) {
       const name = m[1].trim();
