@@ -54,13 +54,20 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
             <div><Label className="text-xs">Adres *</Label><Input className="h-8 text-sm" value={wz.adres} onChange={e => updateWz(idx, 'adres', e.target.value)} /></div>
             <div><Label className="text-xs">Telefon</Label><Input className="h-8 text-sm" value={wz.tel || ''} onChange={e => updateWz(idx, 'tel', e.target.value)} /></div>
             <div><Label className="text-xs">Masa (kg) *</Label><Input className="h-8 text-sm" type="number" value={wz.masa_kg || ''} onChange={e => updateWz(idx, 'masa_kg', Number(e.target.value))} /></div>
-            <div><Label className="text-xs">Objętość (m³) *</Label><Input className="h-8 text-sm" type="number" value={wz.objetosc_m3 || ''} onChange={e => updateWz(idx, 'objetosc_m3', Number(e.target.value))} /></div>
+            <div>
+              <Label className="text-xs">Objętość (m³) {!wz.luzne_karton && '*'}</Label>
+              <Input className="h-8 text-sm" type="number" value={wz.luzne_karton ? 0 : (wz.objetosc_m3 || '')} disabled={wz.luzne_karton} onChange={e => updateWz(idx, 'objetosc_m3', Number(e.target.value))} />
+              <label className="flex items-center gap-1.5 mt-1 cursor-pointer">
+                <Checkbox checked={wz.luzne_karton || false} onCheckedChange={(checked) => { updateWz(idx, 'luzne_karton', !!checked); if (checked) updateWz(idx, 'objetosc_m3', 0); }} />
+                <span className="text-[11px] text-muted-foreground">Luźne/karton</span>
+              </label>
+            </div>
             <div>
               <Label className="text-xs">Palety (szt) {!wz.bez_palet && '*'}</Label>
               <Input className="h-8 text-sm" type="number" min={0} placeholder="0" value={wz.bez_palet ? 0 : (wz.ilosc_palet || '')} disabled={wz.bez_palet} onChange={e => updateWz(idx, 'ilosc_palet', Number(e.target.value))} />
               <label className="flex items-center gap-1.5 mt-1 cursor-pointer">
                 <Checkbox checked={wz.bez_palet || false} onCheckedChange={(checked) => { updateWz(idx, 'bez_palet', !!checked); if (checked) updateWz(idx, 'ilosc_palet', 0); }} />
-                <span className="text-[11px] text-muted-foreground">Bez palet (karton/luźne)</span>
+                <span className="text-[11px] text-muted-foreground">Bez palet</span>
               </label>
             </div>
             <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={wz.uwagi || ''} onChange={e => updateWz(idx, 'uwagi', e.target.value)} /></div>

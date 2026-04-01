@@ -26,7 +26,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [dzien, setDzien] = useState('');
   const [godzina, setGodzina] = useState('');
   const [wzList, setWzList] = useState<WzInput[]>([{
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, uwagi: '',
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '',
   }]);
   const [showImport, setShowImport] = useState(false);
 
@@ -45,6 +45,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       objetosc_m3: d.objetosc_m3 || 0,
       ilosc_palet: d.ilosc_palet || 0,
       bez_palet: false,
+      luzne_karton: false,
       uwagi: d.uwagi || '',
     }));
 
@@ -59,7 +60,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const handleGoToCheck = () => {
     const invalid = wzList.find(w => {
       if (!w.odbiorca || !w.masa_kg) return true;
-      if (!w.objetosc_m3 || w.objetosc_m3 <= 0) return true;
+      if (!w.luzne_karton && (!w.objetosc_m3 || w.objetosc_m3 <= 0)) return true;
       if (!w.bez_palet && (!w.ilosc_palet || w.ilosc_palet <= 0)) return true;
       return false;
     });
@@ -67,7 +68,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       const missing: string[] = [];
       if (!invalid.odbiorca) missing.push('odbiorca');
       if (!invalid.masa_kg) missing.push('masa kg');
-      if (!invalid.objetosc_m3 || invalid.objetosc_m3 <= 0) missing.push('objętość m³');
+      if (!invalid.luzne_karton && (!invalid.objetosc_m3 || invalid.objetosc_m3 <= 0)) missing.push('objętość m³');
       if (!invalid.bez_palet && (!invalid.ilosc_palet || invalid.ilosc_palet <= 0)) missing.push('ilość palet');
       toast.error(`Uzupełnij: ${missing.join(', ')}`);
       return;

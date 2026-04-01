@@ -14,6 +14,7 @@ export interface WzInput {
   objetosc_m3: number | null;
   ilosc_palet: number;
   bez_palet: boolean;
+  luzne_karton: boolean;
   uwagi: string | null;
 }
 
