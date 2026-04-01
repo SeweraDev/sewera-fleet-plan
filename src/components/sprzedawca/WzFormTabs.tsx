@@ -82,9 +82,11 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
 function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const [step, setStep] = useState<'upload' | 'text' | 'preview'>('upload');
   const [parsing, setParsing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
+  const [ocrText, setOcrText] = useState("");
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,13 +94,13 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     if (file.size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
     setParsing(true);
     setError(null);
-    setPreview(null);
+    setOcrText("");
     setProgress(0);
     setProgressMsg("Ładowanie modelu OCR...");
 
     try {
       const TesseractModule = await import("tesseract.js");
-      const { data: { text: ocrText } } = await TesseractModule.default.recognize(file, "pol", {
+      const { data: { text } } = await TesseractModule.default.recognize(file, "pol", {
         logger: (m: any) => {
           if (m.status === "recognizing text") {
             const pct = Math.round((m.progress || 0) * 100);
@@ -112,108 +114,36 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       });
 
       setParsing(false);
-      setProgress(100);
+      const cleaned = cleanOcrText(text || "");
+      setOcrText(cleaned);
 
-      if (!ocrText || ocrText.trim().length < 20) {
-        setError("Nie udało się rozpoznać tekstu ze zdjęcia. Spróbuj lepsze zdjęcie lub wklej tekst ręcznie.");
+      if (cleaned.trim().length < 10) {
+        setError("Nie udało się rozpoznać tekstu. Spróbuj lepsze zdjęcie.");
         return;
       }
 
-      const cleaned = cleanOcrText(ocrText);
-      console.log("[WzOcrTab] cleaned text:\n", cleaned.substring(0, 500));
-      const local = parseWzTextLocal(cleaned);
-
-      // ─── OCR-specific: ekstrakcja odbiorcy ───
-      const SEWERA_BLOCK = /SEWERA|KO[SŚ]CIUSZKI\s*326|000044503|NR\s*BDO|SIEMIANOWICE/i;
-      let ocrOdbiorca = local.odbiorca || '';
-      // Odrzuć jeśli to dane SEWERY
-      if (ocrOdbiorca && SEWERA_BLOCK.test(ocrOdbiorca)) ocrOdbiorca = '';
-
-      // Strategia 1: szukaj "Odbiorca" w tekście → zbierz blok tekstu po nim
-      if (!ocrOdbiorca) {
-        const cLines = cleaned.split(/\n/).map(l => l.trim()).filter(Boolean);
-        const odbLineIdx = cLines.findIndex(l => /Odbiorca/i.test(l));
-        if (odbLineIdx >= 0) {
-          const nameParts: string[] = [];
-          for (let i = odbLineIdx + 1; i < Math.min(odbLineIdx + 8, cLines.length); i++) {
-            const l = cLines[i];
-            if (/^ul\.|^al\.|^os\.|^pl\.|^\d{2}-\d{3}|^Nr\s*ewid|^NIP/i.test(l)) break;
-            if (SEWERA_BLOCK.test(l)) continue;
-            if (l.length < 3) continue;
-            nameParts.push(l);
-          }
-          if (nameParts.length) ocrOdbiorca = nameParts.join(' ').trim();
-        }
-      }
-
-      // Strategia 2: szukaj linii z SPÓŁKA/KOMANDYTOWA (nie SEWERA)
-      if (!ocrOdbiorca) {
-        const cLines = cleaned.split(/\n/).map(l => l.trim()).filter(Boolean);
-        for (const l of cLines) {
-          if (/SPÓŁKA|SP\.\s*(?:Z|K)|KOMANDYT|S\.A\.?\s*$/i.test(l) && !SEWERA_BLOCK.test(l)) {
-            ocrOdbiorca = l; break;
-          }
-        }
-        // Jeśli znaleziono linię z formą prawną, zbierz też linię przed nią (początek nazwy)
-        if (ocrOdbiorca) {
-          const idx = cLines.findIndex(l => l === ocrOdbiorca);
-          if (idx > 0) {
-            const prev = cLines[idx - 1];
-            // Dodaj poprzednią linię jeśli wygląda na nazwę firmy (nie marker)
-            if (prev.length >= 3 && !/^ul\.|^al\.|^\d{2}-\d{3}|^NIP|^Nr\s*ewid|Odbiorca|Sprzedawca|Nabywca/i.test(prev) && !SEWERA_BLOCK.test(prev)) {
-              ocrOdbiorca = `${prev} ${ocrOdbiorca}`;
-            }
-          }
-        }
-      }
-
-      // Strategia 3: regex na formę prawną w ciągłym tekście (nie SEWERA)
-      if (!ocrOdbiorca) {
-        const firmRegex = /([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s.\-&]{3,}(?:SPÓŁKA|KOMANDYT|SP\.\s*(?:Z\s*O\.O\.|K)|S\.A\.?|S\.C\.)[A-Za-ząćęłńóśźż\s]*)/gi;
-        let firmM;
-        while ((firmM = firmRegex.exec(cleaned)) !== null) {
-          const candidate = firmM[1].trim();
-          if (!SEWERA_BLOCK.test(candidate)) { ocrOdbiorca = candidate; break; }
-        }
-      }
-
-      // Cleanup: usuń trailing krótkie śmieci z OCR
-      if (ocrOdbiorca) {
-        ocrOdbiorca = ocrOdbiorca.replace(/\s+[a-zA-Z]{1}$/,'').trim();
-      }
-
-      // Ekstrakcja os. kontaktowa z pełnego tekstu (OCR często ma to w jednej linii z adresem)
-      let osKontaktowa = '';
-      const kontaktM = cleaned.match(/(?:Os\.?\s*kontaktowa|kontaktowa)\s*:?\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)/i);
-      if (kontaktM) osKontaktowa = kontaktM[1].trim();
-      // Fallback: szukaj "Imię Nazwisko tel. XXX"
-      if (!osKontaktowa) {
-        const nametelM = cleaned.match(/([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)\s+tel\.?\s*([\d\s\-]{9,})/i);
-        if (nametelM) osKontaktowa = nametelM[1].trim();
-      }
-
-      // Lepszy tel z cleaned text jeśli parser nie znalazł
-      let tel = local.tel || '';
-      if (!tel) {
-        const telM = cleaned.match(/tel\.?\s*:?\s*([\d][\d\s\-]{7,}[\d])/i);
-        if (telM) tel = telM[1].replace(/\s+/g, '').replace(/-/g, '');
-      }
-
-      setPreview({
-        numer_wz: local.numer_wz || '',
-        nr_zamowienia: local.nr_zamowienia || '',
-        odbiorca: ocrOdbiorca || '',
-        adres: local.adres || '',
-        tel: osKontaktowa ? `${osKontaktowa}, tel. ${tel}` : tel,
-        masa_kg: local.masa_kg || 0,
-        objetosc_m3: 0,
-        ilosc_palet: local.ilosc_palet || 0,
-        uwagi: local.uwagi || '',
-      });
+      // Od razu pokaż tekst do edycji
+      setStep('text');
     } catch (e: any) {
       setParsing(false);
       setError("Błąd OCR: " + (e.message || "nieznany"));
     }
+  };
+
+  const handleParse = () => {
+    const local = parseWzTextLocal(ocrText);
+    setPreview({
+      numer_wz: local.numer_wz || '',
+      nr_zamowienia: local.nr_zamowienia || '',
+      odbiorca: local.odbiorca || '',
+      adres: local.adres || '',
+      tel: local.tel || '',
+      masa_kg: local.masa_kg || 0,
+      objetosc_m3: 0,
+      ilosc_palet: local.ilosc_palet || 0,
+      uwagi: local.uwagi || '',
+    });
+    setStep('preview');
   };
 
   const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
@@ -236,12 +166,15 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     } else {
       setWzList([...wzList, newWz]);
     }
+    setStep('upload');
     setPreview(null);
+    setOcrText("");
   };
 
   return (
     <div className="space-y-3 pt-2">
-      {!preview && !parsing && (
+      {/* Krok 1: Upload zdjęcia */}
+      {step === 'upload' && !parsing && (
         <>
           <div className="grid grid-cols-2 gap-3">
             <div
@@ -252,7 +185,6 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
               <div className="text-3xl mb-2">📷</div>
               <p className="text-sm font-medium text-muted-foreground">Zrób zdjęcie</p>
-              <p className="text-xs text-muted-foreground mt-1">Aparat telefonu</p>
             </div>
             <div
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -264,13 +196,13 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
               <div className="text-3xl mb-2">🖼️</div>
               <p className="text-sm font-medium text-muted-foreground">Wybierz plik</p>
-              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, HEIC</p>
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </>
       )}
 
+      {/* Progress */}
       {parsing && (
         <div className="space-y-2 py-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -283,9 +215,26 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         </div>
       )}
 
-      {preview && (
+      {/* Krok 2: Edycja rozpoznanego tekstu */}
+      {step === 'text' && (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">Sprawdź i popraw odczytane dane:</p>
+          <p className="text-xs text-muted-foreground">Popraw rozpoznany tekst jeśli trzeba, potem kliknij Parsuj:</p>
+          <textarea
+            className="w-full min-h-[200px] font-mono text-xs border rounded-md p-2 bg-background"
+            value={ocrText}
+            onChange={e => setOcrText(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleParse}>Parsuj tekst</Button>
+            <Button size="sm" variant="outline" onClick={() => { setStep('upload'); setOcrText(""); }}>Nowe zdjęcie</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Krok 3: Podgląd sparsowanych pól */}
+      {step === 'preview' && preview && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Sprawdź i popraw dane:</p>
           <div className="space-y-2">
             {previewFields.map(f => {
               const val = preview[f.key];
@@ -309,7 +258,8 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
-            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>Nowe zdjęcie</Button>
+            <Button size="sm" variant="outline" onClick={() => setStep('text')}>Popraw tekst</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setStep('upload'); setPreview(null); setOcrText(""); }}>Nowe zdjęcie</Button>
           </div>
         </div>
       )}
