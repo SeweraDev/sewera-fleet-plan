@@ -142,6 +142,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             wzList={wzList}
             onBack={() => setStep(3)}
             onSubmit={handleSubmit}
+            onChangeDzien={(newDzien) => setDzien(newDzien)}
             submitting={submitting}
           />
         )}
