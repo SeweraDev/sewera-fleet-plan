@@ -112,8 +112,8 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
         .order('kolejnosc');
 
       const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
-      let zlecMap = new Map<string, { numer: string }>();
-      let wzMap = new Map<string, { odbiorca: string; adres: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number; numer_wz: string; nr_zamowienia: string; tel: string; uwagi: string }>();
+      const zlecMap = new Map<string, { numer: string }>();
+      const wzListMap = new Map<string, any[]>();
 
       if (zlecenieIds.length > 0) {
         const { data: zlData } = await supabase
@@ -126,8 +126,6 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
           .from('zlecenia_wz')
           .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, numer_wz, nr_zamowienia, tel, uwagi')
           .in('zlecenie_id', zlecenieIds);
-        // Grupuj WZ per zlecenie jako lista (nie agregat)
-        const wzListMap = new Map<string, typeof wzData>();
         (wzData || []).forEach(w => {
           const list = wzListMap.get(w.zlecenie_id) || [];
           list.push(w);
