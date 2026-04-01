@@ -34,7 +34,7 @@ export function usePowiadomienia() {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel(`powiadomienia-realtime-${Date.now()}`)
+      .channel(`powiadomienia-realtime-${Date.now()}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

@@ -138,7 +138,7 @@ export function useMojeKursyDzis() {
   useEffect(() => {
     refetch();
     const channel = supabase
-      .channel(`kierowca-kursy-${Date.now()}`)
+      .channel(`kierowca-kursy-${Date.now()}-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kursy' }, () => refetch())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kurs_przystanki' }, () => refetch())
       .subscribe();
