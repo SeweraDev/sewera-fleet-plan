@@ -7,11 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import * as pdfjsLib from "pdfjs-dist";
-import * as XLSX from "xlsx";
-import Tesseract from "tesseract.js";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Heavy libraries loaded dynamically (lazy) to avoid blocking app startup
+let pdfjsLib: typeof import("pdfjs-dist") | null = null;
+async function getPdfjs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import("pdfjs-dist");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+  }
+  return pdfjsLib;
+}
 
 export interface WZImportData {
   numer_wz: string | null;
@@ -165,7 +169,8 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
       try {
         // OCR branch: images (PNG/JPG)
         if (isImage) {
-          const { data: { text: ocrText } } = await Tesseract.recognize(file, "pol", {
+          const TesseractModule = await import("tesseract.js");
+          const { data: { text: ocrText } } = await TesseractModule.default.recognize(file, "pol", {
             logger: (m: any) => {
               if (m.status === "recognizing text") {
                 setError(`Rozpoznawanie tekstu: ${Math.round((m.progress || 0) * 100)}%`);
@@ -202,7 +207,8 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
         // Client-side PDF text extraction — preserve line structure via Y-position tracking
         const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+        const pdf = await getPdfjs();
+        const pdfDoc = await pdf.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
         const pages: string[] = [];
         for (let i = 1; i <= pdfDoc.numPages; i++) {
           const page = await pdfDoc.getPage(i);
@@ -431,6 +437,7 @@ function XlsTab({ onParsed }: { onParsed: (rows: WZImportData[]) => void }) {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
+      const XLSX = await import("xlsx");
       const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
