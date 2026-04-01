@@ -360,6 +360,13 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
     const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
     const hasInitials = /\b[A-Z]\.[A-Z]\.?\b/.test(line);
     const allCapsName = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}$/.test(w)).length >= 2;
+    // OCR guard: odrzuć kandydatów z dużą ilością znaków specjalnych (garbage)
+    const specialChars = (line.match(/[):;=\[\]{}|]/g) || []).length;
+    if (specialChars >= 2) continue;
+    // OCR guard: odrzuć jeśli >50% słów to 1-2 znaki (śmieci OCR)
+    const words = line.split(/\s+/).filter(Boolean);
+    const shortWords = words.filter(w => w.length <= 2 && !/^(i|w|z|o|u|sp|SA|ul|al|os|II|ZB)$/i.test(w)).length;
+    if (words.length > 0 && shortWords / words.length > 0.4) continue;
     if (hasLegalForm || capsWords >= 3 || (hasInitials && allCapsName)) { odbiorca = line; break; }
   }
 
@@ -410,11 +417,21 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
       adres = undefined;
     }
   }
-  // Fallback adres: szukaj wzorca "ul./al./os. + nazwa + numer, kod-pocztowy miasto" w pełnym tekście
+  // Fallback adres: szukaj wzorca "ul./al./os. + nazwa + numer ... kod-pocztowy miasto" w pełnym tekście
   if (!adres) {
-    const addrRegex = /(?:ul\.|al\.|os\.|pl\.)\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s]+\d+[a-zA-Z]?(?:\s*[,/]\s*\d+)?[,\s]+\d{2}-\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+/;
+    // Elastyczny regex — OCR może wstawiać śmieci między częściami adresu
+    const addrRegex = /(?:ul\.|al\.|os\.|pl\.)\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s.]+?\d+[a-zA-Z]?[\s\S]{0,30}?(\d{2}-\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)/;
     const addrM = text.match(addrRegex);
-    if (addrM) adres = addrM[0].trim();
+    if (addrM) {
+      // Wyciągnij ul. + numer i kod + miasto osobno, połącz czysto
+      const streetM = text.match(/((?:ul\.|al\.|os\.|pl\.)\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s.]+?\d+[a-zA-Z]?)/);
+      const cityPart = addrM[1]; // np. "41-200 Sosnowiec"
+      if (streetM) {
+        adres = `${streetM[1].trim()}, ${cityPart.trim()}`;
+      } else {
+        adres = cityPart.trim();
+      }
+    }
   }
   if (adres && odbiorca && odbiorca.includes(adres)) {
     adres = undefined;
@@ -486,13 +503,24 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
   // ─── Post-processing: obcięcie adresu z artefaktów OCR ───
   if (adres) {
     // OCR często łączy kolumny tabeli w jedną linię — obetnij przy znanych markerach
-    const cutMarkers = [/kontaktowa/i, /Kod\s*towaru/i, /Nazwa\s*towaru/i, /AE\s/i, /mp\s/i, /Ilo[sś][cć]/i, /Cena/i, /Netto/i];
+    const cutMarkers = [/kontaktowa/i, /Kod\s*towaru/i, /Nazwa\s*towaru/i, /AE\s/i, /mp\s/i, /Ilo[sś][cć]/i, /Cena/i, /Netto/i, /wz\s/i];
     for (const marker of cutMarkers) {
       const cutIdx = adres.search(marker);
       if (cutIdx > 10) { adres = adres.substring(0, cutIdx).replace(/[,\s]+$/, ''); break; }
     }
-    // Usuń końcowe litery-śmieci (zj R, S itp. — artefakty OCR)
-    adres = adres.replace(/[,\s]+[a-zA-Z]{1,2}$/, '').trim();
+    // Usuń izolowane 1-2 znakowe artefakty OCR (zj, R, S, itp.) ale zachowaj numery i skróty adresowe
+    // Wzorzec: po kodzie pocztowym i mieście obetnij resztę
+    const pcMatch = adres.match(/(\d{2}-\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźżA-Z]+)/);
+    if (pcMatch) {
+      const pcEnd = adres.indexOf(pcMatch[1]) + pcMatch[1].length;
+      adres = adres.substring(0, pcEnd).trim();
+    } else {
+      // Fallback: usuń końcowe krótkie śmieci
+      adres = adres.replace(/[,\s]+[a-zA-Z]{1,2}$/, '').trim();
+    }
+    // Usuń izolowane krótkie słowa pomiędzy częściami adresu (OCR artefakty jak "zj R")
+    adres = adres.replace(/,\s*[a-zA-Z]{1,2}\s+[A-Z]{1}\s+(?=\d{2}-\d{3})/, ', ');
+    adres = adres.replace(/\s+[a-z]{1,2}\s+[A-Z]{1}\s+/, ' ');
   }
 
   // ─── Fallback odbiorca z regex (OCR garble) ───
