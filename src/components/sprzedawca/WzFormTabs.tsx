@@ -79,23 +79,160 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
   );
 }
 
-function WzOcrTab() {
-  const [fileName, setFileName] = useState<string | null>(null);
+function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMsg, setProgressMsg] = useState("");
+  const [preview, setPreview] = useState<ParsePreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleImage = async (file: File) => {
+    if (file.size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
+    setParsing(true);
+    setError(null);
+    setPreview(null);
+    setProgress(0);
+    setProgressMsg("Ładowanie modelu OCR...");
+
+    try {
+      const TesseractModule = await import("tesseract.js");
+      const { data: { text: ocrText } } = await TesseractModule.default.recognize(file, "pol", {
+        logger: (m: any) => {
+          if (m.status === "recognizing text") {
+            const pct = Math.round((m.progress || 0) * 100);
+            setProgress(pct);
+            setProgressMsg(`Rozpoznawanie tekstu: ${pct}%`);
+          } else if (m.status === "loading language traineddata") {
+            setProgressMsg("Pobieranie modelu języka polskiego...");
+            setProgress(10);
+          }
+        },
+      });
+
+      setParsing(false);
+      setProgress(100);
+
+      if (!ocrText || ocrText.trim().length < 20) {
+        setError("Nie udało się rozpoznać tekstu ze zdjęcia. Spróbuj lepsze zdjęcie lub wklej tekst ręcznie.");
+        return;
+      }
+
+      console.log("[WzOcrTab] extracted text:\n", ocrText.substring(0, 500));
+      const local = parseWzTextLocal(ocrText);
+      setPreview({
+        numer_wz: local.numer_wz || '',
+        nr_zamowienia: local.nr_zamowienia || '',
+        odbiorca: local.odbiorca || '',
+        adres: local.adres || '',
+        tel: local.tel || '',
+        masa_kg: local.masa_kg || 0,
+        objetosc_m3: 0,
+        ilosc_palet: local.ilosc_palet || 0,
+        uwagi: local.uwagi || '',
+      });
+    } catch (e: any) {
+      setParsing(false);
+      setError("Błąd OCR: " + (e.message || "nieznany"));
+    }
+  };
+
+  const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
+    { key: 'numer_wz', label: 'Nr WZ' },
+    { key: 'nr_zamowienia', label: 'Nr zamówienia' },
+    { key: 'odbiorca', label: 'Odbiorca' },
+    { key: 'adres', label: 'Adres dostawy' },
+    { key: 'tel', label: 'Telefon / kontakt' },
+    { key: 'masa_kg', label: 'Masa (kg)', type: 'number' },
+    { key: 'objetosc_m3', label: 'Objętość (m³)', type: 'number' },
+    { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
+    { key: 'uwagi', label: 'Uwagi' },
+  ];
+
+  const handleConfirm = () => {
+    if (!preview) return;
+    const newWz: WzInput = { ...preview };
+    if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
+      setWzList([newWz]);
+    } else {
+      setWzList([...wzList, newWz]);
+    }
+    setPreview(null);
+  };
 
   return (
-    <div className="space-y-3">
-      <div
-        className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"
-        onClick={() => fileRef.current?.click()}
-      >
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setFileName(f.name); }} />
-        <p className="text-sm font-medium text-muted-foreground">📷 Wgraj zdjęcie WZ</p>
-      </div>
-      {fileName && (
-        <div className="text-sm space-y-1">
-          <p className="text-foreground">Plik: <span className="font-mono">{fileName}</span></p>
-          <p className="text-muted-foreground italic">Analiza zdjęcia — funkcja OCR w przygotowaniu</p>
+    <div className="space-y-3 pt-2">
+      {!preview && !parsing && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div
+              className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => cameraRef.current?.click()}
+            >
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
+              <div className="text-3xl mb-2">📷</div>
+              <p className="text-sm font-medium text-muted-foreground">Zrób zdjęcie</p>
+              <p className="text-xs text-muted-foreground mt-1">Aparat telefonu</p>
+            </div>
+            <div
+              className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImage(f); }}
+            >
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/heic,image/webp" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
+              <div className="text-3xl mb-2">🖼️</div>
+              <p className="text-sm font-medium text-muted-foreground">Wybierz plik</p>
+              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, HEIC</p>
+            </div>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </>
+      )}
+
+      {parsing && (
+        <div className="space-y-2 py-4">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{progressMsg}</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2.5">
+            <div className="bg-primary h-2.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
+
+      {preview && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Sprawdź i popraw odczytane dane:</p>
+          <div className="space-y-2">
+            {previewFields.map(f => {
+              const val = preview[f.key];
+              const found = val !== '' && val !== 0;
+              return (
+                <div key={f.key} className="flex items-center gap-2">
+                  <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
+                  <Label className="text-xs w-32 shrink-0">{f.label}</Label>
+                  <Input
+                    className="h-8 text-sm flex-1"
+                    type={f.type || 'text'}
+                    value={val?.toString() ?? ''}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      setPreview(prev => prev ? { ...prev, [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw } : prev);
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
+            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>Nowe zdjęcie</Button>
+          </div>
         </div>
       )}
     </div>
@@ -504,7 +641,7 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
           <TabsTrigger value="reczne" className="flex-1 text-xs">✏️ Ręcznie</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="ocr"><WzOcrTab /></TabsContent>
+        <TabsContent value="ocr"><WzOcrTab wzList={wzList} setWzList={setWzList} /></TabsContent>
         <TabsContent value="paste"><WzPasteTab wzList={wzList} setWzList={setWzList} /></TabsContent>
         <TabsContent value="reczne"><WzManualForm wzList={wzList} setWzList={setWzList} /></TabsContent>
       </Tabs>
