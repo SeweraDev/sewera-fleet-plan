@@ -99,7 +99,8 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
     try {
       const TesseractModule = await import("tesseract.js");
-      const { data: { text } } = await TesseractModule.default.recognize(file, "pol", {
+      // PSM 4 = kolumnowe rozpoznawanie — lepiej rozdziela kolumny tabel
+      const worker = await TesseractModule.default.createWorker("pol", undefined, {
         logger: (m: any) => {
           if (m.status === "recognizing text") {
             const pct = Math.round((m.progress || 0) * 100);
@@ -111,6 +112,9 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           }
         },
       });
+      await worker.setParameters({ tessedit_pageseg_mode: '4' });
+      const { data: { text } } = await worker.recognize(file);
+      await worker.terminate();
 
       setParsing(false);
       const cleaned = cleanOcrText(text || "");
