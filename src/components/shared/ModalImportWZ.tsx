@@ -1013,12 +1013,19 @@ function parseWZText(rawText: string): WZImportData {
 }
 
 /* ─── Paste Tab ─── */
-function PasteTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
-  const [text, setText] = useState("");
+function PasteTab({ onParsed, prefillText }: { onParsed: (d: WZImportData) => void; prefillText?: string }) {
+  const [text, setText] = useState(prefillText || "");
   const [parsing, setParsing] = useState(false);
   const [result, setResult] = useState<WZImportData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [decodedPreview, setDecodedPreview] = useState<string>("");
+
+  // Update text when prefillText changes (e.g. from OCR → Paste switch)
+  const prevPrefill = useRef(prefillText);
+  if (prefillText && prefillText !== prevPrefill.current) {
+    prevPrefill.current = prefillText;
+    setText(prefillText);
+  }
 
   const hasPUA = Array.from(text).some((ch) => {
     const cp = ch.codePointAt(0) ?? 0;
@@ -1197,9 +1204,191 @@ function ManualTab({ onParsed }: { onParsed: (d: WZImportData) => void }) {
   );
 }
 
+/* ─── OCR Tab (dedicated camera/photo) ─── */
+function OcrTab({ onParsed, onSwitchPaste }: { onParsed: (d: WZImportData) => void; onSwitchPaste: (text: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMsg, setProgressMsg] = useState("");
+  const [result, setResult] = useState<ParsedPdfResult | null>(null);
+  const [formData, setFormData] = useState<WZImportData | null>(null);
+  const [rawOcrText, setRawOcrText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const handleImage = useCallback(async (file: File) => {
+    const name = file.name.toLowerCase();
+    const isImage = name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")
+      || name.endsWith(".heic") || name.endsWith(".webp");
+    if (!isImage) {
+      setError("Wymagane zdjęcie (PNG, JPG, HEIC, WebP).");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setError("Plik za duży (max 15 MB)");
+      return;
+    }
+
+    setParsing(true);
+    setError(null);
+    setResult(null);
+    setFormData(null);
+    setRawOcrText("");
+    setProgress(0);
+    setProgressMsg("Ładowanie modelu OCR...");
+
+    try {
+      const TesseractModule = await import("tesseract.js");
+      const { data: { text: ocrText } } = await TesseractModule.default.recognize(file, "pol", {
+        logger: (m: any) => {
+          if (m.status === "recognizing text") {
+            const pct = Math.round((m.progress || 0) * 100);
+            setProgress(pct);
+            setProgressMsg(`Rozpoznawanie tekstu: ${pct}%`);
+          } else if (m.status === "loading language traineddata") {
+            setProgressMsg("Pobieranie modelu języka polskiego...");
+            setProgress(10);
+          }
+        },
+      });
+
+      setParsing(false);
+      setProgress(100);
+      setRawOcrText(ocrText || "");
+
+      if (!ocrText || ocrText.trim().length < 20) {
+        setError("Nie udało się rozpoznać tekstu ze zdjęcia.");
+        return;
+      }
+
+      console.log("[OcrTab] extracted text:\n", ocrText.substring(0, 500));
+      const mapped = parseWZText(ocrText);
+
+      setResult({
+        nr_wz: mapped.numer_wz, nr_zamowienia: mapped.nr_zamowienia,
+        odbiorca_nazwa: mapped.odbiorca, odbiorca: mapped.odbiorca,
+        odbiorca_adres_siedziby: null, adres_dostawy: mapped.adres,
+        nazwa_budowy: null, osoba_kontaktowa: mapped.osoba_kontaktowa,
+        tel: mapped.tel, tel2: null, masa_kg: mapped.masa_kg,
+        ilosc_palet: mapped.ilosc_palet, objetosc_m3: mapped.objetosc_m3,
+        uwagi: mapped.uwagi, pozycje: [], pewnosc: 60,
+        uwagi_krotkie: null, data_wz: null,
+      });
+      setFormData(mapped);
+    } catch (e: any) {
+      setParsing(false);
+      setError("Błąd OCR: " + (e.message || "nieznany"));
+    }
+  }, []);
+
+  return (
+    <div className="space-y-3 pt-2">
+      {!result && !parsing && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Camera button (mobile) */}
+            <div
+              className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => cameraRef.current?.click()}
+            >
+              <input
+                ref={cameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }}
+              />
+              <div className="text-3xl mb-2">📷</div>
+              <p className="text-sm font-medium text-muted-foreground">Zrób zdjęcie</p>
+              <p className="text-xs text-muted-foreground mt-1">Aparat telefonu</p>
+            </div>
+
+            {/* File picker */}
+            <div
+              className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImage(f); }}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/heic,image/webp"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }}
+              />
+              <div className="text-3xl mb-2">🖼️</div>
+              <p className="text-sm font-medium text-muted-foreground">Wybierz plik</p>
+              <p className="text-xs text-muted-foreground mt-1">PNG, JPG, HEIC, WebP</p>
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </>
+      )}
+
+      {/* Progress bar */}
+      {parsing && (
+        <div className="space-y-2 py-4">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{progressMsg}</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2.5">
+            <div
+              className="bg-primary h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* OCR result preview */}
+      {result && formData && (
+        <div className="space-y-3">
+          <ConfidenceBadge pewnosc={result.pewnosc} totalFields={16} />
+
+          <div className="space-y-2 text-sm">
+            {formData.numer_wz && <div><span className="text-muted-foreground">Nr WZ:</span> <strong className="font-mono">{formData.numer_wz}</strong></div>}
+            {formData.nr_zamowienia && <div><span className="text-muted-foreground">Nr zam.:</span> <strong className="font-mono">{formData.nr_zamowienia}</strong></div>}
+            {formData.odbiorca && <div><span className="text-muted-foreground">Odbiorca:</span> <strong>{formData.odbiorca}</strong></div>}
+            {formData.adres && <div><span className="text-muted-foreground">Adres:</span> {formData.adres}</div>}
+            {formData.tel && <div><span className="text-muted-foreground">Tel:</span> {formData.tel}</div>}
+            {formData.osoba_kontaktowa && <div><span className="text-muted-foreground">Os. kontaktowa:</span> {formData.osoba_kontaktowa}</div>}
+            {formData.masa_kg != null && <div><span className="text-muted-foreground">Masa:</span> {formData.masa_kg} kg</div>}
+            {formData.uwagi && <div><span className="text-muted-foreground">Uwagi:</span> {formData.uwagi}</div>}
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={() => onParsed(formData)} className="flex-1">
+              Importuj WZ
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => onSwitchPaste(rawOcrText)}
+              className="text-xs"
+            >
+              Popraw tekst
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => { setResult(null); setFormData(null); setError(null); }}
+              className="text-xs"
+            >
+              Nowe zdjęcie
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main Modal ─── */
 export function ModalImportWZ({ isOpen, onClose, onImport, hideXls }: Props) {
   const [activeTab, setActiveTab] = useState("pdf");
+  const [prefillPasteText, setPrefillPasteText] = useState("");
 
   const handleSingle = useCallback(
     (d: WZImportData) => {
@@ -1224,26 +1413,32 @@ export function ModalImportWZ({ isOpen, onClose, onImport, hideXls }: Props) {
           <DialogTitle>📥 Import WZ</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== "paste") setPrefillPasteText(""); }}>
           <TabsList className="w-full">
             <TabsTrigger value="pdf" className="flex-1 text-xs">
-              📄 PDF / Skan
+              PDF
+            </TabsTrigger>
+            <TabsTrigger value="ocr" className="flex-1 text-xs">
+              OCR
             </TabsTrigger>
             {!hideXls && (
               <TabsTrigger value="xls" className="flex-1 text-xs">
-                📊 XLS/XLSX
+                XLS
               </TabsTrigger>
             )}
             <TabsTrigger value="paste" className="flex-1 text-xs">
-              📋 Wklej tekst
+              Wklej
             </TabsTrigger>
             <TabsTrigger value="manual" className="flex-1 text-xs">
-              ✏️ Ręcznie
+              Ręcznie
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="pdf">
             <PdfTab onParsed={handleSingle} onSwitchManual={() => setActiveTab("manual")} />
+          </TabsContent>
+          <TabsContent value="ocr">
+            <OcrTab onParsed={handleSingle} onSwitchPaste={(text) => { setPrefillPasteText(text); setActiveTab("paste"); }} />
           </TabsContent>
           {!hideXls && (
             <TabsContent value="xls">
@@ -1251,7 +1446,7 @@ export function ModalImportWZ({ isOpen, onClose, onImport, hideXls }: Props) {
             </TabsContent>
           )}
           <TabsContent value="paste">
-            <PasteTab onParsed={handleSingle} />
+            <PasteTab onParsed={handleSingle} prefillText={prefillPasteText} />
           </TabsContent>
           <TabsContent value="manual">
             <ManualTab onParsed={handleSingle} />
