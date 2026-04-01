@@ -123,6 +123,29 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       console.log("[WzOcrTab] cleaned text:\n", cleaned.substring(0, 500));
       const local = parseWzTextLocal(cleaned);
 
+      // ─── OCR-specific: ekstrakcja odbiorcy po etykiecie "Odbiorca" ───
+      let ocrOdbiorca = local.odbiorca || '';
+      if (!ocrOdbiorca) {
+        // Szukaj "Odbiorca" i zbierz linie po nim (do następnego markera)
+        const odbM = cleaned.match(/Odbiorca[\s:]*\n?([\s\S]{5,}?)(?:\n\s*(?:ul\.|al\.|Nr\s*ewid|NIP|Adres|Tel|Os\.|kontaktowa|\d{2}-\d{3})|$)/i);
+        if (odbM) {
+          // Pierwsza linia po "Odbiorca" to zazwyczaj nazwa firmy
+          const odbLines = odbM[1].split(/\n/).map(l => l.trim()).filter(Boolean);
+          // Zbierz linie z nazwą firmy (do linii z adresem)
+          const nameParts: string[] = [];
+          for (const l of odbLines) {
+            if (/^ul\.|^al\.|^os\.|^pl\.|^\d{2}-\d{3}|^Nr\s*ewid|^NIP/i.test(l)) break;
+            nameParts.push(l);
+          }
+          if (nameParts.length) ocrOdbiorca = nameParts.join(' ').trim();
+        }
+      }
+      // Fallback: szukaj SPÓŁKA/SP./S.A. w tekście
+      if (!ocrOdbiorca) {
+        const firmM = cleaned.match(/([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s.\-&]{3,}(?:SPÓŁKA|SP\.\s*(?:Z\s*O\.O\.|K)|S\.A\.?|S\.C\.|KOMANDYT)[A-Za-ząćęłńóśźż\s]*)/i);
+        if (firmM) ocrOdbiorca = firmM[1].trim();
+      }
+
       // Ekstrakcja os. kontaktowa z pełnego tekstu (OCR często ma to w jednej linii z adresem)
       let osKontaktowa = '';
       const kontaktM = cleaned.match(/(?:Os\.?\s*kontaktowa|kontaktowa)\s*:?\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)/i);
@@ -143,7 +166,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       setPreview({
         numer_wz: local.numer_wz || '',
         nr_zamowienia: local.nr_zamowienia || '',
-        odbiorca: local.odbiorca || '',
+        odbiorca: ocrOdbiorca || '',
         adres: local.adres || '',
         tel: osKontaktowa ? `${osKontaktowa}, tel. ${tel}` : tel,
         masa_kg: local.masa_kg || 0,
