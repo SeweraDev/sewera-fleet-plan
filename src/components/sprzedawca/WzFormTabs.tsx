@@ -118,9 +118,10 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         return;
       }
 
-      // Ten sam parser co PDF i Wklej tekst (v7 z ModalImportWZ)
+      // Wyczyść artefakty OCR (pipe'y z ramek tabel, === itp.) i parsuj parserem v7
+      const cleaned = cleanOcrText(ocrText);
       const { parseWZText } = await import("@/components/shared/ModalImportWZ");
-      const mapped = parseWZText(ocrText);
+      const mapped = parseWZText(cleaned);
 
       setPreview({
         numer_wz: mapped.numer_wz || '',
