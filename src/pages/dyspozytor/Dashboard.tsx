@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +27,12 @@ import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
 import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
 import { useBlokady } from '@/hooks/useBlokady';
+import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
+import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
+import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
+import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
+import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
+import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
@@ -33,6 +40,7 @@ import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
   { id: 'zlecenia', label: '📋 Zlecenia' },
+  { id: 'nowe_zlecenie', label: '➕ Nowe zlecenie' },
   { id: 'flota', label: '🔧 Flota' },
 ];
 
@@ -188,10 +196,14 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-8">#</TableHead>
-                        <TableHead>Zlecenie</TableHead>
+                        <TableHead>Nr WZ</TableHead>
                         <TableHead>Odbiorca</TableHead>
                         <TableHead>Adres</TableHead>
                         <TableHead className="text-right">Kg</TableHead>
+                        <TableHead className="text-right">m³</TableHead>
+                        <TableHead className="text-right">Pal.</TableHead>
+                        <TableHead>Tel / Kontakt</TableHead>
+                        <TableHead>Uwagi</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
@@ -200,10 +212,14 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                       {kPrz.map(p => (
                         <TableRow key={p.id}>
                           <TableCell>{p.kolejnosc}</TableCell>
-                          <TableCell className="font-mono text-xs">{p.zl_numer}</TableCell>
-                          <TableCell>{p.odbiorca}</TableCell>
-                          <TableCell className="text-xs">{p.adres}</TableCell>
+                          <TableCell className="font-mono text-xs">{p.numer_wz || p.zl_numer}</TableCell>
+                          <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
+                          <TableCell className="text-xs max-w-[140px] truncate">{p.adres}</TableCell>
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
+                          <TableCell className="text-right">{p.objetosc_m3 ? Math.round(p.objetosc_m3 * 10) / 10 : '—'}</TableCell>
+                          <TableCell className="text-right">{p.ilosc_palet || '—'}</TableCell>
+                          <TableCell className="text-xs max-w-[120px] truncate">{p.tel || '—'}</TableCell>
+                          <TableCell className="text-xs max-w-[120px] truncate">{p.uwagi || '—'}</TableCell>
                           <TableCell><StatusBadge status={p.prz_status} /></TableCell>
                           <TableCell className="flex gap-1">
                             {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
@@ -373,6 +389,87 @@ function NowyKursModal({
   );
 }
 
+/* ─── Nowe Zlecenie (formularz identyczny jak u sprzedawcy) ─── */
+function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
+  const [step, setStep] = useState(1);
+  const [oddzialId, setOddzialId] = useState<number | null>(null);
+  const [typPojazdu, setTypPojazdu] = useState('');
+  const [dzien, setDzien] = useState('');
+  const [godzina, setGodzina] = useState('');
+  const [wzList, setWzList] = useState<WzInput[]>([{
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '',
+  }]);
+  const [showImport, setShowImport] = useState(false);
+
+  const { oddzialy, loading: loadingOddzialy } = useOddzialy();
+  const { flota: flotaList, loading: loadingFlota } = useFlotaOddzialu(oddzialId);
+  const { create, submitting, error } = useCreateZlecenie(onSuccess);
+
+  const handleImport = useCallback((data: WZImportData[]) => {
+    const newWzList: WzInput[] = data.map(d => ({
+      numer_wz: d.numer_wz || '', nr_zamowienia: d.nr_zamowienia || '', odbiorca: d.odbiorca || '',
+      adres: d.adres || '', tel: d.tel || '', masa_kg: d.masa_kg || 0, objetosc_m3: d.objetosc_m3 || 0,
+      ilosc_palet: d.ilosc_palet || 0, bez_palet: false, luzne_karton: false, uwagi: d.uwagi || '',
+    }));
+    if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
+      setWzList(newWzList);
+    } else {
+      setWzList([...wzList, ...newWzList]);
+    }
+  }, [wzList]);
+
+  const handleGoToCheck = () => {
+    const invalid = wzList.find(w => {
+      if (!w.odbiorca || !w.masa_kg) return true;
+      if (!w.luzne_karton && (!w.objetosc_m3 || w.objetosc_m3 <= 0)) return true;
+      if (!w.bez_palet && (!w.ilosc_palet || w.ilosc_palet <= 0)) return true;
+      return false;
+    });
+    if (invalid) {
+      const missing: string[] = [];
+      if (!invalid.odbiorca) missing.push('odbiorca');
+      if (!invalid.masa_kg) missing.push('masa kg');
+      if (!invalid.luzne_karton && (!invalid.objetosc_m3 || invalid.objetosc_m3 <= 0)) missing.push('objętość m³');
+      if (!invalid.bez_palet && (!invalid.ilosc_palet || invalid.ilosc_palet <= 0)) missing.push('ilość palet');
+      toast.error(`Uzupełnij: ${missing.join(', ')}`);
+      return;
+    }
+    setStep(4);
+  };
+
+  const handleSubmit = (forceVerify: boolean) => {
+    if (!oddzialId || !dzien || !godzina) { toast.error('Uzupełnij wszystkie pola'); return; }
+    create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, dzien, preferowana_godzina: godzina, wz_list: wzList }, forceVerify);
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-lg">Nowe zlecenie — Krok {step}/4</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        {step === 1 && (
+          <TypPojazduStep oddzialId={oddzialId} setOddzialId={setOddzialId} typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
+            oddzialy={oddzialy} loadingOddzialy={loadingOddzialy} flota={flotaList} loadingFlota={loadingFlota} onNext={() => setStep(2)} />
+        )}
+        {step === 2 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm">Pozycje WZ ({wzList.length})</h3>
+              <Button size="sm" onClick={() => setShowImport(true)}>Importuj WZ</Button>
+            </div>
+            <WzFormTabs wzList={wzList} setWzList={setWzList} error={error} submitting={submitting} onBack={() => setStep(2)} onSubmit={handleGoToCheck} />
+            <ModalImportWZ isOpen={showImport} onClose={() => setShowImport(false)} onImport={handleImport} />
+          </div>
+        )}
+        {step === 4 && oddzialId && (
+          <DostepnoscStep oddzialId={oddzialId} typPojazdu={typPojazdu} dzien={dzien} wzList={wzList}
+            onBack={() => setStep(3)} onSubmit={handleSubmit} submitting={submitting} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DyspozytorDashboard() {
   const { profile } = useAuth();
   const [activeId, setActiveId] = useState('kursy');
@@ -472,6 +569,9 @@ export default function DyspozytorDashboard() {
                   oddzialId={oddzialId}
                   onOpenKursModal={(zlId) => { setPreSelectedZlId(zlId); setShowModal(true); }}
                 />
+              )}
+              {activeId === 'nowe_zlecenie' && (
+                <NoweZlecenieFormDyspozytor onSuccess={() => setActiveId('zlecenia')} />
               )}
               {activeId === 'flota' && (
                 <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />

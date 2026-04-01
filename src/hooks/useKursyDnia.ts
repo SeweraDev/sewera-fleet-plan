@@ -30,6 +30,10 @@ export interface PrzystanekDto {
   masa_kg: number;
   objetosc_m3: number;
   ilosc_palet: number;
+  numer_wz: string;
+  nr_zamowienia: string;
+  tel: string;
+  uwagi: string;
 }
 
 export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: string) {
@@ -109,7 +113,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
 
       const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
       let zlecMap = new Map<string, { numer: string }>();
-      let wzMap = new Map<string, { odbiorca: string; adres: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number }>();
+      let wzMap = new Map<string, { odbiorca: string; adres: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number; numer_wz: string; nr_zamowienia: string; tel: string; uwagi: string }>();
 
       if (zlecenieIds.length > 0) {
         const { data: zlData } = await supabase
@@ -120,16 +124,21 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
 
         const { data: wzData } = await supabase
           .from('zlecenia_wz')
-          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet')
+          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, numer_wz, nr_zamowienia, tel, uwagi')
           .in('zlecenie_id', zlecenieIds);
         (wzData || []).forEach(w => {
-          const cur = wzMap.get(w.zlecenie_id) || { odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0 };
+          const cur = wzMap.get(w.zlecenie_id) || { odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '' };
+          const wAny = w as any;
           wzMap.set(w.zlecenie_id, {
-            odbiorca: (w as any).odbiorca || cur.odbiorca,
-            adres: (w as any).adres || cur.adres,
+            odbiorca: wAny.odbiorca || cur.odbiorca,
+            adres: wAny.adres || cur.adres,
             masa_kg: cur.masa_kg + Number(w.masa_kg),
             objetosc_m3: cur.objetosc_m3 + Number(w.objetosc_m3),
-            ilosc_palet: cur.ilosc_palet + Number((w as any).ilosc_palet || 0),
+            ilosc_palet: cur.ilosc_palet + Number(wAny.ilosc_palet || 0),
+            numer_wz: [cur.numer_wz, wAny.numer_wz].filter(Boolean).join(', '),
+            nr_zamowienia: wAny.nr_zamowienia || cur.nr_zamowienia,
+            tel: wAny.tel || cur.tel,
+            uwagi: [cur.uwagi, wAny.uwagi].filter(Boolean).join('; '),
           });
         });
       }
@@ -149,6 +158,10 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
           masa_kg: wz?.masa_kg || 0,
           objetosc_m3: wz?.objetosc_m3 || 0,
           ilosc_palet: wz?.ilosc_palet || 0,
+          numer_wz: wz?.numer_wz || '',
+          nr_zamowienia: wz?.nr_zamowienia || '',
+          tel: wz?.tel || '',
+          uwagi: wz?.uwagi || '',
         };
       }));
     } else {
