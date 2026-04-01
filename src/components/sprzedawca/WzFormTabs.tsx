@@ -124,14 +124,52 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       const local = parseWzTextLocal(cleaned);
 
       // ─── OCR-specific: ekstrakcja odbiorcy ───
-      const SEWERA_BLOCK = /SEWERA|KOŚCIUSZKI\s*326|000044503|NR\s*BDO|SIEMIANOWICE/i;
+      const SEWERA_BLOCK = /SEWERA|KO[SŚ]CIUSZKI\s*326|000044503|NR\s*BDO|SIEMIANOWICE/i;
       let ocrOdbiorca = local.odbiorca || '';
       // Odrzuć jeśli to dane SEWERY
       if (ocrOdbiorca && SEWERA_BLOCK.test(ocrOdbiorca)) ocrOdbiorca = '';
 
+      // Strategia 1: szukaj "Odbiorca" w tekście → zbierz blok tekstu po nim
       if (!ocrOdbiorca) {
-        // Szukaj SPÓŁKA/KOMANDYTOWA/SP.K./S.A. w tekście — ale NIE SEWERA
-        const firmRegex = /([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s.\-&]{3,}(?:SPÓŁKA|SP\.\s*(?:Z\s*O\.O\.|K)|S\.A\.?|S\.C\.|KOMANDYT)[A-Za-ząćęłńóśźż\s]*)/gi;
+        const cLines = cleaned.split(/\n/).map(l => l.trim()).filter(Boolean);
+        const odbLineIdx = cLines.findIndex(l => /Odbiorca/i.test(l));
+        if (odbLineIdx >= 0) {
+          const nameParts: string[] = [];
+          for (let i = odbLineIdx + 1; i < Math.min(odbLineIdx + 8, cLines.length); i++) {
+            const l = cLines[i];
+            if (/^ul\.|^al\.|^os\.|^pl\.|^\d{2}-\d{3}|^Nr\s*ewid|^NIP/i.test(l)) break;
+            if (SEWERA_BLOCK.test(l)) continue;
+            if (l.length < 3) continue;
+            nameParts.push(l);
+          }
+          if (nameParts.length) ocrOdbiorca = nameParts.join(' ').trim();
+        }
+      }
+
+      // Strategia 2: szukaj linii z SPÓŁKA/KOMANDYTOWA (nie SEWERA)
+      if (!ocrOdbiorca) {
+        const cLines = cleaned.split(/\n/).map(l => l.trim()).filter(Boolean);
+        for (const l of cLines) {
+          if (/SPÓŁKA|SP\.\s*(?:Z|K)|KOMANDYT|S\.A\.?\s*$/i.test(l) && !SEWERA_BLOCK.test(l)) {
+            ocrOdbiorca = l; break;
+          }
+        }
+        // Jeśli znaleziono linię z formą prawną, zbierz też linię przed nią (początek nazwy)
+        if (ocrOdbiorca) {
+          const idx = cLines.findIndex(l => l === ocrOdbiorca);
+          if (idx > 0) {
+            const prev = cLines[idx - 1];
+            // Dodaj poprzednią linię jeśli wygląda na nazwę firmy (nie marker)
+            if (prev.length >= 3 && !/^ul\.|^al\.|^\d{2}-\d{3}|^NIP|^Nr\s*ewid|Odbiorca|Sprzedawca|Nabywca/i.test(prev) && !SEWERA_BLOCK.test(prev)) {
+              ocrOdbiorca = `${prev} ${ocrOdbiorca}`;
+            }
+          }
+        }
+      }
+
+      // Strategia 3: regex na formę prawną w ciągłym tekście (nie SEWERA)
+      if (!ocrOdbiorca) {
+        const firmRegex = /([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s.\-&]{3,}(?:SPÓŁKA|KOMANDYT|SP\.\s*(?:Z\s*O\.O\.|K)|S\.A\.?|S\.C\.)[A-Za-ząćęłńóśźż\s]*)/gi;
         let firmM;
         while ((firmM = firmRegex.exec(cleaned)) !== null) {
           const candidate = firmM[1].trim();
@@ -139,21 +177,9 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         }
       }
 
-      if (!ocrOdbiorca) {
-        // Szukaj po etykiecie "Odbiorca" — zbierz linie po nim, filtruj SEWERA
-        const odbIdx = cleaned.search(/Odbiorca/i);
-        if (odbIdx >= 0) {
-          const after = cleaned.substring(odbIdx + 9);
-          const odbLines = after.split(/\n/).map(l => l.trim()).filter(Boolean);
-          const nameParts: string[] = [];
-          for (const l of odbLines) {
-            if (/^ul\.|^al\.|^os\.|^pl\.|^\d{2}-\d{3}|^Nr\s*ewid|^NIP/i.test(l)) break;
-            if (SEWERA_BLOCK.test(l)) continue; // skip SEWERA data
-            if (l.length < 3) continue;
-            nameParts.push(l);
-          }
-          if (nameParts.length) ocrOdbiorca = nameParts.join(' ').trim();
-        }
+      // Cleanup: usuń trailing krótkie śmieci z OCR
+      if (ocrOdbiorca) {
+        ocrOdbiorca = ocrOdbiorca.replace(/\s+[a-zA-Z]{1}$/,'').trim();
       }
 
       // Ekstrakcja os. kontaktowa z pełnego tekstu (OCR często ma to w jednej linii z adresem)
