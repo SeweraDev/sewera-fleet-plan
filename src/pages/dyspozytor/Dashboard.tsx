@@ -209,9 +209,15 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {kPrz.map(p => (
+                      {kPrz.map((p, pIdx) => {
+                        // Pokaż # i akcje tylko dla pierwszego WZ w grupie (ten sam kolejnosc)
+                        const isFirst = pIdx === 0 || kPrz[pIdx - 1].kolejnosc !== p.kolejnosc;
+                        const groupSize = kPrz.filter(x => x.kolejnosc === p.kolejnosc).length;
+                        return (
                         <TableRow key={p.id}>
-                          <TableCell>{p.kolejnosc}</TableCell>
+                          {isFirst ? (
+                            <TableCell rowSpan={groupSize} className="align-top font-medium">{p.kolejnosc}</TableCell>
+                          ) : null}
                           <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
                           <TableCell className="font-mono text-xs max-w-[180px]">{p.numer_wz || p.zl_numer}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.adres}</TableCell>
@@ -220,10 +226,14 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                           <TableCell className="text-right">{p.ilosc_palet || '—'}</TableCell>
                           <TableCell className="text-xs max-w-[120px] truncate">{p.tel || '—'}</TableCell>
                           <TableCell className="text-xs max-w-[120px] truncate">{p.uwagi || '—'}</TableCell>
-                          <TableCell><StatusBadge status={p.prz_status} /></TableCell>
-                          <TableCell className="flex gap-1">
+                          {isFirst ? (
+                            <TableCell rowSpan={groupSize} className="align-top"><StatusBadge status={p.prz_status} /></TableCell>
+                          ) : null}
+                          {isFirst ? (
+                            <TableCell rowSpan={groupSize} className="align-top">
+                              <div className="flex gap-1">
                             {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
-                              <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id)} disabled={acting}>
+                              <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id.split('_')[0])} disabled={acting}>
                                 ✓ Dostarcz
                               </Button>
                             )}
@@ -233,13 +243,16 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                               </Button>
                             )}
                             {p.zlecenie_id && (
-                              <Button size="sm" variant="ghost" onClick={() => { setPrzepnijPrz(p); setPrzepnijKurs(kurs); }}>
+                              <Button size="sm" variant="ghost" onClick={() => { setPrzepnijPrz({...p, id: p.id.split('_')[0]}); setPrzepnijKurs(kurs); }}>
                                 🔀
                               </Button>
                             )}
-                          </TableCell>
+                              </div>
+                            </TableCell>
+                          ) : null}
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>

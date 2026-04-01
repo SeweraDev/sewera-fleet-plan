@@ -126,44 +126,43 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
           .from('zlecenia_wz')
           .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, numer_wz, nr_zamowienia, tel, uwagi')
           .in('zlecenie_id', zlecenieIds);
+        // Grupuj WZ per zlecenie jako lista (nie agregat)
+        const wzListMap = new Map<string, typeof wzData>();
         (wzData || []).forEach(w => {
-          const cur = wzMap.get(w.zlecenie_id) || { odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '' };
-          const wAny = w as any;
-          wzMap.set(w.zlecenie_id, {
-            odbiorca: wAny.odbiorca || cur.odbiorca,
-            adres: wAny.adres || cur.adres,
-            masa_kg: cur.masa_kg + Number(w.masa_kg),
-            objetosc_m3: cur.objetosc_m3 + Number(w.objetosc_m3),
-            ilosc_palet: cur.ilosc_palet + Number(wAny.ilosc_palet || 0),
-            numer_wz: [cur.numer_wz, wAny.numer_wz].filter(Boolean).join(', '),
-            nr_zamowienia: wAny.nr_zamowienia || cur.nr_zamowienia,
-            tel: wAny.tel || cur.tel,
-            uwagi: [cur.uwagi, wAny.uwagi].filter(Boolean).join('; '),
-          });
+          const list = wzListMap.get(w.zlecenie_id) || [];
+          list.push(w);
+          wzListMap.set(w.zlecenie_id, list);
         });
       }
 
-      setPrzystanki((przData || []).map(p => {
+      // Rozwiń przystanki: jeden wiersz per WZ (nie per zlecenie)
+      const expandedPrz: PrzystanekDto[] = [];
+      (przData || []).forEach(p => {
         const zl = zlecMap.get(p.zlecenie_id || '');
-        const wz = wzMap.get(p.zlecenie_id || '');
-        return {
-          id: p.id,
-          kurs_id: p.kurs_id,
-          kolejnosc: p.kolejnosc,
-          prz_status: p.status,
-          zlecenie_id: p.zlecenie_id,
-          zl_numer: zl?.numer || '',
-          odbiorca: wz?.odbiorca || '',
-          adres: wz?.adres || '',
-          masa_kg: wz?.masa_kg || 0,
-          objetosc_m3: wz?.objetosc_m3 || 0,
-          ilosc_palet: wz?.ilosc_palet || 0,
-          numer_wz: wz?.numer_wz || '',
-          nr_zamowienia: wz?.nr_zamowienia || '',
-          tel: wz?.tel || '',
-          uwagi: wz?.uwagi || '',
-        };
-      }));
+        const wzList = wzListMap.get(p.zlecenie_id || '') || [];
+        if (wzList.length === 0) {
+          // Brak WZ — pokaż pusty wiersz
+          expandedPrz.push({
+            id: p.id, kurs_id: p.kurs_id, kolejnosc: p.kolejnosc, prz_status: p.status,
+            zlecenie_id: p.zlecenie_id, zl_numer: zl?.numer || '',
+            odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0,
+            numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '',
+          });
+        } else {
+          wzList.forEach((w, i) => {
+            const wAny = w as any;
+            expandedPrz.push({
+              id: `${p.id}_wz${i}`, kurs_id: p.kurs_id, kolejnosc: p.kolejnosc,
+              prz_status: p.status, zlecenie_id: p.zlecenie_id, zl_numer: zl?.numer || '',
+              odbiorca: wAny.odbiorca || '', adres: wAny.adres || '',
+              masa_kg: Number(w.masa_kg) || 0, objetosc_m3: Number(w.objetosc_m3) || 0,
+              ilosc_palet: Number(wAny.ilosc_palet) || 0, numer_wz: wAny.numer_wz || '',
+              nr_zamowienia: wAny.nr_zamowienia || '', tel: wAny.tel || '', uwagi: wAny.uwagi || '',
+            });
+          });
+        }
+      });
+      setPrzystanki(expandedPrz);
     } else {
       setPrzystanki([]);
     }
