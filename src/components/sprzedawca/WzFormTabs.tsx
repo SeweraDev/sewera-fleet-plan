@@ -112,7 +112,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           }
         },
       });
-      await worker.setParameters({ tessedit_pageseg_mode: '4' });
+      await worker.setParameters({ tessedit_pageseg_mode: '6' });
       const { data: { text } } = await worker.recognize(file);
       await worker.terminate();
 

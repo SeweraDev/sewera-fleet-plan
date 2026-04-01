@@ -684,7 +684,7 @@ export function parseWZText(rawText: string): WZImportData {
     numer_wz = `${wzM[1]} ${wzM[2]}`;
   }
 
-  // 2. nr_zamowienia — label first, then pattern
+  // 2. nr_zamowienia — label first, then pattern, then "Potwierdzenie zamówienia nr:"
   let nr_zamowienia: string | null = null;
   const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/i);
   if (zamLabel) nr_zamowienia = zamLabel[1];
@@ -692,9 +692,33 @@ export function parseWZText(rawText: string): WZImportData {
     const zamPattern = text.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
     if (zamPattern) nr_zamowienia = zamPattern[1];
   }
+  if (!nr_zamowienia) {
+    const potwM = text.match(/Potwierdzenie\s+zam[oó]wienia\s+nr[:\s]+([A-Z0-9\/]+)/i);
+    if (potwM) nr_zamowienia = potwM[1];
+  }
 
-  // 3. odbiorca — CRITICAL: skip SEWERA block completely, find second company
+  // 3. odbiorca — try labeled section first ("Odbiorca" / "Nabywca"), then fallback
   let odbiorca: string | null = null;
+
+  // Priority: find "Odbiorca" or "Nabywca" label and collect lines after it
+  const odbLabelIdx = lines.findIndex((l) => /^(?:Odbiorca|Nabywca)\s*$/i.test(l));
+  if (odbLabelIdx >= 0) {
+    const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
+    const nameParts: string[] = [];
+    for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 6, lines.length); i++) {
+      const l = lines[i];
+      if (/^(Adres\s+dostawy|Informacje|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(l)) break;
+      if (/^Nr\s+ewid/i.test(l)) break;
+      if (/^NIP:/i.test(l)) break;
+      if (SEWERA_CHECK.test(l)) { nameParts.length = 0; continue; } // skip SEWERA block, reset
+      if (l.length < 2) continue;
+      nameParts.push(l);
+    }
+    if (nameParts.length) odbiorca = nameParts.join(", ");
+  }
+
+  // Fallback: skip SEWERA block, find company by legal form / caps
+  if (!odbiorca) {
   const SELLER_MARKERS = /SEWERA|KOŚCIUSZKI\s*326|NR\s*BDO:\s*000044503/i;
   const SKIP_PATTERNS = [
     SELLER_MARKERS,
@@ -777,6 +801,7 @@ export function parseWZText(rawText: string): WZImportData {
       break;
     }
   }
+  } // end if (!odbiorca)
 
   // 4. adres_dostawy — ONLY set when document has explicit "Adres dostawy" or "Budowa" section
   let adres: string | null = null;
