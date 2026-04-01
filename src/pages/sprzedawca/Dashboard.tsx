@@ -1,4 +1,4 @@
-import { useState, useCallback, lazy, Suspense } from 'react';
+import { useState, useCallback } from 'react';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,10 +11,8 @@ import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
 import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
 import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
 import { MojeZleceniaTab } from '@/components/sprzedawca/MojeZleceniaTab';
-import type { WZImportData } from '@/components/shared/ModalImportWZ';
+import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
 import { Button } from '@/components/ui/button';
-
-const ModalImportWZ = lazy(() => import('@/components/shared/ModalImportWZ').then(m => ({ default: m.ModalImportWZ })));
 
 const SIDEBAR_ITEMS = [
   { id: 'nowe', label: '➕ Nowe zlecenie' },
@@ -129,15 +127,11 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
               onBack={() => setStep(2)}
               onSubmit={handleGoToCheck}
             />
-            {showImport && (
-              <Suspense fallback={null}>
-                <ModalImportWZ
-                  isOpen={showImport}
-                  onClose={() => setShowImport(false)}
-                  onImport={handleImport}
-                />
-              </Suspense>
-            )}
+            <ModalImportWZ
+              isOpen={showImport}
+              onClose={() => setShowImport(false)}
+              onImport={handleImport}
+            />
           </div>
         )}
         {step === 4 && oddzialId && (
@@ -148,7 +142,6 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             wzList={wzList}
             onBack={() => setStep(3)}
             onSubmit={handleSubmit}
-            onChangeDzien={(newDzien) => setDzien(newDzien)}
             submitting={submitting}
           />
         )}
