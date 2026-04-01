@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 
 export interface WzInput {
   numer_wz: string | null;
@@ -33,14 +34,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
     setSubmitting(true);
     setError(null);
 
-    const { data: numerData, error: numerErr } = await supabase
-      .rpc('generuj_numer_zlecenia', { p_oddzial_id: input.oddzial_id });
-    if (numerErr || !numerData) {
-      setError(numerErr?.message || 'Błąd generowania numeru zlecenia');
-      setSubmitting(false);
-      return;
-    }
-    const numer = numerData as string;
+    const numer = await generateNumerZlecenia(input.oddzial_id);
 
     const { data: zlecenie, error: err1 } = await supabase
       .from('zlecenia')

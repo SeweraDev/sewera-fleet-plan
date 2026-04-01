@@ -41,8 +41,8 @@ export default function KierowcaMojaTrasa() {
 
     setSubmitting(true);
 
-    const { data: numerData } = await supabase.rpc('generuj_numer_zlecenia', { p_oddzial_id: kurs.oddzial_id });
-    const numer = (numerData as string) || `ZL-DOM-${Date.now().toString(36).toUpperCase()}`;
+    const { generateNumerZlecenia } = await import('@/lib/generateNumerZlecenia');
+    const numer = await generateNumerZlecenia(kurs.oddzial_id);
     const d = data[0];
 
     const { data: zlecenie, error: err1 } = await supabase

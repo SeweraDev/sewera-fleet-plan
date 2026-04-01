@@ -177,8 +177,8 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
       // Create zlecenia for this kurs
       for (let j = 0; j < kurs.zlecenia.length; j++) {
         const zl = kurs.zlecenia[j];
-        const { data: numerData } = await supabase.rpc('generuj_numer_zlecenia', { p_oddzial_id: oddzialId });
-        const numer = (numerData as string) || `ZL-IMP-${Date.now().toString(36).toUpperCase()}-${j}`;
+        const { generateNumerZlecenia } = await import('@/lib/generateNumerZlecenia');
+        const numer = await generateNumerZlecenia(oddzialId);
 
         const { data: newZl, error: zlErr } = await supabase
           .from('zlecenia')
