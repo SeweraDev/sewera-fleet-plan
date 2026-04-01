@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useSprawdzDostepnosc, pctColor, pctBg, type VehicleOccupancy } from '@/hooks/useSprawdzDostepnosc';
+import { useSprawdzDostepnosc, pctColor, pctBg } from '@/hooks/useSprawdzDostepnosc';
+import type { VehicleOccupancy } from '@/hooks/useSprawdzDostepnosc';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 
 interface DostepnoscStepProps {
@@ -50,7 +51,7 @@ function VehicleCard({ v }: { v: VehicleOccupancy }) {
         {v.fits ? (
           warn ? (
             <Badge variant="outline" className="bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-[10px]">
-              ⚠ >=90%
+              ! >=90%
             </Badge>
           ) : (
             <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px]">
