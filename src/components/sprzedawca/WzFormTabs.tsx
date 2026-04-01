@@ -123,27 +123,37 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       console.log("[WzOcrTab] cleaned text:\n", cleaned.substring(0, 500));
       const local = parseWzTextLocal(cleaned);
 
-      // ─── OCR-specific: ekstrakcja odbiorcy po etykiecie "Odbiorca" ───
+      // ─── OCR-specific: ekstrakcja odbiorcy ───
+      const SEWERA_BLOCK = /SEWERA|KOŚCIUSZKI\s*326|000044503|NR\s*BDO|SIEMIANOWICE/i;
       let ocrOdbiorca = local.odbiorca || '';
+      // Odrzuć jeśli to dane SEWERY
+      if (ocrOdbiorca && SEWERA_BLOCK.test(ocrOdbiorca)) ocrOdbiorca = '';
+
       if (!ocrOdbiorca) {
-        // Szukaj "Odbiorca" i zbierz linie po nim (do następnego markera)
-        const odbM = cleaned.match(/Odbiorca[\s:]*\n?([\s\S]{5,}?)(?:\n\s*(?:ul\.|al\.|Nr\s*ewid|NIP|Adres|Tel|Os\.|kontaktowa|\d{2}-\d{3})|$)/i);
-        if (odbM) {
-          // Pierwsza linia po "Odbiorca" to zazwyczaj nazwa firmy
-          const odbLines = odbM[1].split(/\n/).map(l => l.trim()).filter(Boolean);
-          // Zbierz linie z nazwą firmy (do linii z adresem)
+        // Szukaj SPÓŁKA/KOMANDYTOWA/SP.K./S.A. w tekście — ale NIE SEWERA
+        const firmRegex = /([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s.\-&]{3,}(?:SPÓŁKA|SP\.\s*(?:Z\s*O\.O\.|K)|S\.A\.?|S\.C\.|KOMANDYT)[A-Za-ząćęłńóśźż\s]*)/gi;
+        let firmM;
+        while ((firmM = firmRegex.exec(cleaned)) !== null) {
+          const candidate = firmM[1].trim();
+          if (!SEWERA_BLOCK.test(candidate)) { ocrOdbiorca = candidate; break; }
+        }
+      }
+
+      if (!ocrOdbiorca) {
+        // Szukaj po etykiecie "Odbiorca" — zbierz linie po nim, filtruj SEWERA
+        const odbIdx = cleaned.search(/Odbiorca/i);
+        if (odbIdx >= 0) {
+          const after = cleaned.substring(odbIdx + 9);
+          const odbLines = after.split(/\n/).map(l => l.trim()).filter(Boolean);
           const nameParts: string[] = [];
           for (const l of odbLines) {
             if (/^ul\.|^al\.|^os\.|^pl\.|^\d{2}-\d{3}|^Nr\s*ewid|^NIP/i.test(l)) break;
+            if (SEWERA_BLOCK.test(l)) continue; // skip SEWERA data
+            if (l.length < 3) continue;
             nameParts.push(l);
           }
           if (nameParts.length) ocrOdbiorca = nameParts.join(' ').trim();
         }
-      }
-      // Fallback: szukaj SPÓŁKA/SP./S.A. w tekście
-      if (!ocrOdbiorca) {
-        const firmM = cleaned.match(/([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s.\-&]{3,}(?:SPÓŁKA|SP\.\s*(?:Z\s*O\.O\.|K)|S\.A\.?|S\.C\.|KOMANDYT)[A-Za-ząćęłńóśźż\s]*)/i);
-        if (firmM) ocrOdbiorca = firmM[1].trim();
       }
 
       // Ekstrakcja os. kontaktowa z pełnego tekstu (OCR często ma to w jednej linii z adresem)
