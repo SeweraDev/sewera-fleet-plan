@@ -235,7 +235,7 @@ export function ZleceniaTab({
   const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('all');
   const [selectedZl, setSelectedZl] = useState<ZlecenieOddzialuDto | null>(null);
   const [editZlId, setEditZlId] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'dzien' | 'status' | 'godzina' | 'kg' | 'numer'>('dzien');
+  const [sortBy, setSortBy] = useState<'dzien' | 'status' | 'godzina' | 'kg' | 'numer' | 'km'>('dzien');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const toggleSort = (col: typeof sortBy) => {
@@ -252,6 +252,7 @@ export function ZleceniaTab({
     else if (sortBy === 'status') cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
     else if (sortBy === 'godzina') cmp = (a.preferowana_godzina || '').localeCompare(b.preferowana_godzina || '');
     else if (sortBy === 'kg') cmp = a.suma_kg - b.suma_kg;
+    else if (sortBy === 'km') cmp = (a.dystans_km ?? 9999) - (b.dystans_km ?? 9999);
     else if (sortBy === 'numer') cmp = a.numer.localeCompare(b.numer);
     return sortDir === 'asc' ? cmp : -cmp;
   });
@@ -334,6 +335,9 @@ export function ZleceniaTab({
                   </TableHead>
                   <TableHead className="text-right">m³</TableHead>
                   <TableHead className="text-right">Pal.</TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('km')}>
+                    km {sortBy === 'km' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
                   <TableHead>Typ</TableHead>
                   <TableHead>Kurs</TableHead>
                   <TableHead>WZ</TableHead>
@@ -355,6 +359,7 @@ export function ZleceniaTab({
                     <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
                     <TableCell className="text-right">{z.suma_m3 ? Math.round(z.suma_m3 * 10) / 10 : '—'}</TableCell>
                     <TableCell className="text-right">{z.suma_palet || '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{z.dystans_km != null ? `${z.dystans_km}` : '...'}</TableCell>
                     <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell>
                       {z.kurs_numer

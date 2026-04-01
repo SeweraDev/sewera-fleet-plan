@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateDistance } from '@/lib/oddzialy-geo';
 
 export interface ZlecenieOddzialuDto {
   id: string;
@@ -16,6 +17,7 @@ export interface ZlecenieOddzialuDto {
   suma_kg: number;
   suma_m3: number;
   suma_palet: number;
+  dystans_km: number | null;
   deadline_wz: string | null;
   ma_wz: boolean;
   flaga_brak_wz: boolean;
@@ -131,12 +133,27 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
         suma_kg: wzInfo?.suma_kg || 0,
         suma_m3: wzInfo?.suma_m3 || 0,
         suma_palet: wzInfo?.suma_palet || 0,
+        dystans_km: null,
         deadline_wz: (z as any).deadline_wz || null,
         ma_wz: !!(z as any).ma_wz,
         flaga_brak_wz: !!(z as any).flaga_brak_wz,
       };
     }));
     setLoading(false);
+
+    // Oblicz dystans w tle (asynchronicznie, nie blokuje renderowania)
+    const oddzialNazwa = oddzialId != null ? oddzialMap.get(oddzialId) || '' : '';
+    if (oddzialNazwa) {
+      (zlData || []).forEach(async (z) => {
+        const wzInfo = wzMap.get(z.id);
+        const adres = wzInfo?.adres;
+        if (!adres) return;
+        const km = await calculateDistance(oddzialNazwa, adres);
+        if (km != null) {
+          setZlecenia(prev => prev.map(zl => zl.id === z.id ? { ...zl, dystans_km: km } : zl));
+        }
+      });
+    }
   }, [oddzialId, pastOnly]);
 
   useEffect(() => { refetch(); }, [refetch]);
