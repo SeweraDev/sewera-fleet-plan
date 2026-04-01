@@ -82,11 +82,9 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
 function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<'upload' | 'text' | 'preview'>('upload');
   const [parsing, setParsing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
-  const [ocrText, setOcrText] = useState("");
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,13 +92,13 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     if (file.size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
     setParsing(true);
     setError(null);
-    setOcrText("");
+    setPreview(null);
     setProgress(0);
     setProgressMsg("Ładowanie modelu OCR...");
 
     try {
       const TesseractModule = await import("tesseract.js");
-      const { data: { text } } = await TesseractModule.default.recognize(file, "pol", {
+      const { data: { text: ocrText } } = await TesseractModule.default.recognize(file, "pol", {
         logger: (m: any) => {
           if (m.status === "recognizing text") {
             const pct = Math.round((m.progress || 0) * 100);
@@ -114,36 +112,31 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       });
 
       setParsing(false);
-      const cleaned = cleanOcrText(text || "");
-      setOcrText(cleaned);
 
-      if (cleaned.trim().length < 10) {
+      if (!ocrText || ocrText.trim().length < 10) {
         setError("Nie udało się rozpoznać tekstu. Spróbuj lepsze zdjęcie.");
         return;
       }
 
-      // Od razu pokaż tekst do edycji
-      setStep('text');
+      // Ten sam parser co PDF i Wklej tekst (v7 z ModalImportWZ)
+      const { parseWZText } = await import("@/components/shared/ModalImportWZ");
+      const mapped = parseWZText(ocrText);
+
+      setPreview({
+        numer_wz: mapped.numer_wz || '',
+        nr_zamowienia: mapped.nr_zamowienia || '',
+        odbiorca: mapped.odbiorca || '',
+        adres: mapped.adres || '',
+        tel: mapped.osoba_kontaktowa ? `${mapped.osoba_kontaktowa}${mapped.tel ? ', tel. ' + mapped.tel : ''}` : (mapped.tel || ''),
+        masa_kg: mapped.masa_kg || 0,
+        objetosc_m3: mapped.objetosc_m3 || 0,
+        ilosc_palet: mapped.ilosc_palet || 0,
+        uwagi: mapped.uwagi || '',
+      });
     } catch (e: any) {
       setParsing(false);
       setError("Błąd OCR: " + (e.message || "nieznany"));
     }
-  };
-
-  const handleParse = () => {
-    const local = parseWzTextLocal(ocrText);
-    setPreview({
-      numer_wz: local.numer_wz || '',
-      nr_zamowienia: local.nr_zamowienia || '',
-      odbiorca: local.odbiorca || '',
-      adres: local.adres || '',
-      tel: local.tel || '',
-      masa_kg: local.masa_kg || 0,
-      objetosc_m3: 0,
-      ilosc_palet: local.ilosc_palet || 0,
-      uwagi: local.uwagi || '',
-    });
-    setStep('preview');
   };
 
   const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
@@ -166,15 +159,12 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     } else {
       setWzList([...wzList, newWz]);
     }
-    setStep('upload');
     setPreview(null);
-    setOcrText("");
   };
 
   return (
     <div className="space-y-3 pt-2">
-      {/* Krok 1: Upload zdjęcia */}
-      {step === 'upload' && !parsing && (
+      {!preview && !parsing && (
         <>
           <div className="grid grid-cols-2 gap-3">
             <div
@@ -202,7 +192,6 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         </>
       )}
 
-      {/* Progress */}
       {parsing && (
         <div className="space-y-2 py-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -215,24 +204,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         </div>
       )}
 
-      {/* Krok 2: Edycja rozpoznanego tekstu */}
-      {step === 'text' && (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">Popraw rozpoznany tekst jeśli trzeba, potem kliknij Parsuj:</p>
-          <textarea
-            className="w-full min-h-[200px] font-mono text-xs border rounded-md p-2 bg-background"
-            value={ocrText}
-            onChange={e => setOcrText(e.target.value)}
-          />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleParse}>Parsuj tekst</Button>
-            <Button size="sm" variant="outline" onClick={() => { setStep('upload'); setOcrText(""); }}>Nowe zdjęcie</Button>
-          </div>
-        </div>
-      )}
-
-      {/* Krok 3: Podgląd sparsowanych pól */}
-      {step === 'preview' && preview && (
+      {preview && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">Sprawdź i popraw dane:</p>
           <div className="space-y-2">
@@ -258,8 +230,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
-            <Button size="sm" variant="outline" onClick={() => setStep('text')}>Popraw tekst</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setStep('upload'); setPreview(null); setOcrText(""); }}>Nowe zdjęcie</Button>
+            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>Nowe zdjęcie</Button>
           </div>
         </div>
       )}

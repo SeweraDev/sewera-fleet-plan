@@ -670,7 +670,7 @@ function formatMasaKg(masa: number | null | undefined): string {
 }
 
 /* ─── parseWZText — Ekonom WZ parser v5 ─── */
-function parseWZText(rawText: string): WZImportData {
+export function parseWZText(rawText: string): WZImportData {
   const text = cleanText(decodePUA(rawText));
   const lines = text
     .split(/\r?\n/)
