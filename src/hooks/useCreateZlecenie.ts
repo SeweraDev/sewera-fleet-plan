@@ -13,6 +13,7 @@ export interface WzInput {
   masa_kg: number;
   objetosc_m3: number | null;
   ilosc_palet: number;
+  bez_palet: boolean;
   uwagi: string | null;
 }
 
