@@ -37,20 +37,28 @@ const SIDEBAR_ITEMS = [
 ];
 
 function capacityColor(pct: number) {
-  if (pct <= 40) return 'bg-green-500';
-  if (pct <= 70) return 'bg-yellow-500';
-  if (pct <= 95) return 'bg-orange-500';
+  if (pct <= 70) return 'bg-green-500';
+  if (pct <= 90) return 'bg-orange-500';
   return 'bg-red-500';
 }
 
+function capacityTextColor(pct: number) {
+  if (pct <= 70) return 'text-green-600 dark:text-green-400';
+  if (pct <= 90) return 'text-orange-600 dark:text-orange-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
 function CapacityBar({ used, total, unit }: { used: number; total: number; unit: string }) {
-  const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
+  const pct = total > 0 ? (used / total) * 100 : 0;
+  const displayPct = Math.min(pct, 100);
   return (
     <div className="flex-1 min-w-0">
-      <div className="h-2 rounded-full bg-muted overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${capacityColor(pct)}`} style={{ width: `${pct}%` }} />
+      <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${capacityColor(pct)}`} style={{ width: `${displayPct}%` }} />
       </div>
-      <p className="text-[10px] text-muted-foreground mt-0.5">{Math.round(used)} / {Math.round(total)} {unit}</p>
+      <p className={`text-[10px] font-medium mt-0.5 ${capacityTextColor(pct)}`}>
+        {Math.round(used)} / {Math.round(total)} {unit} ({Math.round(pct)}%)
+      </p>
     </div>
   );
 }

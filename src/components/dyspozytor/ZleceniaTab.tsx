@@ -16,6 +16,44 @@ import { cn } from '@/lib/utils';
 import { CalendarIcon } from 'lucide-react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 
+// Mapowanie typ pojazdu → pojemność (do pasków zajętości)
+const TYP_CAPACITY: Record<string, { kg: number; m3: number; pal: number }> = {
+  'Dostawczy 1,2t': { kg: 1200, m3: 8, pal: 4 },
+  'Winda 1,8t': { kg: 1800, m3: 12, pal: 6 },
+  'Winda 6,3t': { kg: 6300, m3: 28, pal: 14 },
+  'Winda MAX 15,8t': { kg: 15800, m3: 52, pal: 33 },
+  'HDS 8,9t': { kg: 8900, m3: 38, pal: 20 },
+  'HDS 11,7t': { kg: 11700, m3: 52, pal: 33 },
+};
+
+function capacityColor(pct: number) {
+  if (pct <= 70) return 'bg-green-500';
+  if (pct <= 90) return 'bg-orange-500';
+  return 'bg-red-500';
+}
+
+function capacityTextColor(pct: number) {
+  if (pct <= 70) return 'text-green-600 dark:text-green-400';
+  if (pct <= 90) return 'text-orange-600 dark:text-orange-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
+function CapacityBar({ used, total, unit, label }: { used: number; total: number; unit: string; label?: string }) {
+  const pct = total > 0 ? (used / total) * 100 : 0;
+  const displayPct = Math.min(pct, 100);
+  return (
+    <div className="flex-1 min-w-0">
+      {label && <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>}
+      <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${capacityColor(pct)}`} style={{ width: `${displayPct}%` }} />
+      </div>
+      <p className={`text-[10px] font-medium mt-0.5 ${capacityTextColor(pct)}`}>
+        {Math.round(used)} / {Math.round(total)} {unit} ({Math.round(pct)}%)
+      </p>
+    </div>
+  );
+}
+
 type ZlStatusFilter = 'all' | 'robocza' | 'potwierdzona' | 'w_trasie' | 'dostarczona' | 'anulowana';
 
 const ZL_STATUS_FILTERS: { key: ZlStatusFilter; label: string }[] = [
@@ -102,6 +140,24 @@ function ZlSzczegolyDialog({
               </TableBody>
             </Table>
           )}
+
+          {/* Paski zajętości pojazdu */}
+          {zlecenie.typ_pojazdu && TYP_CAPACITY[zlecenie.typ_pojazdu] && wz.length > 0 && (() => {
+            const cap = TYP_CAPACITY[zlecenie.typ_pojazdu!];
+            const totalKg = wz.reduce((s, w) => s + w.masa_kg, 0);
+            const totalM3 = wz.reduce((s, w) => s + w.objetosc_m3, 0);
+            const totalPal = wz.reduce((s, w) => s + (w.ilosc_palet || 0), 0);
+            return (
+              <div className="mt-3 p-3 bg-muted/30 rounded-lg">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Zajętość pojazdu ({zlecenie.typ_pojazdu})</p>
+                <div className="flex gap-4">
+                  <CapacityBar used={totalKg} total={cap.kg} unit="kg" label="Waga" />
+                  {cap.m3 > 0 && <CapacityBar used={totalM3} total={cap.m3} unit="m³" label="Objętość" />}
+                  {cap.pal > 0 && <CapacityBar used={totalPal} total={cap.pal} unit="pal" label="Palety" />}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <DialogFooter className="gap-2">
