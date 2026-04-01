@@ -235,8 +235,26 @@ export function ZleceniaTab({
   const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('all');
   const [selectedZl, setSelectedZl] = useState<ZlecenieOddzialuDto | null>(null);
   const [editZlId, setEditZlId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'dzien' | 'status' | 'godzina' | 'kg' | 'numer'>('dzien');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  const filtered = statusFilter === 'all' ? zlecenia : zlecenia.filter(z => z.status === statusFilter);
+  const toggleSort = (col: typeof sortBy) => {
+    if (sortBy === col) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
+    else { setSortBy(col); setSortDir('asc'); }
+  };
+
+  const STATUS_ORDER: Record<string, number> = { robocza: 0, do_weryfikacji: 1, potwierdzona: 2, w_trasie: 3, dostarczona: 4, anulowana: 5 };
+
+  const filteredBase = statusFilter === 'all' ? zlecenia : zlecenia.filter(z => z.status === statusFilter);
+  const filtered = [...filteredBase].sort((a, b) => {
+    let cmp = 0;
+    if (sortBy === 'dzien') cmp = a.dzien.localeCompare(b.dzien);
+    else if (sortBy === 'status') cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+    else if (sortBy === 'godzina') cmp = (a.preferowana_godzina || '').localeCompare(b.preferowana_godzina || '');
+    else if (sortBy === 'kg') cmp = a.suma_kg - b.suma_kg;
+    else if (sortBy === 'numer') cmp = a.numer.localeCompare(b.numer);
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
 
   const counts: Record<ZlStatusFilter, number> = {
     all: zlecenia.length,
@@ -297,14 +315,24 @@ export function ZleceniaTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Numer</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Dzień</TableHead>
-                  <TableHead>Godzina</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('numer')}>
+                    Numer {sortBy === 'numer' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                    Status {sortBy === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('dzien')}>
+                    Dzień {sortBy === 'dzien' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('godzina')}>
+                    Godzina {sortBy === 'godzina' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
                   <TableHead>Typ pojazdu</TableHead>
                   <TableHead>Nadawca</TableHead>
                   <TableHead>Odbiorca</TableHead>
-                  <TableHead className="text-right">Kg</TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('kg')}>
+                    Kg {sortBy === 'kg' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
                   <TableHead>Kurs</TableHead>
                   <TableHead>WZ</TableHead>
                 </TableRow>

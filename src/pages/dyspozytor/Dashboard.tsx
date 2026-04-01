@@ -196,8 +196,8 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-8">#</TableHead>
-                        <TableHead>Nr WZ</TableHead>
                         <TableHead>Odbiorca</TableHead>
+                        <TableHead>Nr WZ</TableHead>
                         <TableHead>Adres</TableHead>
                         <TableHead className="text-right">Kg</TableHead>
                         <TableHead className="text-right">m³</TableHead>
@@ -212,8 +212,8 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                       {kPrz.map(p => (
                         <TableRow key={p.id}>
                           <TableCell>{p.kolejnosc}</TableCell>
-                          <TableCell className="font-mono text-xs">{p.numer_wz || p.zl_numer}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
+                          <TableCell className="font-mono text-xs max-w-[180px]">{p.numer_wz || p.zl_numer}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.adres}</TableCell>
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
                           <TableCell className="text-right">{p.objetosc_m3 ? Math.round(p.objetosc_m3 * 10) / 10 : '—'}</TableCell>
