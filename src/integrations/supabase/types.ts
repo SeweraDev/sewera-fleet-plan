@@ -289,18 +289,21 @@ export type Database = {
           aktywny: boolean
           created_at: string
           id: number
+          kod: string
           nazwa: string
         }
         Insert: {
           aktywny?: boolean
           created_at?: string
           id?: number
+          kod: string
           nazwa: string
         }
         Update: {
           aktywny?: boolean
           created_at?: string
           id?: number
+          kod?: string
           nazwa?: string
         }
         Relationships: []
@@ -504,6 +507,7 @@ export type Database = {
         Returns: boolean
       }
       oblicz_deadline_wz: { Args: { dzien_dostawy: string }; Returns: string }
+      generuj_numer_zlecenia: { Args: { p_oddzial_id: number }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "zarzad" | "dyspozytor" | "sprzedawca" | "kierowca"

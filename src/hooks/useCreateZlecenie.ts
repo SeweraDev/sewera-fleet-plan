@@ -33,7 +33,14 @@ export function useCreateZlecenie(onSuccess?: () => void) {
     setSubmitting(true);
     setError(null);
 
-    const numer = `ZL-${Date.now().toString(36).toUpperCase()}`;
+    const { data: numerData, error: numerErr } = await supabase
+      .rpc('generuj_numer_zlecenia', { p_oddzial_id: input.oddzial_id });
+    if (numerErr || !numerData) {
+      setError(numerErr?.message || 'Błąd generowania numeru zlecenia');
+      setSubmitting(false);
+      return;
+    }
+    const numer = numerData as string;
 
     const { data: zlecenie, error: err1 } = await supabase
       .from('zlecenia')

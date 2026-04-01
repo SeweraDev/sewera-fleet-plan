@@ -41,7 +41,8 @@ export default function KierowcaMojaTrasa() {
 
     setSubmitting(true);
 
-    const numer = `ZL-DOM-${Date.now().toString(36).toUpperCase()}`;
+    const { data: numerData } = await supabase.rpc('generuj_numer_zlecenia', { p_oddzial_id: kurs.oddzial_id });
+    const numer = (numerData as string) || `ZL-DOM-${Date.now().toString(36).toUpperCase()}`;
     const d = data[0];
 
     const { data: zlecenie, error: err1 } = await supabase
