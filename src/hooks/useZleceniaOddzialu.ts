@@ -12,7 +12,10 @@ export interface ZlecenieOddzialuDto {
   kurs_nrrej: string | null;
   oddział_nadawcy: string | null;
   odbiorca: string | null;
+  adres: string | null;
   suma_kg: number;
+  suma_m3: number;
+  suma_palet: number;
   deadline_wz: string | null;
   ma_wz: boolean;
   flaga_brak_wz: boolean;
@@ -90,17 +93,21 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
 
     // Get WZ sums + first odbiorca
     const ids = (zlData || []).map(z => z.id);
-    let wzMap = new Map<string, { suma_kg: number; odbiorca: string | null }>();
+    let wzMap = new Map<string, { suma_kg: number; suma_m3: number; suma_palet: number; odbiorca: string | null; adres: string | null }>();
     if (ids.length > 0) {
       const { data: wzData } = await supabase
         .from('zlecenia_wz')
-        .select('zlecenie_id, masa_kg, odbiorca')
+        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet, odbiorca, adres')
         .in('zlecenie_id', ids);
       (wzData || []).forEach(w => {
         const cur = wzMap.get(w.zlecenie_id);
+        const wAny = w as any;
         wzMap.set(w.zlecenie_id, {
           suma_kg: (cur?.suma_kg || 0) + Number(w.masa_kg),
-          odbiorca: cur?.odbiorca || w.odbiorca || null,
+          suma_m3: (cur?.suma_m3 || 0) + Number(w.objetosc_m3 || 0),
+          suma_palet: (cur?.suma_palet || 0) + Number(wAny.ilosc_palet || 0),
+          odbiorca: cur?.odbiorca || wAny.odbiorca || null,
+          adres: cur?.adres || wAny.adres || null,
         });
       });
     }
@@ -120,7 +127,10 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
         kurs_nrrej: kursNrRej || null,
         oddział_nadawcy: z.oddzial_id ? oddzialMap.get(z.oddzial_id) || null : null,
         odbiorca: wzInfo?.odbiorca || null,
+        adres: wzInfo?.adres || null,
         suma_kg: wzInfo?.suma_kg || 0,
+        suma_m3: wzInfo?.suma_m3 || 0,
+        suma_palet: wzInfo?.suma_palet || 0,
         deadline_wz: (z as any).deadline_wz || null,
         ma_wz: !!(z as any).ma_wz,
         flaga_brak_wz: !!(z as any).flaga_brak_wz,

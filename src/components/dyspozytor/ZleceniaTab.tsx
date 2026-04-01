@@ -315,24 +315,26 @@ export function ZleceniaTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('numer')}>
-                    Numer {sortBy === 'numer' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-                  </TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
-                    Status {sortBy === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-                  </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('dzien')}>
                     Dzień {sortBy === 'dzien' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('godzina')}>
                     Godzina {sortBy === 'godzina' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </TableHead>
-                  <TableHead>Typ pojazdu</TableHead>
-                  <TableHead>Nadawca</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                    Status {sortBy === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('numer')}>
+                    Numer {sortBy === 'numer' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
                   <TableHead>Odbiorca</TableHead>
+                  <TableHead>Adres</TableHead>
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('kg')}>
                     Kg {sortBy === 'kg' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </TableHead>
+                  <TableHead className="text-right">m³</TableHead>
+                  <TableHead className="text-right">Pal.</TableHead>
+                  <TableHead>Typ</TableHead>
                   <TableHead>Kurs</TableHead>
                   <TableHead>WZ</TableHead>
                 </TableRow>
@@ -344,14 +346,16 @@ export function ZleceniaTab({
                     className={`cursor-pointer hover:bg-muted/50 ${z.flaga_brak_wz ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
                     onClick={() => setSelectedZl(z)}
                   >
-                    <TableCell className="font-mono text-sm">{z.numer}</TableCell>
-                    <TableCell><StatusBadge status={z.status} /></TableCell>
                     <TableCell>{z.dzien}</TableCell>
                     <TableCell>{z.preferowana_godzina || '—'}</TableCell>
-                    <TableCell>{z.typ_pojazdu || '—'}</TableCell>
-                    <TableCell className="text-xs">{z.oddział_nadawcy || '—'}</TableCell>
-                    <TableCell className="text-xs">{z.odbiorca || '—'}</TableCell>
+                    <TableCell><StatusBadge status={z.status} /></TableCell>
+                    <TableCell className="font-mono text-xs">{z.numer}</TableCell>
+                    <TableCell className="text-xs max-w-[140px] truncate">{z.odbiorca || '—'}</TableCell>
+                    <TableCell className="text-xs max-w-[140px] truncate">{z.adres || '—'}</TableCell>
                     <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
+                    <TableCell className="text-right">{z.suma_m3 ? Math.round(z.suma_m3 * 10) / 10 : '—'}</TableCell>
+                    <TableCell className="text-right">{z.suma_palet || '—'}</TableCell>
+                    <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell>
                       {z.kurs_numer
                         ? <Badge variant="outline" className="font-mono text-xs">{z.kurs_numer}{z.kurs_nrrej ? ` · ${z.kurs_nrrej}` : ''}</Badge>
