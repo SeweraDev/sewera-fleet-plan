@@ -119,14 +119,33 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         return;
       }
 
-      console.log("[WzOcrTab] extracted text:\n", ocrText.substring(0, 500));
-      const local = parseWzTextLocal(ocrText);
+      const cleaned = cleanOcrText(ocrText);
+      console.log("[WzOcrTab] cleaned text:\n", cleaned.substring(0, 500));
+      const local = parseWzTextLocal(cleaned);
+
+      // Ekstrakcja os. kontaktowa z pełnego tekstu (OCR często ma to w jednej linii z adresem)
+      let osKontaktowa = '';
+      const kontaktM = cleaned.match(/(?:Os\.?\s*kontaktowa|kontaktowa)\s*:?\s*([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)/i);
+      if (kontaktM) osKontaktowa = kontaktM[1].trim();
+      // Fallback: szukaj "Imię Nazwisko tel. XXX"
+      if (!osKontaktowa) {
+        const nametelM = cleaned.match(/([A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)\s+tel\.?\s*([\d\s\-]{9,})/i);
+        if (nametelM) osKontaktowa = nametelM[1].trim();
+      }
+
+      // Lepszy tel z cleaned text jeśli parser nie znalazł
+      let tel = local.tel || '';
+      if (!tel) {
+        const telM = cleaned.match(/tel\.?\s*:?\s*([\d][\d\s\-]{7,}[\d])/i);
+        if (telM) tel = telM[1].replace(/\s+/g, '').replace(/-/g, '');
+      }
+
       setPreview({
         numer_wz: local.numer_wz || '',
         nr_zamowienia: local.nr_zamowienia || '',
         odbiorca: local.odbiorca || '',
         adres: local.adres || '',
-        tel: local.tel || '',
+        tel: osKontaktowa ? `${osKontaktowa}, tel. ${tel}` : tel,
         masa_kg: local.masa_kg || 0,
         objetosc_m3: 0,
         ilosc_palet: local.ilosc_palet || 0,
@@ -237,6 +256,22 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       )}
     </div>
   );
+}
+
+// Czyści tekst z OCR — usuwa artefakty tabel (|, =, ramki), normalizuje whitespace
+function cleanOcrText(raw: string): string {
+  let t = raw;
+  // Usuń pipe chars (ramki tabel) i zastąp spacją
+  t = t.replace(/\|/g, ' ');
+  // Usuń linie składające się tylko z = - _ + (separatory tabel)
+  t = t.replace(/^[\s=\-_+]{3,}$/gm, '');
+  // Usuń powtarzające się = - (artefakty tabel inline)
+  t = t.replace(/[=\-]{3,}/g, ' ');
+  // Normalizuj wielokrotne spacje
+  t = t.replace(/[ \t]{2,}/g, ' ');
+  // Normalizuj wielokrotne puste linie
+  t = t.replace(/(\n\s*){3,}/g, '\n\n');
+  return t.trim();
 }
 
 type ParsePreview = {
@@ -375,7 +410,12 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
       adres = undefined;
     }
   }
-  // No "Adres dostawy" / "Budowa" section → adres stays undefined
+  // Fallback adres: szukaj wzorca "ul./al./os. + nazwa + numer, kod-pocztowy miasto" w pełnym tekście
+  if (!adres) {
+    const addrRegex = /(?:ul\.|al\.|os\.|pl\.)\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s]+\d+[a-zA-Z]?(?:\s*[,/]\s*\d+)?[,\s]+\d{2}-\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+/;
+    const addrM = text.match(addrRegex);
+    if (addrM) adres = addrM[0].trim();
+  }
   if (adres && odbiorca && odbiorca.includes(adres)) {
     adres = undefined;
   }
@@ -441,6 +481,31 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
       afterLines.push(l);
     }
     uwagi = afterLines.join('\n').trim() || undefined;
+  }
+
+  // ─── Post-processing: obcięcie adresu z artefaktów OCR ───
+  if (adres) {
+    // OCR często łączy kolumny tabeli w jedną linię — obetnij przy znanych markerach
+    const cutMarkers = [/kontaktowa/i, /Kod\s*towaru/i, /Nazwa\s*towaru/i, /AE\s/i, /mp\s/i, /Ilo[sś][cć]/i, /Cena/i, /Netto/i];
+    for (const marker of cutMarkers) {
+      const cutIdx = adres.search(marker);
+      if (cutIdx > 10) { adres = adres.substring(0, cutIdx).replace(/[,\s]+$/, ''); break; }
+    }
+    // Usuń końcowe litery-śmieci (zj R, S itp. — artefakty OCR)
+    adres = adres.replace(/[,\s]+[a-zA-Z]{1,2}$/, '').trim();
+  }
+
+  // ─── Fallback odbiorca z regex (OCR garble) ───
+  if (!odbiorca) {
+    // Szukaj firmy z formą prawną w pełnym tekście
+    const firmM = text.match(/([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s\.\-&]{3,}(?:SP\.\s*Z\s*O\.O\.|SPÓŁKA|SP\.\s*K|S\.A\.?|S\.C\.))/i);
+    if (firmM) odbiorca = firmM[1].trim();
+  }
+
+  // ─── Fallback tel z pełnego tekstu ───
+  if (!tel) {
+    const telM = text.match(/(?:tel\.?|Tel\.?)\s*:?\s*([\d][\d\s\-]{7,}[\d])/i);
+    if (telM) tel = telM[1].replace(/\s+/g, '');
   }
 
   return { numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, uwagi };
