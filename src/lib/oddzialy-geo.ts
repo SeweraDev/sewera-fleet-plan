@@ -31,6 +31,17 @@ export function getOddzialCoordsById(oddzialId: number, oddzialNazwa: string): {
   return getOddzialCoordsByName(oddzialNazwa);
 }
 
+// Wyczyść adres z prefixów (Budowa, Hala, Magazyn...) i zostaw tylko ulicę + kod + miasto
+function cleanAddressForGeocoding(raw: string): string {
+  let a = raw;
+  // Usuń prefixy typu "Budowa Żłobka w Sosnowcu," itp.
+  a = a.replace(/^(?:Budowa|Hala|Magazyn|Plac|Obiekt|Inwestycja)[^,]*,\s*/i, '');
+  // Usuń "nazwa obiektu" przed "ul./al./os."
+  const streetIdx = a.search(/(?:ul\.|al\.|os\.|pl\.)/i);
+  if (streetIdx > 0) a = a.substring(streetIdx);
+  return a.trim();
+}
+
 // Cache geocodingu — nie pytaj ponownie o ten sam adres
 const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
 
@@ -38,23 +49,36 @@ const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
 export async function geocodeAddress(adres: string): Promise<{ lat: number; lng: number } | null> {
   if (!adres || adres.length < 5) return null;
 
-  const cacheKey = adres.trim().toLowerCase();
+  const cleaned = cleanAddressForGeocoding(adres);
+  const cacheKey = cleaned.trim().toLowerCase();
   if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey) || null;
 
-  try {
-    const q = encodeURIComponent(adres + ', Polska');
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=pl`,
-      { headers: { 'User-Agent': 'SeweraFleetPlan/1.0' } }
-    );
-    const data = await res.json();
-    if (data && data.length > 0) {
-      const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      geocodeCache.set(cacheKey, result);
-      return result;
+  // Próba 1: pełny oczyszczony adres
+  const attempts = [cleaned];
+  // Próba 2: tylko kod pocztowy + miasto (jeśli jest)
+  const pcMatch = cleaned.match(/(\d{2}-\d{3})\s+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s]+)/);
+  if (pcMatch) {
+    const streetMatch = cleaned.match(/((?:ul\.|al\.|os\.|pl\.)[^,]+)/i);
+    if (streetMatch) attempts.push(`${streetMatch[1]}, ${pcMatch[1]} ${pcMatch[2]}`);
+    attempts.push(`${pcMatch[1]} ${pcMatch[2]}`);
+  }
+
+  for (const attempt of attempts) {
+    try {
+      const q = encodeURIComponent(attempt + ', Polska');
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=pl`,
+        { headers: { 'User-Agent': 'SeweraFleetPlan/1.0' } }
+      );
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        geocodeCache.set(cacheKey, result);
+        return result;
+      }
+    } catch {
+      // Nominatim error — próbuj następny attempt
     }
-  } catch {
-    // Nominatim error — zwróć null
   }
 
   geocodeCache.set(cacheKey, null);
