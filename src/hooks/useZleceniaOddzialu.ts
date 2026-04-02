@@ -35,7 +35,7 @@ export interface WzDto {
   uwagi: string | null;
 }
 
-export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) {
+export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, dzien?: string) {
   const [zlecenia, setZlecenia] = useState<ZlecenieOddzialuDto[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -51,7 +51,9 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
       .order('dzien', { ascending: true })
       .order('created_at', { ascending: true });
 
-    if (pastOnly) {
+    if (dzien) {
+      query = query.eq('dzien', dzien);
+    } else if (pastOnly) {
       query = query.lt('dzien', today);
     }
 
@@ -157,7 +159,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
         }
       })();
     }
-  }, [oddzialId, pastOnly]);
+  }, [oddzialId, pastOnly, dzien]);
 
   useEffect(() => { refetch(); }, [refetch]);
 

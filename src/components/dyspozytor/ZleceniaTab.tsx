@@ -228,14 +228,16 @@ function DeadlineExtendPicker({ zlecenie, onDone }: { zlecenie: ZlecenieOddzialu
 
 export function ZleceniaTab({
   oddzialId,
+  dzien,
   pastOnly = false,
   onOpenKursModal,
 }: {
   oddzialId: number;
+  dzien?: string;
   pastOnly?: boolean;
   onOpenKursModal?: (zlecenieId: string) => void;
 }) {
-  const { zlecenia, loading, refetch } = useZleceniaOddzialu(oddzialId, pastOnly);
+  const { zlecenia, loading, refetch } = useZleceniaOddzialu(oddzialId, pastOnly, dzien);
   const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('bez_kursu');
   const [selectedZl, setSelectedZl] = useState<ZlecenieOddzialuDto | null>(null);
   const [editZlId, setEditZlId] = useState<string | null>(null);
