@@ -54,15 +54,11 @@ function CapacityBar({ used, total, unit, label }: { used: number; total: number
   );
 }
 
-type ZlStatusFilter = 'all' | 'bez_kursu' | 'robocza' | 'potwierdzona' | 'w_trasie' | 'dostarczona' | 'anulowana';
+type ZlStatusFilter = 'bez_kursu' | 'all' | 'anulowana';
 
 const ZL_STATUS_FILTERS: { key: ZlStatusFilter; label: string }[] = [
-  { key: 'all', label: 'Wszystkie' },
   { key: 'bez_kursu', label: 'Bez kursu' },
-  { key: 'robocza', label: 'Robocze' },
-  { key: 'potwierdzona', label: 'Potwierdzone' },
-  { key: 'w_trasie', label: 'W trasie' },
-  { key: 'dostarczona', label: 'Dostarczone' },
+  { key: 'all', label: 'Wszystkie' },
   { key: 'anulowana', label: 'Anulowane' },
 ];
 
@@ -253,8 +249,8 @@ export function ZleceniaTab({
 
   const STATUS_ORDER: Record<string, number> = { robocza: 0, do_weryfikacji: 1, potwierdzona: 2, w_trasie: 3, dostarczona: 4, anulowana: 5 };
 
-  const filteredBase = statusFilter === 'all' ? zlecenia
-    : statusFilter === 'bez_kursu' ? zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana')
+  const filteredBase = statusFilter === 'bez_kursu' ? zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana')
+    : statusFilter === 'all' ? zlecenia.filter(z => z.status !== 'anulowana')
     : zlecenia.filter(z => z.status === statusFilter);
   const filtered = [...filteredBase].sort((a, b) => {
     let cmp = 0;
@@ -268,12 +264,8 @@ export function ZleceniaTab({
   });
 
   const counts: Record<ZlStatusFilter, number> = {
-    all: zlecenia.length,
     bez_kursu: zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana').length,
-    robocza: zlecenia.filter(z => z.status === 'robocza').length,
-    potwierdzona: zlecenia.filter(z => z.status === 'potwierdzona').length,
-    w_trasie: zlecenia.filter(z => z.status === 'w_trasie').length,
-    dostarczona: zlecenia.filter(z => z.status === 'dostarczona').length,
+    all: zlecenia.filter(z => z.status !== 'anulowana').length,
     anulowana: zlecenia.filter(z => z.status === 'anulowana').length,
   };
 
