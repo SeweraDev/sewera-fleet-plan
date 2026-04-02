@@ -43,34 +43,10 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Cache geocodingu — tylko udane wyniki (null NIE jest cache'owany → retry przy następnym razie)
+// Cache geocodingu — tylko udane wyniki (null NIE jest cache'owany → retry)
 const geocodeCache = new Map<string, { lat: number; lng: number }>();
 
-// Kolejka requestów Nominatim — max 1 req/s
-let lastNominatimRequest = 0;
-
-async function nominatimFetch(query: string): Promise<any[]> {
-  // Czekaj żeby nie przekroczyć 1 req/s
-  const now = Date.now();
-  const elapsed = now - lastNominatimRequest;
-  if (elapsed < 1100) {
-    await delay(1100 - elapsed);
-  }
-  lastNominatimRequest = Date.now();
-
-  const q = encodeURIComponent(query);
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=pl`,
-    { headers: { 'User-Agent': 'SeweraFleetPlan/1.0' } }
-  );
-  if (!res.ok) {
-    console.warn(`[geocode] Nominatim HTTP ${res.status} for: ${query}`);
-    return [];
-  }
-  return await res.json();
-}
-
-// Geocoding adresu → Nominatim (darmowy, 1 req/s z kolejką)
+// Geocoding adresu → Photon (Komoot) — darmowy, bez klucza API, bez rate limitu
 export async function geocodeAddress(adres: string): Promise<{ lat: number; lng: number } | null> {
   if (!adres || adres.length < 5) return null;
 
@@ -78,39 +54,29 @@ export async function geocodeAddress(adres: string): Promise<{ lat: number; lng:
   const cacheKey = cleaned.trim().toLowerCase();
   if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey)!;
 
-  // Buduj próby geocodingu
-  const attempts: string[] = [];
+  // Buduj query — usuń "ul." prefix (Photon lepiej rozumie bez niego)
+  const queryBase = cleaned.replace(/^ul\.\s*/i, '').replace(/,\s*Polska$/i, '');
 
-  // Próba 1: ul. + kod + miasto (najdokładniejsza)
-  const streetMatch = cleaned.match(/((?:ul\.|al\.|os\.|pl\.)[^,]+)/i);
-  const pcMatch = cleaned.match(/(\d{2}-\d{3})\s+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s]+)/);
-  if (streetMatch && pcMatch) {
-    attempts.push(`${streetMatch[1].trim()}, ${pcMatch[1]} ${pcMatch[2].trim()}, Polska`);
-  }
-  // Próba 2: pełny oczyszczony adres
-  attempts.push(`${cleaned}, Polska`);
-  // Próba 3: tylko kod pocztowy + miasto
-  if (pcMatch) {
-    attempts.push(`${pcMatch[1]} ${pcMatch[2].trim()}, Polska`);
-  }
-
-  for (const attempt of attempts) {
-    try {
-      const data = await nominatimFetch(attempt);
-      if (data && data.length > 0) {
-        const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-        console.log(`[geocode] OK: "${attempt}" → ${result.lat}, ${result.lng}`);
-        geocodeCache.set(cacheKey, result);
-        return result;
-      }
-      console.log(`[geocode] empty: "${attempt}"`);
-    } catch (e) {
-      console.warn(`[geocode] error: "${attempt}"`, e);
+  try {
+    const q = encodeURIComponent(queryBase + ' Poland');
+    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=1`);
+    if (!res.ok) {
+      console.warn(`[geocode] Photon HTTP ${res.status}`);
+      return null;
     }
+    const data = await res.json();
+    if (data.features && data.features.length > 0) {
+      const [lng, lat] = data.features[0].geometry.coordinates;
+      const result = { lat, lng };
+      console.log(`[geocode] OK: "${queryBase}" → ${lat}, ${lng}`);
+      geocodeCache.set(cacheKey, result);
+      return result;
+    }
+    console.log(`[geocode] empty: "${queryBase}"`);
+  } catch (e) {
+    console.warn(`[geocode] error:`, e);
   }
 
-  console.warn(`[geocode] FAILED all attempts for: "${adres}" (cleaned: "${cleaned}")`);
-  // NIE cache'ujemy null — retry przy następnym razie
   return null;
 }
 
