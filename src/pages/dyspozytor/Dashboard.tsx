@@ -224,6 +224,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                         <TableHead>Uwagi</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead></TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -250,17 +251,21 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                           {isFirst ? (
                             <TableCell rowSpan={groupSize} className="align-top"><StatusBadge status={p.prz_status} /></TableCell>
                           ) : null}
+                          <TableCell>
+                            <div className="flex gap-1">
+                            {p.zlecenie_id && (
+                              <Button size="sm" variant="ghost" onClick={() => setEditZlId(p.zlecenie_id)}>
+                                ✏️
+                              </Button>
+                            )}
+                            </div>
+                          </TableCell>
                           {isFirst ? (
                             <TableCell rowSpan={groupSize} className="align-top">
                               <div className="flex gap-1">
                             {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
                               <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id.split('_')[0])} disabled={acting}>
-                                ✓ Dostarcz
-                              </Button>
-                            )}
-                            {p.zlecenie_id && (
-                              <Button size="sm" variant="ghost" onClick={() => setEditZlId(p.zlecenie_id)}>
-                                ✏️
+                                ✓
                               </Button>
                             )}
                             {p.zlecenie_id && (
