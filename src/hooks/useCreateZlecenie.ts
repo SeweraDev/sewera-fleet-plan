@@ -53,7 +53,9 @@ export function useCreateZlecenie(onSuccess?: () => void) {
       .single();
 
     if (err1 || !zlecenie) {
-      setError(err1?.message || 'Błąd zapisu zlecenia');
+      const msg = err1?.message || 'Błąd zapisu zlecenia';
+      setError(msg);
+      toast.error(msg);
       setSubmitting(false);
       return;
     }
@@ -75,6 +77,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
       const { error: err2 } = await supabase.from('zlecenia_wz').insert(wzRows);
       if (err2) {
         setError(err2.message);
+        toast.error('Błąd zapisu WZ: ' + err2.message);
         setSubmitting(false);
         return;
       }
