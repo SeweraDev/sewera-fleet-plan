@@ -79,6 +79,7 @@ export function useSprawdzDostepnosc() {
     newKg: number,
     newM3: number,
     newPalet: number,
+    godzina?: string,
   ) => {
     setResult(prev => ({ ...prev, loading: true }));
 
@@ -135,15 +136,20 @@ export function useSprawdzDostepnosc() {
       }
     }
 
-    // 2b. Nieprzypisane zlecenia (robocze/do_weryfikacji) na ten dzień — dodaj do ogólnego obciążenia
-    // Te nie mają przypisanego pojazdu, więc obciążają WSZYSTKIE pojazdy danego typu równomiernie
-    const { data: unassigned } = await supabase
+    // 2b. Nieprzypisane zlecenia (robocze/do_weryfikacji) na ten dzień
+    // Filtruj po godzinie — liczymy tylko zlecenia z tego samego przedziału
+    let unassignedQuery = supabase
       .from('zlecenia')
-      .select('id, typ_pojazdu')
+      .select('id, typ_pojazdu, preferowana_godzina')
       .eq('oddzial_id', oddzialId)
       .eq('dzien', dzien)
       .in('status', ['robocza', 'do_weryfikacji']);
 
+    if (godzina && godzina !== 'dowolna') {
+      unassignedQuery = unassignedQuery.eq('preferowana_godzina', godzina);
+    }
+
+    const { data: unassigned } = await unassignedQuery;
     const unassignedIds = (unassigned || []).map(z => z.id);
     let unassignedLoad = { kg: 0, m3: 0, palet: 0 };
     if (unassignedIds.length > 0) {
@@ -155,28 +161,25 @@ export function useSprawdzDostepnosc() {
       });
     }
 
-    // 4b. Sprawdź wolne przedziały — policz obciążenie per slot
+    // 4b. Sprawdź wolne przedziały — pobierz WSZYSTKIE nieprzypisane (bez filtra godziny)
     const ALL_SLOTS = ['do 8:00', 'do 10:00', 'do 12:00', 'do 14:00', 'do 16:00'];
     const slotLoad = new Map<string, { kg: number; palet: number }>();
     ALL_SLOTS.forEach(s => slotLoad.set(s, { kg: 0, palet: 0 }));
-    (unassigned || []).forEach(z => {
-      const slot = (z as any).preferowana_godzina || 'dowolna';
-      if (slotLoad.has(slot)) {
-        // Obciążenie tego slotu = suma WZ tego zlecenia
-        const wzForZl = unassignedIds.includes(z.id) ? true : false;
-      }
-    });
-    // Pobierz obciążenie per slot z unassigned zleceń
-    if (unassignedIds.length > 0) {
-      const { data: uzlFull } = await supabase
-        .from('zlecenia')
-        .select('id, preferowana_godzina')
-        .in('id', unassignedIds);
+
+    const { data: allUnassigned } = await supabase
+      .from('zlecenia')
+      .select('id, preferowana_godzina')
+      .eq('oddzial_id', oddzialId)
+      .eq('dzien', dzien)
+      .in('status', ['robocza', 'do_weryfikacji']);
+
+    const allUnassignedIds = (allUnassigned || []).map(z => z.id);
+    if (allUnassignedIds.length > 0) {
       const { data: uwzFull } = await supabase
         .from('zlecenia_wz')
         .select('zlecenie_id, masa_kg, ilosc_palet')
-        .in('zlecenie_id', unassignedIds);
-      (uzlFull || []).forEach(z => {
+        .in('zlecenie_id', allUnassignedIds);
+      (allUnassigned || []).forEach(z => {
         const slot = z.preferowana_godzina || 'dowolna';
         const entry = slotLoad.get(slot) || { kg: 0, palet: 0 };
         (uwzFull || []).filter(w => w.zlecenie_id === z.id).forEach(w => {

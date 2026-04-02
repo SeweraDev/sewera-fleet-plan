@@ -520,7 +520,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
           </div>
         )}
         {step === 4 && oddzialId && (
-          <DostepnoscStep oddzialId={oddzialId} typPojazdu={typPojazdu} dzien={dzien} wzList={wzList}
+          <DostepnoscStep oddzialId={oddzialId} typPojazdu={typPojazdu} dzien={dzien} godzina={godzina} wzList={wzList}
             onBack={() => setStep(3)} onSubmit={handleSubmit} submitting={submitting}
             onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(2); }}
             onChangeGodzina={(newGodzina) => { setGodzina(newGodzina); setStep(2); }} />

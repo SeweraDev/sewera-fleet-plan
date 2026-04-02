@@ -10,6 +10,7 @@ interface DostepnoscStepProps {
   oddzialId: number;
   typPojazdu: string;
   dzien: string;
+  godzina?: string;
   wzList: WzInput[];
   onBack: () => void;
   onSubmit: (forceVerify: boolean) => void;
@@ -74,6 +75,7 @@ export function DostepnoscStep({
   oddzialId,
   typPojazdu,
   dzien,
+  godzina,
   wzList,
   onBack,
   onSubmit,
@@ -89,9 +91,9 @@ export function DostepnoscStep({
 
   useEffect(() => {
     if (oddzialId && dzien) {
-      check(oddzialId, typPojazdu, dzien, totalKg, totalM3, totalPalet);
+      check(oddzialId, typPojazdu, dzien, totalKg, totalM3, totalPalet, godzina);
     }
-  }, [oddzialId, typPojazdu, dzien, totalKg, totalM3, totalPalet, check]);
+  }, [oddzialId, typPojazdu, dzien, godzina, totalKg, totalM3, totalPalet, check]);
 
   if (loading) {
     return <p className="text-center text-muted-foreground py-8">Sprawdzanie dostępności floty...</p>;

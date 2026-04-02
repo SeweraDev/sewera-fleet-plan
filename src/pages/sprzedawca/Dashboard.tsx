@@ -139,6 +139,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             oddzialId={oddzialId}
             typPojazdu={typPojazdu}
             dzien={dzien}
+            godzina={godzina}
             wzList={wzList}
             onBack={() => setStep(3)}
             onSubmit={handleSubmit}
