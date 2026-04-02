@@ -141,18 +141,21 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false) 
     }));
     setLoading(false);
 
-    // Oblicz dystans w tle (asynchronicznie, nie blokuje renderowania)
+    // Oblicz dystans SEKWENCYJNIE w tle (Nominatim limit 1 req/s)
     const oddzialNazwa = oddzialId != null ? oddzialMap.get(oddzialId) || '' : '';
     if (oddzialNazwa) {
-      (zlData || []).forEach(async (z) => {
-        const wzInfo = wzMap.get(z.id);
-        const adres = wzInfo?.adres;
-        if (!adres) return;
-        const km = await calculateDistance(oddzialNazwa, adres);
-        if (km != null) {
-          setZlecenia(prev => prev.map(zl => zl.id === z.id ? { ...zl, dystans_km: km } : zl));
+      const zlWithAddress = (zlData || []).filter(z => wzMap.get(z.id)?.adres);
+      // Uruchom w tle — nie blokuj renderowania, ale sekwencyjnie (nie parallel)
+      (async () => {
+        for (const z of zlWithAddress) {
+          const adres = wzMap.get(z.id)?.adres;
+          if (!adres) continue;
+          const km = await calculateDistance(oddzialNazwa, adres);
+          if (km != null) {
+            setZlecenia(prev => prev.map(zl => zl.id === z.id ? { ...zl, dystans_km: km } : zl));
+          }
         }
-      });
+      })();
     }
   }, [oddzialId, pastOnly]);
 

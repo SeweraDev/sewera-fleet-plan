@@ -27,10 +27,6 @@ export function getOddzialCoordsByName(nazwaOddzialu: string): { lat: number; ln
   return kod ? ODDZIAL_COORDS[kod] || null : null;
 }
 
-export function getOddzialCoordsById(oddzialId: number, oddzialNazwa: string): { lat: number; lng: number } | null {
-  return getOddzialCoordsByName(oddzialNazwa);
-}
-
 // Wyczyść adres z prefixów (Budowa, Hala, Magazyn...) i zostaw tylko ulicę + kod + miasto
 function cleanAddressForGeocoding(raw: string): string {
   let a = raw;
@@ -42,46 +38,79 @@ function cleanAddressForGeocoding(raw: string): string {
   return a.trim();
 }
 
-// Cache geocodingu — nie pytaj ponownie o ten sam adres
-const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
+// Delay helper
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-// Geocoding adresu → Nominatim (darmowy, 1 req/s)
+// Cache geocodingu — tylko udane wyniki (null NIE jest cache'owany → retry przy następnym razie)
+const geocodeCache = new Map<string, { lat: number; lng: number }>();
+
+// Kolejka requestów Nominatim — max 1 req/s
+let lastNominatimRequest = 0;
+
+async function nominatimFetch(query: string): Promise<any[]> {
+  // Czekaj żeby nie przekroczyć 1 req/s
+  const now = Date.now();
+  const elapsed = now - lastNominatimRequest;
+  if (elapsed < 1100) {
+    await delay(1100 - elapsed);
+  }
+  lastNominatimRequest = Date.now();
+
+  const q = encodeURIComponent(query);
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=pl`,
+    { headers: { 'User-Agent': 'SeweraFleetPlan/1.0' } }
+  );
+  if (!res.ok) {
+    console.warn(`[geocode] Nominatim HTTP ${res.status} for: ${query}`);
+    return [];
+  }
+  return await res.json();
+}
+
+// Geocoding adresu → Nominatim (darmowy, 1 req/s z kolejką)
 export async function geocodeAddress(adres: string): Promise<{ lat: number; lng: number } | null> {
   if (!adres || adres.length < 5) return null;
 
   const cleaned = cleanAddressForGeocoding(adres);
   const cacheKey = cleaned.trim().toLowerCase();
-  if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey) || null;
+  if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey)!;
 
-  // Próba 1: pełny oczyszczony adres
-  const attempts = [cleaned];
-  // Próba 2: tylko kod pocztowy + miasto (jeśli jest)
+  // Buduj próby geocodingu
+  const attempts: string[] = [];
+
+  // Próba 1: ul. + kod + miasto (najdokładniejsza)
+  const streetMatch = cleaned.match(/((?:ul\.|al\.|os\.|pl\.)[^,]+)/i);
   const pcMatch = cleaned.match(/(\d{2}-\d{3})\s+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s]+)/);
+  if (streetMatch && pcMatch) {
+    attempts.push(`${streetMatch[1].trim()}, ${pcMatch[1]} ${pcMatch[2].trim()}, Polska`);
+  }
+  // Próba 2: pełny oczyszczony adres
+  attempts.push(`${cleaned}, Polska`);
+  // Próba 3: tylko kod pocztowy + miasto
   if (pcMatch) {
-    const streetMatch = cleaned.match(/((?:ul\.|al\.|os\.|pl\.)[^,]+)/i);
-    if (streetMatch) attempts.push(`${streetMatch[1]}, ${pcMatch[1]} ${pcMatch[2]}`);
-    attempts.push(`${pcMatch[1]} ${pcMatch[2]}`);
+    attempts.push(`${pcMatch[1]} ${pcMatch[2].trim()}, Polska`);
   }
 
   for (const attempt of attempts) {
     try {
-      const q = encodeURIComponent(attempt + ', Polska');
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=pl`,
-        { headers: { 'User-Agent': 'SeweraFleetPlan/1.0' } }
-      );
-      const data = await res.json();
+      const data = await nominatimFetch(attempt);
       if (data && data.length > 0) {
         const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        console.log(`[geocode] OK: "${attempt}" → ${result.lat}, ${result.lng}`);
         geocodeCache.set(cacheKey, result);
         return result;
       }
-    } catch {
-      // Nominatim error — próbuj następny attempt
+      console.log(`[geocode] empty: "${attempt}"`);
+    } catch (e) {
+      console.warn(`[geocode] error: "${attempt}"`, e);
     }
   }
 
-  geocodeCache.set(cacheKey, null);
+  console.warn(`[geocode] FAILED all attempts for: "${adres}" (cleaned: "${cleaned}")`);
+  // NIE cache'ujemy null — retry przy następnym razie
   return null;
 }
 
@@ -95,31 +124,39 @@ export async function getRouteDistance(
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && data.routes?.[0]) {
-      return Math.round(data.routes[0].distance / 1000); // metry → km
+      const km = Math.round(data.routes[0].distance / 1000);
+      console.log(`[osrm] ${km} km`);
+      return km;
     }
-  } catch {
-    // OSRM error
+    console.warn(`[osrm] no route`, data);
+  } catch (e) {
+    console.warn(`[osrm] error`, e);
   }
   return null;
 }
 
-// Cache dystansu — klucz: "oddzialId:adres"
-const distanceCache = new Map<string, number | null>();
+// Cache dystansu — klucz: "oddział:adres". Null NIE jest cache'owany.
+const distanceCache = new Map<string, number>();
 
 // Oblicz dystans od oddziału do adresu dostawy (km po drogach)
 export async function calculateDistance(oddzialNazwa: string, adresDostawy: string): Promise<number | null> {
-  if (!adresDostawy) return null;
+  if (!adresDostawy || !oddzialNazwa) return null;
 
   const cacheKey = `${oddzialNazwa}:${adresDostawy.trim().toLowerCase()}`;
-  if (distanceCache.has(cacheKey)) return distanceCache.get(cacheKey) || null;
+  if (distanceCache.has(cacheKey)) return distanceCache.get(cacheKey)!;
 
   const from = getOddzialCoordsByName(oddzialNazwa);
-  if (!from) return null;
+  if (!from) {
+    console.warn(`[distance] unknown oddział: "${oddzialNazwa}"`);
+    return null;
+  }
 
   const to = await geocodeAddress(adresDostawy);
   if (!to) return null;
 
   const km = await getRouteDistance(from, to);
-  distanceCache.set(cacheKey, km);
+  if (km != null) {
+    distanceCache.set(cacheKey, km);
+  }
   return km;
 }
