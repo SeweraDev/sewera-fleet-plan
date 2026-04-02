@@ -24,12 +24,20 @@ export interface NextAvailable {
   pct_kg: number;
 }
 
+export interface SlotInfo {
+  godzina: string;
+  totalKg: number;
+  totalPalet: number;
+  zlecenCount: number;
+}
+
 export interface OccupancyResult {
   vehicles: VehicleOccupancy[];
   anyFits: boolean;
   loading: boolean;
   nextAvailable: NextAvailable | null;
   searchingNext: boolean;
+  freeSlots: string[];
 }
 
 function pctColor(pct: number): string {
@@ -62,7 +70,7 @@ function generateWorkdays(startDate: string, count: number): string[] {
 }
 
 export function useSprawdzDostepnosc() {
-  const [result, setResult] = useState<OccupancyResult>({ vehicles: [], anyFits: false, loading: false, nextAvailable: null, searchingNext: false });
+  const [result, setResult] = useState<OccupancyResult>({ vehicles: [], anyFits: false, loading: false, nextAvailable: null, searchingNext: false, freeSlots: [] });
 
   const check = useCallback(async (
     oddzialId: number,
@@ -147,6 +155,47 @@ export function useSprawdzDostepnosc() {
       });
     }
 
+    // 4b. Sprawdź wolne przedziały — policz obciążenie per slot
+    const ALL_SLOTS = ['do 8:00', 'do 10:00', 'do 12:00', 'do 14:00', 'do 16:00'];
+    const slotLoad = new Map<string, { kg: number; palet: number }>();
+    ALL_SLOTS.forEach(s => slotLoad.set(s, { kg: 0, palet: 0 }));
+    (unassigned || []).forEach(z => {
+      const slot = (z as any).preferowana_godzina || 'dowolna';
+      if (slotLoad.has(slot)) {
+        // Obciążenie tego slotu = suma WZ tego zlecenia
+        const wzForZl = unassignedIds.includes(z.id) ? true : false;
+      }
+    });
+    // Pobierz obciążenie per slot z unassigned zleceń
+    if (unassignedIds.length > 0) {
+      const { data: uzlFull } = await supabase
+        .from('zlecenia')
+        .select('id, preferowana_godzina')
+        .in('id', unassignedIds);
+      const { data: uwzFull } = await supabase
+        .from('zlecenia_wz')
+        .select('zlecenie_id, masa_kg, ilosc_palet')
+        .in('zlecenie_id', unassignedIds);
+      (uzlFull || []).forEach(z => {
+        const slot = z.preferowana_godzina || 'dowolna';
+        const entry = slotLoad.get(slot) || { kg: 0, palet: 0 };
+        (uwzFull || []).filter(w => w.zlecenie_id === z.id).forEach(w => {
+          entry.kg += Number(w.masa_kg) || 0;
+          entry.palet += Number(w.ilosc_palet) || 0;
+        });
+        slotLoad.set(slot, entry);
+      });
+    }
+    // Wolne sloty: te gdzie zmieści się nowe zlecenie (per najlepszy pojazd)
+    const bestVehicle = vehicles.reduce((best, v) => (Number(v.ladownosc_kg) > Number(best.ladownosc_kg) ? v : best), vehicles[0]);
+    const bestCap = { kg: Number(bestVehicle.ladownosc_kg) || 1, palet: bestVehicle.max_palet ? Number(bestVehicle.max_palet) : null };
+    const freeSlots = ALL_SLOTS.filter(slot => {
+      const load = slotLoad.get(slot) || { kg: 0, palet: 0 };
+      const fitKg = (load.kg + newKg) <= bestCap.kg;
+      const fitPal = !bestCap.palet || (load.palet + newPalet) <= bestCap.palet;
+      return fitKg && fitPal;
+    });
+
     // 5. Build result — dodaj obciążenie z nieprzypisanych zleceń (rozłóż na pojazdy)
     const numVehicles = vehicles.length || 1;
     const occupancy: VehicleOccupancy[] = vehicles.map(v => {
@@ -200,6 +249,7 @@ export function useSprawdzDostepnosc() {
       loading: false,
       nextAvailable: null,
       searchingNext: !anyFits,
+      freeSlots,
     });
 
     // Jeśli nic nie pasuje — szukaj następnego wolnego terminu w tle

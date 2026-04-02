@@ -15,6 +15,7 @@ interface DostepnoscStepProps {
   onSubmit: (forceVerify: boolean) => void;
   submitting: boolean;
   onChangeDzien?: (newDzien: string) => void;
+  onChangeGodzina?: (newGodzina: string) => void;
 }
 
 function OccupancyBar({ label, pct, value, max }: { label: string; pct: number; value: number; max: number | null }) {
@@ -78,8 +79,9 @@ export function DostepnoscStep({
   onSubmit,
   submitting,
   onChangeDzien,
+  onChangeGodzina,
 }: DostepnoscStepProps) {
-  const { vehicles, anyFits, loading, check, nextAvailable, searchingNext } = useSprawdzDostepnosc();
+  const { vehicles, anyFits, loading, check, nextAvailable, searchingNext, freeSlots } = useSprawdzDostepnosc();
 
   const totalKg = wzList.reduce((s, w) => s + (w.masa_kg || 0), 0);
   const totalM3 = wzList.reduce((s, w) => s + (Number(w.objetosc_m3) || 0), 0);
@@ -154,6 +156,24 @@ export function DostepnoscStep({
               <p className="text-sm font-medium text-destructive">
                 Żaden pojazd typu „{typPojazdu}" nie ma wystarczającej pojemności na {dzien}.
               </p>
+
+              {/* Wolne przedziały na ten dzień */}
+              {freeSlots.length > 0 && onChangeGodzina && (
+                <div className="rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800 p-3 space-y-2">
+                  <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
+                    Wolne przedziały na {dzien}:
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {freeSlots.map(slot => (
+                      <Button key={slot} size="sm" variant="outline"
+                        className="border-yellow-400 text-yellow-700 hover:bg-yellow-100"
+                        onClick={() => onChangeGodzina(slot)}>
+                        {slot}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Sugestia następnego wolnego terminu */}
               {searchingNext && (

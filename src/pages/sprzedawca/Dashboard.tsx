@@ -144,6 +144,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             onSubmit={handleSubmit}
             submitting={submitting}
             onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(2); }}
+            onChangeGodzina={(newGodzina) => { setGodzina(newGodzina); setStep(2); }}
           />
         )}
       </CardContent>

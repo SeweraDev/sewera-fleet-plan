@@ -522,7 +522,8 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
         {step === 4 && oddzialId && (
           <DostepnoscStep oddzialId={oddzialId} typPojazdu={typPojazdu} dzien={dzien} wzList={wzList}
             onBack={() => setStep(3)} onSubmit={handleSubmit} submitting={submitting}
-            onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(2); }} />
+            onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(2); }}
+            onChangeGodzina={(newGodzina) => { setGodzina(newGodzina); setStep(2); }} />
         )}
       </CardContent>
     </Card>
