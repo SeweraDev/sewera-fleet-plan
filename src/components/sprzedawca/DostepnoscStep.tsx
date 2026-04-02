@@ -14,6 +14,7 @@ interface DostepnoscStepProps {
   onBack: () => void;
   onSubmit: (forceVerify: boolean) => void;
   submitting: boolean;
+  onChangeDzien?: (newDzien: string) => void;
 }
 
 function OccupancyBar({ label, pct, value, max }: { label: string; pct: number; value: number; max: number | null }) {
@@ -76,8 +77,9 @@ export function DostepnoscStep({
   onBack,
   onSubmit,
   submitting,
+  onChangeDzien,
 }: DostepnoscStepProps) {
-  const { vehicles, anyFits, loading, check } = useSprawdzDostepnosc();
+  const { vehicles, anyFits, loading, check, nextAvailable, searchingNext } = useSprawdzDostepnosc();
 
   const totalKg = wzList.reduce((s, w) => s + (w.masa_kg || 0), 0);
   const totalM3 = wzList.reduce((s, w) => s + (Number(w.objetosc_m3) || 0), 0);
@@ -150,14 +152,41 @@ export function DostepnoscStep({
           ) : (
             <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-3 space-y-3">
               <p className="text-sm font-medium text-destructive">
-                ⚠️ Żaden pojazd typu „{typPojazdu}" nie ma wystarczającej pojemności na ten dzień.
+                Żaden pojazd typu „{typPojazdu}" nie ma wystarczającej pojemności na {dzien}.
               </p>
+
+              {/* Sugestia następnego wolnego terminu */}
+              {searchingNext && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 p-3">
+                  <p className="text-sm text-blue-700 dark:text-blue-300">Szukam najbliższego wolnego terminu...</p>
+                </div>
+              )}
+              {nextAvailable && (
+                <div className="rounded-lg border border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-800 p-3 space-y-2">
+                  <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                    Najbliższy wolny termin: <strong>{nextAvailable.dzien}</strong>
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    {nextAvailable.nr_rej} · {nextAvailable.typ} — {nextAvailable.pct_kg}% zajęte
+                  </p>
+                  {onChangeDzien && (
+                    <Button size="sm" variant="outline" className="border-green-400 text-green-700 hover:bg-green-100"
+                      onClick={() => onChangeDzien(nextAvailable.dzien)}>
+                      Użyj tego terminu ({nextAvailable.dzien})
+                    </Button>
+                  )}
+                </div>
+              )}
+              {!searchingNext && !nextAvailable && (
+                <p className="text-xs text-muted-foreground">Brak wolnych terminów w najbliższych 14 dniach roboczych.</p>
+              )}
+
               <div className="flex gap-2">
                 <Button variant="outline" onClick={onBack}>
-                  ← Zmień termin / pojazd
+                  Zmień termin / pojazd
                 </Button>
                 <Button variant="secondary" onClick={() => onSubmit(true)} disabled={submitting}>
-                  {submitting ? 'Wysyłanie...' : '⚠️ Złóż mimo to (do weryfikacji)'}
+                  {submitting ? 'Wysyłanie...' : 'Złóż mimo to (do weryfikacji)'}
                 </Button>
               </div>
             </div>

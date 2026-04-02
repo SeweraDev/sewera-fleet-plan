@@ -143,6 +143,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             onBack={() => setStep(3)}
             onSubmit={handleSubmit}
             submitting={submitting}
+            onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(2); }}
           />
         )}
       </CardContent>
