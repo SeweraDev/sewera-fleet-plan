@@ -135,6 +135,42 @@ export async function getRouteDistance(
   return null;
 }
 
+// Oblicz łączną trasę: oddział → stop1 → stop2 → ... (OSRM multi-waypoint)
+export async function calculateRouteTotal(
+  oddzialNazwa: string,
+  adresy: string[]
+): Promise<number | null> {
+  if (!adresy.length || !oddzialNazwa) return null;
+
+  const from = getOddzialCoordsByName(oddzialNazwa);
+  if (!from) return null;
+
+  // Geocoduj wszystkie adresy (sekwencyjnie — Nominatim rate limit)
+  const waypoints: { lat: number; lng: number }[] = [from];
+  for (const adres of adresy) {
+    const coords = await geocodeAddress(adres);
+    if (coords) waypoints.push(coords);
+  }
+
+  if (waypoints.length < 2) return null;
+
+  // OSRM multi-waypoint
+  try {
+    const coords = waypoints.map(w => `${w.lng},${w.lat}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code === 'Ok' && data.routes?.[0]) {
+      const km = Math.round(data.routes[0].distance / 1000);
+      console.log(`[osrm-route] ${waypoints.length} punktów → ${km} km`);
+      return km;
+    }
+  } catch (e) {
+    console.warn(`[osrm-route] error`, e);
+  }
+  return null;
+}
+
 // Cache dystansu — klucz: "oddział:adres". Null NIE jest cache'owany.
 const distanceCache = new Map<string, number>();
 

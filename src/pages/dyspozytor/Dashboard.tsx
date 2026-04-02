@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateRouteTotal } from '@/lib/oddzialy-geo';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -80,10 +81,29 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'zakonczony', label: 'Zakończone' },
 ];
 
-function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean }) {
+function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked }: { oddzialId: number | null; oddzialNazwa?: string; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('zaplanowany');
+  const [kursKm, setKursKm] = useState<Record<string, number | null>>({});
+
+  // Oblicz łączne km trasy per kurs (w tle)
+  useEffect(() => {
+    if (!oddzialNazwa || !kursy.length) return;
+    (async () => {
+      for (const kurs of kursy) {
+        if (kursKm[kurs.id] !== undefined) continue; // już obliczone
+        const kPrz = przystanki.filter(p => p.kurs_id === kurs.id);
+        const adresy = [...new Set(kPrz.map(p => p.adres).filter(Boolean))];
+        if (!adresy.length) continue;
+        const km = await calculateRouteTotal(oddzialNazwa, adresy);
+        if (km != null) {
+          setKursKm(prev => ({ ...prev, [kurs.id]: km }));
+        }
+      }
+    })();
+  }, [kursy, przystanki, oddzialNazwa]);
+
   const [editZlId, setEditZlId] = useState<string | null>(null);
   const [editKurs, setEditKurs] = useState<KursDto | null>(null);
   const [przepnijPrz, setPrzepnijPrz] = useState<PrzystanekDto | null>(null);
@@ -191,7 +211,9 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Rozładunki: {done}/{kPrz.length} · ⚖️ {Math.round(usedKg)}/{Math.round(kurs.ladownosc_kg)} kg
+                  Rozładunki: {done}/{kPrz.length} · {Math.round(usedKg)}/{Math.round(kurs.ladownosc_kg)} kg
+                  {kursKm[kurs.id] != null && <span> · {kursKm[kurs.id]} km trasa</span>}
+                  {kursKm[kurs.id] === undefined && kPrz.length > 0 && <span> · ... km</span>}
                   {kurs.max_palet != null && <> · 📦 {usedPal}/{kurs.max_palet} pal</>}
                 </p>
                 {kurs.ladownosc_kg > 0 && (
@@ -590,6 +612,7 @@ export default function DyspozytorDashboard() {
               {activeId === 'kursy' && (
                 <KursyTab
                   oddzialId={oddzialId}
+                  oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
                   dzien={dzien}
                   dzienDo={rangeMode ? dzienDo : undefined}
                   zlBezKursuCount={zlBezKursu.length}
