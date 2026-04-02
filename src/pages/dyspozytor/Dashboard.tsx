@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -167,12 +168,20 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                     <StatusBadge status={kurs.status} />
                   </CardTitle>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>⚙️ Edytuj</Button>
-                    {kurs.status === 'zaplanowany' && (
-                      <Button size="sm" onClick={() => handleStart(kurs.id)} disabled={acting}>▶ Wyjazd</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>Edytuj</Button>
+                    {kurs.status === 'zaplanowany' && kPrz.length === 0 && (
+                      <Button size="sm" variant="destructive" onClick={async () => {
+                        if (!confirm('Usunąć pusty kurs?')) return;
+                        await supabase.from('kursy').delete().eq('id', kurs.id);
+                        refetch();
+                        toast.success('Kurs usunięty');
+                      }}>Usuń</Button>
+                    )}
+                    {kurs.status === 'zaplanowany' && kPrz.length > 0 && (
+                      <Button size="sm" onClick={() => handleStart(kurs.id)} disabled={acting}>Wyjazd</Button>
                     )}
                     {kurs.status === 'aktywny' && (
-                      <Button size="sm" variant="secondary" onClick={() => handleStop(kurs.id)} disabled={acting}>⏹ Powrót</Button>
+                      <Button size="sm" variant="secondary" onClick={() => handleStop(kurs.id)} disabled={acting}>Powrót</Button>
                     )}
                   </div>
                 </div>
