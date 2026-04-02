@@ -17,10 +17,19 @@ export interface VehicleOccupancy {
   fits: boolean;
 }
 
+export interface NextAvailable {
+  dzien: string;
+  nr_rej: string;
+  typ: string;
+  pct_kg: number;
+}
+
 export interface OccupancyResult {
   vehicles: VehicleOccupancy[];
   anyFits: boolean;
   loading: boolean;
+  nextAvailable: NextAvailable | null;
+  searchingNext: boolean;
 }
 
 function pctColor(pct: number): string {
@@ -39,8 +48,21 @@ function pctBg(pct: number): string {
 
 export { pctColor, pctBg };
 
+// Generuj dni robocze (pomijaj weekendy) od startDate + 1
+function generateWorkdays(startDate: string, count: number): string[] {
+  const days: string[] = [];
+  const d = new Date(startDate);
+  while (days.length < count) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) continue; // skip weekends
+    days.push(d.toISOString().split('T')[0]);
+  }
+  return days;
+}
+
 export function useSprawdzDostepnosc() {
-  const [result, setResult] = useState<OccupancyResult>({ vehicles: [], anyFits: false, loading: false });
+  const [result, setResult] = useState<OccupancyResult>({ vehicles: [], anyFits: false, loading: false, nextAvailable: null, searchingNext: false });
 
   const check = useCallback(async (
     oddzialId: number,
@@ -167,11 +189,90 @@ export function useSprawdzDostepnosc() {
 
     occupancy.sort((a, b) => a.pct_kg - b.pct_kg);
 
+    const anyFits = occupancy.some(v => v.fits);
     setResult({
       vehicles: occupancy,
-      anyFits: occupancy.some(v => v.fits),
+      anyFits,
       loading: false,
+      nextAvailable: null,
+      searchingNext: !anyFits,
     });
+
+    // Jeśli nic nie pasuje — szukaj następnego wolnego terminu w tle
+    if (!anyFits) {
+      findNextAvailable(oddzialId, typPojazdu, dzien, newKg, newM3, newPalet);
+    }
+  }, []);
+
+  const findNextAvailable = useCallback(async (
+    oddzialId: number, typPojazdu: string, startDzien: string,
+    newKg: number, newM3: number, newPalet: number,
+  ) => {
+    const days = generateWorkdays(startDzien, 14);
+    const isAny = !typPojazdu || typPojazdu === 'bez_preferencji' || typPojazdu === 'zewnetrzny';
+
+    // Pobierz pojazdy (raz)
+    let vQuery = supabase.from('flota').select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet')
+      .eq('oddzial_id', oddzialId).eq('aktywny', true);
+    if (!isAny) vQuery = vQuery.eq('typ', typPojazdu);
+    const { data: vehicles } = await vQuery;
+    if (!vehicles?.length) { setResult(prev => ({ ...prev, searchingNext: false })); return; }
+
+    const vehicleIds = vehicles.map(v => v.id);
+
+    for (const day of days) {
+      // Pobierz kursy tego dnia
+      const { data: kursy } = await supabase.from('kursy').select('id, flota_id').eq('dzien', day).in('flota_id', vehicleIds).neq('status', 'usuniety');
+      const kursIds = (kursy || []).map(k => k.id);
+
+      // Pobierz obciążenia
+      const vehicleLoads = new Map<string, { kg: number; m3: number; palet: number }>();
+      vehicleIds.forEach(id => vehicleLoads.set(id, { kg: 0, m3: 0, palet: 0 }));
+
+      if (kursIds.length > 0) {
+        const kursFlotaMap = new Map<string, string>();
+        (kursy || []).forEach(k => { if (k.flota_id) kursFlotaMap.set(k.id, k.flota_id); });
+
+        const { data: prz } = await supabase.from('kurs_przystanki').select('zlecenie_id, kurs_id').in('kurs_id', kursIds);
+        const zlIds = (prz || []).filter(p => p.zlecenie_id).map(p => p.zlecenie_id!);
+
+        if (zlIds.length > 0) {
+          const { data: wz } = await supabase.from('zlecenia_wz').select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet').in('zlecenie_id', zlIds);
+          (prz || []).forEach(p => {
+            if (!p.zlecenie_id) return;
+            const fid = kursFlotaMap.get(p.kurs_id);
+            if (!fid) return;
+            const loads = (wz || []).filter(w => w.zlecenie_id === p.zlecenie_id);
+            const entry = vehicleLoads.get(fid)!;
+            loads.forEach(l => { entry.kg += Number(l.masa_kg) || 0; entry.m3 += Number(l.objetosc_m3) || 0; entry.palet += Number(l.ilosc_palet) || 0; });
+          });
+        }
+      }
+
+      // Sprawdź czy któryś pojazd pasuje
+      for (const v of vehicles) {
+        const used = vehicleLoads.get(v.id) || { kg: 0, m3: 0, palet: 0 };
+        const capKg = Number(v.ladownosc_kg) || 1;
+        const capM3 = Number(v.objetosc_m3) || null;
+        const capPal = v.max_palet ? Number(v.max_palet) : null;
+        const pctKg = Math.round(((used.kg + newKg) / capKg) * 100);
+        const pctM3 = capM3 ? Math.round(((used.m3 + newM3) / capM3) * 100) : 0;
+        const pctPal = capPal ? Math.round(((used.palet + newPalet) / capPal) * 100) : 0;
+        const fits = pctKg <= 100 && (!capM3 || pctM3 <= 100) && (!capPal || pctPal <= 100);
+
+        if (fits) {
+          setResult(prev => ({
+            ...prev,
+            searchingNext: false,
+            nextAvailable: { dzien: day, nr_rej: v.nr_rej, typ: v.typ, pct_kg: pctKg },
+          }));
+          return;
+        }
+      }
+    }
+
+    // Nie znaleziono w 14 dniach
+    setResult(prev => ({ ...prev, searchingNext: false }));
   }, []);
 
   return { ...result, check };
