@@ -54,10 +54,11 @@ function CapacityBar({ used, total, unit, label }: { used: number; total: number
   );
 }
 
-type ZlStatusFilter = 'all' | 'robocza' | 'potwierdzona' | 'w_trasie' | 'dostarczona' | 'anulowana';
+type ZlStatusFilter = 'all' | 'bez_kursu' | 'robocza' | 'potwierdzona' | 'w_trasie' | 'dostarczona' | 'anulowana';
 
 const ZL_STATUS_FILTERS: { key: ZlStatusFilter; label: string }[] = [
   { key: 'all', label: 'Wszystkie' },
+  { key: 'bez_kursu', label: 'Bez kursu' },
   { key: 'robocza', label: 'Robocze' },
   { key: 'potwierdzona', label: 'Potwierdzone' },
   { key: 'w_trasie', label: 'W trasie' },
@@ -71,12 +72,14 @@ function ZlSzczegolyDialog({
   onClose,
   onEdit,
   onAssignToKurs,
+  onDelete,
 }: {
   zlecenie: ZlecenieOddzialuDto | null;
   open: boolean;
   onClose: () => void;
   onEdit: (id: string) => void;
   onAssignToKurs: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const { wz, loading } = useZlecenieWz(open && zlecenie ? zlecenie.id : null);
 
@@ -163,12 +166,17 @@ function ZlSzczegolyDialog({
         <DialogFooter className="gap-2">
           {zlecenie.status === 'robocza' && !zlecenie.kurs_numer && (
             <Button variant="outline" onClick={() => { onClose(); onAssignToKurs(zlecenie.id); }}>
-              ➕ Przypisz do kursu
+              Przypisz do kursu
             </Button>
           )}
           <Button variant="outline" onClick={() => { onClose(); onEdit(zlecenie.id); }}>
-            ✏️ Edytuj zlecenie
+            Edytuj zlecenie
           </Button>
+          {(zlecenie.status === 'robocza' || zlecenie.status === 'do_weryfikacji') && (
+            <Button variant="destructive" onClick={() => { if (confirm('Czy na pewno usunąć zlecenie ' + zlecenie.numer + '? Ta operacja jest nieodwracalna.')) { onDelete(zlecenie.id); onClose(); } }}>
+              Usuń zlecenie
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>Zamknij</Button>
         </DialogFooter>
       </DialogContent>
@@ -245,7 +253,9 @@ export function ZleceniaTab({
 
   const STATUS_ORDER: Record<string, number> = { robocza: 0, do_weryfikacji: 1, potwierdzona: 2, w_trasie: 3, dostarczona: 4, anulowana: 5 };
 
-  const filteredBase = statusFilter === 'all' ? zlecenia : zlecenia.filter(z => z.status === statusFilter);
+  const filteredBase = statusFilter === 'all' ? zlecenia
+    : statusFilter === 'bez_kursu' ? zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana')
+    : zlecenia.filter(z => z.status === statusFilter);
   const filtered = [...filteredBase].sort((a, b) => {
     let cmp = 0;
     if (sortBy === 'dzien') cmp = a.dzien.localeCompare(b.dzien);
@@ -259,11 +269,21 @@ export function ZleceniaTab({
 
   const counts: Record<ZlStatusFilter, number> = {
     all: zlecenia.length,
+    bez_kursu: zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana').length,
     robocza: zlecenia.filter(z => z.status === 'robocza').length,
     potwierdzona: zlecenia.filter(z => z.status === 'potwierdzona').length,
     w_trasie: zlecenia.filter(z => z.status === 'w_trasie').length,
     dostarczona: zlecenia.filter(z => z.status === 'dostarczona').length,
     anulowana: zlecenia.filter(z => z.status === 'anulowana').length,
+  };
+
+  const handleDelete = async (id: string) => {
+    // Usuń kurs_przystanki, zlecenia_wz (CASCADE), potem zlecenie
+    await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', id);
+    await supabase.from('zlecenia_wz').delete().eq('zlecenie_id', id);
+    await supabase.from('zlecenia').delete().eq('id', id);
+    toast.success('Zlecenie usunięte');
+    refetch();
   };
 
   const handleAnuluj = async (zl: ZlecenieOddzialuDto) => {
@@ -392,6 +412,7 @@ export function ZleceniaTab({
         onClose={() => setSelectedZl(null)}
         onEdit={(id) => setEditZlId(id)}
         onAssignToKurs={(id) => onOpenKursModal?.(id)}
+        onDelete={handleDelete}
       />
 
       <EdytujZlecenieModal

@@ -89,7 +89,15 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
   const [przepnijPrz, setPrzepnijPrz] = useState<PrzystanekDto | null>(null);
   const [przepnijKurs, setPrzepnijKurs] = useState<KursDto | null>(null);
 
-  const filtered = statusFilter === 'all' ? kursy : kursy.filter(k => k.status === statusFilter);
+  const filteredBase = statusFilter === 'all' ? kursy : kursy.filter(k => k.status === statusFilter);
+  // Sortuj kursy: nr_rej → typ → godzina_start
+  const filtered = [...filteredBase].sort((a, b) => {
+    const nrCmp = (a.nr_rej || '').localeCompare(b.nr_rej || '');
+    if (nrCmp !== 0) return nrCmp;
+    const typCmp = (a.pojazd_typ || '').localeCompare(b.pojazd_typ || '');
+    if (typCmp !== 0) return typCmp;
+    return (a.godzina_start || '').localeCompare(b.godzina_start || '');
+  });
   const counts = {
     all: kursy.length,
     zaplanowany: kursy.filter(k => k.status === 'zaplanowany').length,
@@ -196,6 +204,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-8">#</TableHead>
+                        <TableHead>Godzina</TableHead>
                         <TableHead>Odbiorca</TableHead>
                         <TableHead>Nr WZ</TableHead>
                         <TableHead>Adres</TableHead>
@@ -217,6 +226,9 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                         <TableRow key={p.id}>
                           {isFirst ? (
                             <TableCell rowSpan={groupSize} className="align-top font-medium">{p.kolejnosc}</TableCell>
+                          ) : null}
+                          {isFirst ? (
+                            <TableCell rowSpan={groupSize} className="align-top text-xs">{p.preferowana_godzina || '—'}</TableCell>
                           ) : null}
                           <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
                           <TableCell className="font-mono text-xs max-w-[180px]">{p.numer_wz || p.zl_numer}</TableCell>

@@ -16,6 +16,7 @@ export interface KursDto {
   objetosc_m3: number | null;
   max_palet: number | null;
   kierowca_tel: string | null;
+  godzina_start: string | null;
 }
 
 export interface PrzystanekDto {
@@ -34,6 +35,7 @@ export interface PrzystanekDto {
   nr_zamowienia: string;
   tel: string;
   uwagi: string;
+  preferowana_godzina: string;
 }
 
 export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: string) {
@@ -98,6 +100,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
         objetosc_m3: f?.objetosc_m3 ?? null,
         max_palet: f?.max_palet ?? null,
         kierowca_tel: kier?.tel ?? null,
+        godzina_start: (k as any).godzina_start || null,
       };
     });
     setKursy(mapped);
@@ -112,15 +115,15 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
         .order('kolejnosc');
 
       const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
-      const zlecMap = new Map<string, { numer: string }>();
+      const zlecMap = new Map<string, { numer: string; preferowana_godzina: string | null }>();
       const wzListMap = new Map<string, any[]>();
 
       if (zlecenieIds.length > 0) {
         const { data: zlData } = await supabase
           .from('zlecenia')
-          .select('id, numer')
+          .select('id, numer, preferowana_godzina')
           .in('id', zlecenieIds);
-        (zlData || []).forEach(z => zlecMap.set(z.id, { numer: z.numer }));
+        (zlData || []).forEach(z => zlecMap.set(z.id, { numer: z.numer, preferowana_godzina: z.preferowana_godzina }));
 
         const { data: wzData } = await supabase
           .from('zlecenia_wz')
@@ -144,7 +147,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
             id: p.id, kurs_id: p.kurs_id, kolejnosc: p.kolejnosc, prz_status: p.status,
             zlecenie_id: p.zlecenie_id, zl_numer: zl?.numer || '',
             odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0,
-            numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '',
+            numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '', preferowana_godzina: zl?.preferowana_godzina || '',
           });
         } else {
           wzList.forEach((w, i) => {
@@ -156,9 +159,16 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
               masa_kg: Number(w.masa_kg) || 0, objetosc_m3: Number(w.objetosc_m3) || 0,
               ilosc_palet: Number(wAny.ilosc_palet) || 0, numer_wz: wAny.numer_wz || '',
               nr_zamowienia: wAny.nr_zamowienia || '', tel: wAny.tel || '', uwagi: wAny.uwagi || '',
+              preferowana_godzina: zl?.preferowana_godzina || '',
             });
           });
         }
+      });
+      // Sortuj przystanki wg godziny dostawy (rosnąco) wewnątrz każdego kursu
+      const GODZ_ORDER: Record<string, number> = { 'do 8:00': 1, 'do 10:00': 2, 'do 12:00': 3, 'do 14:00': 4, 'do 16:00': 5, 'dowolna': 6 };
+      expandedPrz.sort((a, b) => {
+        if (a.kurs_id !== b.kurs_id) return 0; // nie mieszaj kursów
+        return (GODZ_ORDER[a.preferowana_godzina] || 9) - (GODZ_ORDER[b.preferowana_godzina] || 9);
       });
       setPrzystanki(expandedPrz);
     } else {
