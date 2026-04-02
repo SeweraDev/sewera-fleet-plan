@@ -72,10 +72,9 @@ function CapacityBar({ used, total, unit }: { used: number; total: number; unit:
   );
 }
 
-type StatusFilter = 'all' | 'zaplanowany' | 'aktywny' | 'zakonczony';
+type StatusFilter = 'zaplanowany' | 'aktywny' | 'zakonczony';
 
 const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
-  { key: 'all', label: 'Wszystkie' },
   { key: 'zaplanowany', label: 'Zaplanowane' },
   { key: 'aktywny', label: 'W trasie' },
   { key: 'zakonczony', label: 'Zakończone' },
@@ -90,7 +89,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
   const [przepnijPrz, setPrzepnijPrz] = useState<PrzystanekDto | null>(null);
   const [przepnijKurs, setPrzepnijKurs] = useState<KursDto | null>(null);
 
-  const filteredBase = statusFilter === 'all' ? kursy : kursy.filter(k => k.status === statusFilter);
+  const filteredBase = kursy.filter(k => k.status === statusFilter);
   // Sortuj kursy: nr_rej → typ → godzina_start
   const filtered = [...filteredBase].sort((a, b) => {
     const nrCmp = (a.nr_rej || '').localeCompare(b.nr_rej || '');
