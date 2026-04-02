@@ -84,7 +84,7 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
 function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked }: { oddzialId: number | null; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('zaplanowany');
   const [editZlId, setEditZlId] = useState<string | null>(null);
   const [editKurs, setEditKurs] = useState<KursDto | null>(null);
   const [przepnijPrz, setPrzepnijPrz] = useState<PrzystanekDto | null>(null);
