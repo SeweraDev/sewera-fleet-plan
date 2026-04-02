@@ -24,6 +24,19 @@ interface Props {
   onDone: () => void;
 }
 
+// Auto-usuń kurs jeśli nie ma żadnych przystanków
+async function autoDeleteEmptyKurs(kursId: string) {
+  const { data } = await supabase
+    .from('kurs_przystanki')
+    .select('id')
+    .eq('kurs_id', kursId)
+    .limit(1);
+  if (!data || data.length === 0) {
+    await supabase.from('kursy').delete().eq('id', kursId);
+    console.log(`[autoDelete] Pusty kurs ${kursId} usunięty`);
+  }
+}
+
 export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy, allPrzystanki, oddzialId, dzien, flota, kierowcy, onDone }: Props) {
   const [targetKursId, setTargetKursId] = useState('');
   const [createNew, setCreateNew] = useState(false);
@@ -79,7 +92,9 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
       if (e2) {
         toast.error('Błąd przepinania: ' + e2.message);
       } else {
-        toast.success(`✅ Nowy kurs ${newKurs.numer || ''} utworzony`);
+        toast.success(`Nowy kurs ${newKurs.numer || ''} utworzony`);
+        // Auto-usuń stary kurs jeśli pusty
+        await autoDeleteEmptyKurs(currentKurs.id);
         onDone();
         onClose();
       }
@@ -97,7 +112,9 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
         toast.error('Błąd przepinania: ' + error.message);
       } else {
         const target = allKursy.find(k => k.id === targetKursId);
-        toast.success(`✅ Zlecenie przepięte do ${target?.numer || target?.nr_rej || 'kursu'}`);
+        toast.success(`Zlecenie przepięte do ${target?.numer || target?.nr_rej || 'kursu'}`);
+        // Auto-usuń stary kurs jeśli pusty
+        await autoDeleteEmptyKurs(currentKurs.id);
         onDone();
         onClose();
       }
