@@ -237,9 +237,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                           {isFirst ? (
                             <TableCell rowSpan={groupSize} className="align-top font-medium">{p.kolejnosc}</TableCell>
                           ) : null}
-                          {isFirst ? (
-                            <TableCell rowSpan={groupSize} className="align-top text-xs">{p.preferowana_godzina || '—'}</TableCell>
-                          ) : null}
+                          <TableCell className="text-xs">{p.preferowana_godzina || '—'}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
                           <TableCell className="font-mono text-xs max-w-[180px]">{p.numer_wz || p.zl_numer}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.adres}</TableCell>
