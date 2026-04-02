@@ -240,7 +240,7 @@ export function ZleceniaTab({
   onOpenKursModal?: (zlecenieId: string) => void;
 }) {
   const { zlecenia, loading, refetch } = useZleceniaOddzialu(oddzialId, pastOnly);
-  const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('bez_kursu');
   const [selectedZl, setSelectedZl] = useState<ZlecenieOddzialuDto | null>(null);
   const [editZlId, setEditZlId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'dzien' | 'status' | 'godzina' | 'kg' | 'numer' | 'km'>('dzien');
