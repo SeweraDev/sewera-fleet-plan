@@ -172,7 +172,7 @@ function KursyTab({ oddzialId, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCou
                     {kurs.status === 'zaplanowany' && kPrz.length === 0 && (
                       <Button size="sm" variant="destructive" onClick={async () => {
                         if (!confirm('Usunąć pusty kurs?')) return;
-                        await supabase.from('kursy').delete().eq('id', kurs.id);
+                        await supabase.from('kursy').update({ status: 'zakonczony' } as any).eq('id', kurs.id);
                         refetch();
                         toast.success('Kurs usunięty');
                       }}>Usuń</Button>

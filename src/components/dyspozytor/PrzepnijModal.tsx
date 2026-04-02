@@ -32,8 +32,9 @@ async function autoDeleteEmptyKurs(kursId: string) {
     .eq('kurs_id', kursId)
     .limit(1);
   if (!data || data.length === 0) {
-    await supabase.from('kursy').delete().eq('id', kursId);
-    console.log(`[autoDelete] Pusty kurs ${kursId} usunięty`);
+    // RLS nie ma DELETE policy — zamiast delete zmieniamy status na zakonczony
+    await supabase.from('kursy').update({ status: 'zakonczony' } as any).eq('id', kursId);
+    console.log(`[autoDelete] Pusty kurs ${kursId} zamknięty`);
   }
 }
 

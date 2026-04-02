@@ -278,10 +278,8 @@ export function ZleceniaTab({
   };
 
   const handleDelete = async (id: string) => {
-    // Usuń kurs_przystanki, zlecenia_wz (CASCADE), potem zlecenie
-    await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', id);
-    await supabase.from('zlecenia_wz').delete().eq('zlecenie_id', id);
-    await supabase.from('zlecenia').delete().eq('id', id);
+    // RLS nie ma DELETE policy — anuluj zamiast usuwać
+    await supabase.from('zlecenia').update({ status: 'anulowana' } as any).eq('id', id);
     toast.success('Zlecenie usunięte');
     refetch();
   };
