@@ -90,40 +90,18 @@ export function useSprawdzDostepnosc() {
       return;
     }
 
-    // 2. Get existing kursy for that day + their loads
+    // 2. Pobierz WSZYSTKIE zlecenia na ten dzień (przypisane + robocze bez kursu)
     const vehicleIds = vehicles.map(v => v.id);
+
+    // 2a. Zlecenia przypisane do kursów (per pojazd)
     const { data: kursy } = await supabase
       .from('kursy')
       .select('id, flota_id')
       .eq('dzien', dzien)
-      .in('flota_id', vehicleIds);
+      .in('flota_id', vehicleIds)
+      .neq('status', 'usuniety');
 
-    // 3. For each kurs, get zlecenia loads via kurs_przystanki → zlecenia → zlecenia_wz
     const kursIds = (kursy || []).map(k => k.id);
-    let wzLoads: { zlecenie_id: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number }[] = [];
-
-    if (kursIds.length > 0) {
-      const { data: przystanki } = await supabase
-        .from('kurs_przystanki')
-        .select('zlecenie_id, kurs_id')
-        .in('kurs_id', kursIds);
-
-      const zlecenieIds = (przystanki || []).filter(p => p.zlecenie_id).map(p => p.zlecenie_id!);
-      if (zlecenieIds.length > 0) {
-        const { data: wz } = await supabase
-          .from('zlecenia_wz')
-          .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet')
-          .in('zlecenie_id', zlecenieIds);
-        wzLoads = (wz || []).map(w => ({
-          zlecenie_id: w.zlecenie_id,
-          masa_kg: Number(w.masa_kg) || 0,
-          objetosc_m3: Number(w.objetosc_m3) || 0,
-          ilosc_palet: Number(w.ilosc_palet) || 0,
-        }));
-      }
-    }
-
-    // 4. Aggregate loads per vehicle
     const kursMap = new Map<string, string>(); // kurs_id → flota_id
     (kursy || []).forEach(k => { if (k.flota_id) kursMap.set(k.id, k.flota_id); });
 
@@ -131,28 +109,54 @@ export function useSprawdzDostepnosc() {
     vehicleIds.forEach(id => vehicleLoads.set(id, { kg: 0, m3: 0, palet: 0 }));
 
     if (kursIds.length > 0) {
-      const { data: przystanki } = await supabase
-        .from('kurs_przystanki')
-        .select('zlecenie_id, kurs_id')
-        .in('kurs_id', kursIds);
-
-      (przystanki || []).forEach(p => {
-        if (!p.zlecenie_id) return;
-        const flotaId = kursMap.get(p.kurs_id);
-        if (!flotaId) return;
-        const loads = wzLoads.filter(w => w.zlecenie_id === p.zlecenie_id);
-        const entry = vehicleLoads.get(flotaId)!;
-        loads.forEach(l => {
-          entry.kg += l.masa_kg;
-          entry.m3 += l.objetosc_m3;
-          entry.palet += l.ilosc_palet;
+      const { data: prz } = await supabase.from('kurs_przystanki').select('zlecenie_id, kurs_id').in('kurs_id', kursIds);
+      const zlIds = (prz || []).filter(p => p.zlecenie_id).map(p => p.zlecenie_id!);
+      if (zlIds.length > 0) {
+        const { data: wz } = await supabase.from('zlecenia_wz').select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet').in('zlecenie_id', zlIds);
+        (prz || []).forEach(p => {
+          if (!p.zlecenie_id) return;
+          const fid = kursMap.get(p.kurs_id);
+          if (!fid) return;
+          const entry = vehicleLoads.get(fid)!;
+          (wz || []).filter(w => w.zlecenie_id === p.zlecenie_id).forEach(w => {
+            entry.kg += Number(w.masa_kg) || 0;
+            entry.m3 += Number(w.objetosc_m3) || 0;
+            entry.palet += Number(w.ilosc_palet) || 0;
+          });
         });
+      }
+    }
+
+    // 2b. Nieprzypisane zlecenia (robocze/do_weryfikacji) na ten dzień — dodaj do ogólnego obciążenia
+    // Te nie mają przypisanego pojazdu, więc obciążają WSZYSTKIE pojazdy danego typu równomiernie
+    const { data: unassigned } = await supabase
+      .from('zlecenia')
+      .select('id, typ_pojazdu')
+      .eq('oddzial_id', oddzialId)
+      .eq('dzien', dzien)
+      .in('status', ['robocza', 'do_weryfikacji']);
+
+    const unassignedIds = (unassigned || []).map(z => z.id);
+    let unassignedLoad = { kg: 0, m3: 0, palet: 0 };
+    if (unassignedIds.length > 0) {
+      const { data: uwz } = await supabase.from('zlecenia_wz').select('masa_kg, objetosc_m3, ilosc_palet').in('zlecenie_id', unassignedIds);
+      (uwz || []).forEach(w => {
+        unassignedLoad.kg += Number(w.masa_kg) || 0;
+        unassignedLoad.m3 += Number(w.objetosc_m3) || 0;
+        unassignedLoad.palet += Number(w.ilosc_palet) || 0;
       });
     }
 
-    // 5. Build result
+    // 5. Build result — dodaj obciążenie z nieprzypisanych zleceń (rozłóż na pojazdy)
+    const numVehicles = vehicles.length || 1;
     const occupancy: VehicleOccupancy[] = vehicles.map(v => {
-      const used = vehicleLoads.get(v.id) || { kg: 0, m3: 0, palet: 0 };
+      const assigned = vehicleLoads.get(v.id) || { kg: 0, m3: 0, palet: 0 };
+      // Nieprzypisane obciążenie: najgorszy scenariusz — cały ładunek trafia na ten pojazd
+      const used = {
+        kg: assigned.kg + unassignedLoad.kg,
+        m3: assigned.m3 + unassignedLoad.m3,
+        palet: assigned.palet + unassignedLoad.palet,
+      };
       const afterKg = used.kg + newKg;
       const afterM3 = used.m3 + newM3;
       const afterPalet = used.palet + newPalet;
