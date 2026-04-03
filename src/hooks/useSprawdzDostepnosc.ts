@@ -93,8 +93,22 @@ export function useSprawdzDostepnosc() {
     if (!isAny) {
       query = query.eq('typ', typPojazdu);
     }
-    const { data: vehicles } = await query;
-    if (!vehicles || vehicles.length === 0) {
+    const { data: allVehicles } = await query;
+    if (!allVehicles || allVehicles.length === 0) {
+      setResult({ vehicles: [], anyFits: false, loading: false });
+      return;
+    }
+
+    // 1b. Odfiltruj zablokowane pojazdy na ten dzień
+    const { data: blokady } = await supabase
+      .from('dostepnosc_blokady')
+      .select('zasob_id')
+      .eq('typ', 'pojazd')
+      .eq('dzien', dzien);
+    const blockedIds = new Set((blokady || []).map(b => b.zasob_id));
+    const vehicles = allVehicles.filter(v => !blockedIds.has(v.id));
+
+    if (vehicles.length === 0) {
       setResult({ vehicles: [], anyFits: false, loading: false });
       return;
     }
@@ -278,13 +292,24 @@ export function useSprawdzDostepnosc() {
     const vehicleIds = vehicles.map(v => v.id);
 
     for (const day of days) {
+      // Odfiltruj zablokowane pojazdy na ten dzień
+      const { data: dayBlokady } = await supabase
+        .from('dostepnosc_blokady')
+        .select('zasob_id')
+        .eq('typ', 'pojazd')
+        .eq('dzien', day);
+      const dayBlockedIds = new Set((dayBlokady || []).map(b => b.zasob_id));
+      const dayVehicles = vehicles.filter(v => !dayBlockedIds.has(v.id));
+      if (dayVehicles.length === 0) continue;
+      const dayVehicleIds = dayVehicles.map(v => v.id);
+
       // Pobierz kursy tego dnia
-      const { data: kursy } = await supabase.from('kursy').select('id, flota_id').eq('dzien', day).in('flota_id', vehicleIds).neq('status', 'usuniety');
+      const { data: kursy } = await supabase.from('kursy').select('id, flota_id').eq('dzien', day).in('flota_id', dayVehicleIds).neq('status', 'usuniety');
       const kursIds = (kursy || []).map(k => k.id);
 
       // Pobierz obciążenia
       const vehicleLoads = new Map<string, { kg: number; m3: number; palet: number }>();
-      vehicleIds.forEach(id => vehicleLoads.set(id, { kg: 0, m3: 0, palet: 0 }));
+      dayVehicleIds.forEach(id => vehicleLoads.set(id, { kg: 0, m3: 0, palet: 0 }));
 
       if (kursIds.length > 0) {
         const kursFlotaMap = new Map<string, string>();
@@ -307,7 +332,7 @@ export function useSprawdzDostepnosc() {
       }
 
       // Sprawdź czy któryś pojazd pasuje
-      for (const v of vehicles) {
+      for (const v of dayVehicles) {
         const used = vehicleLoads.get(v.id) || { kg: 0, m3: 0, palet: 0 };
         const capKg = Number(v.ladownosc_kg) || 1;
         const capM3 = Number(v.objetosc_m3) || null;
