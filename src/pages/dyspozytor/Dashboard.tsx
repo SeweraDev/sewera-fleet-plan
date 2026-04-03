@@ -360,7 +360,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
             const zlIds = kPrz.map(p => p.zlecenie_id).filter(Boolean) as string[];
             await supabase.from('kurs_przystanki').delete().eq('kurs_id', deleteKursId);
             if (zlIds.length > 0) {
-              await supabase.from('zlecenia').update({ status: 'robocza' } as any).in('id', zlIds);
+              await supabase.from('zlecenia').update({ status: 'robocza', kurs_id: null } as any).in('id', zlIds);
             }
           }
           await supabase.from('kursy').update({ status: 'usuniety' } as any).eq('id', deleteKursId);

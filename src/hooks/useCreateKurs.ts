@@ -50,8 +50,8 @@ export function useCreateKurs(onSuccess?: () => void) {
       const { error: err2 } = await supabase.from('kurs_przystanki').insert(przystanki);
       if (err2) { setError(err2.message); setSubmitting(false); return; }
 
-      // Update zlecenia status
-      await supabase.from('zlecenia').update({ status: 'potwierdzona' }).in('id', input.zlecenie_ids);
+      // Update zlecenia status + kurs_id
+      await supabase.from('zlecenia').update({ status: 'potwierdzona', kurs_id: kurs.id } as any).in('id', input.zlecenie_ids);
     }
 
     toast.success('✅ Kurs utworzony');

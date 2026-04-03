@@ -125,6 +125,8 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
       if (e2) {
         toast.error('Błąd przepinania: ' + e2.message);
       } else {
+        // Update kurs_id na zleceniu
+        await supabase.from('zlecenia').update({ kurs_id: newKurs.id } as any).eq('id', przystanek.zlecenie_id!);
         toast.success(`Nowy kurs ${newKurs.numer || ''} utworzony`);
         // Auto-usuń stary kurs jeśli pusty
         await autoDeleteEmptyKurs(currentKurs.id);
@@ -144,6 +146,8 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
       if (error) {
         toast.error('Błąd przepinania: ' + error.message);
       } else {
+        // Update kurs_id na zleceniu
+        await supabase.from('zlecenia').update({ kurs_id: targetKursId } as any).eq('id', przystanek.zlecenie_id!);
         const target = allKursy.find(k => k.id === targetKursId);
         toast.success(`Zlecenie przepięte do ${target?.numer || target?.nr_rej || 'kursu'}`);
         // Auto-usuń stary kurs jeśli pusty
