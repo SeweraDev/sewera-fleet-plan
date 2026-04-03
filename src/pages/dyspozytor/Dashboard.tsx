@@ -379,8 +379,27 @@ function NowyKursModal({
     setSelectedZl(s);
   };
 
+  // Walidacja pojemności
+  const selectedVehicle = flota.find(f => f.id === flotaId);
+  const totalKg = zlecenia.filter(z => selectedZl.has(z.id)).reduce((s, z) => s + z.suma_kg, 0);
+  const totalM3 = zlecenia.filter(z => selectedZl.has(z.id)).reduce((s, z) => s + z.suma_m3, 0);
+  const totalPalet = zlecenia.filter(z => selectedZl.has(z.id)).reduce((s, z) => s + z.suma_palet, 0);
+
+  const capKg = selectedVehicle ? Number(selectedVehicle.ladownosc_kg) || 0 : 0;
+  const capM3 = selectedVehicle ? Number(selectedVehicle.objetosc_m3) || 0 : 0;
+  const capPalet = selectedVehicle ? Number(selectedVehicle.max_palet) || 0 : 0;
+
+  const overKg = capKg > 0 && totalKg > capKg;
+  const overM3 = capM3 > 0 && totalM3 > capM3;
+  const overPalet = capPalet > 0 && totalPalet > capPalet;
+  const isOverloaded = overKg || overM3 || overPalet;
+
   const handleCreate = () => {
     if (!oddzialId) return;
+    if (isOverloaded) {
+      toast.error('❌ Przekroczona pojemność pojazdu! Zmniejsz liczbę zleceń lub wybierz większy pojazd.');
+      return;
+    }
     create({
       oddzial_id: oddzialId,
       dzien,
@@ -430,17 +449,41 @@ function NowyKursModal({
                     <Checkbox checked={selectedZl.has(z.id)} />
                     <span className="font-mono text-xs">{z.numer}</span>
                     <span className="text-xs text-muted-foreground">{z.dzien}</span>
-                    <span className="text-xs ml-auto">{Math.round(z.suma_kg)} kg</span>
+                    <span className="text-xs ml-auto">{Math.round(z.suma_kg)} kg · {z.suma_m3} m³ · {z.suma_palet} pal</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
+          {/* Podsumowanie ładunku + walidacja pojemności */}
+          {selectedZl.size > 0 && selectedVehicle && (
+            <div className={`p-3 rounded-md text-sm space-y-1 ${isOverloaded ? 'bg-red-100 dark:bg-red-950/50 border border-red-400' : 'bg-muted'}`}>
+              <div className="font-semibold mb-1">
+                {isOverloaded ? '❌ Przekroczona pojemność!' : '📦 Podsumowanie ładunku:'}
+              </div>
+              <div className={`flex gap-4 ${overKg ? 'text-red-600 font-bold' : ''}`}>
+                <span>Waga: {Math.round(totalKg)} / {capKg} kg</span>
+                {overKg && <span>⚠️ +{Math.round(totalKg - capKg)} kg</span>}
+              </div>
+              {capM3 > 0 && (
+                <div className={`flex gap-4 ${overM3 ? 'text-red-600 font-bold' : ''}`}>
+                  <span>Objętość: {totalM3} / {capM3} m³</span>
+                  {overM3 && <span>⚠️ +{(totalM3 - capM3).toFixed(1)} m³</span>}
+                </div>
+              )}
+              {capPalet > 0 && (
+                <div className={`flex gap-4 ${overPalet ? 'text-red-600 font-bold' : ''}`}>
+                  <span>Palety: {totalPalet} / {capPalet} pal</span>
+                  {overPalet && <span>⚠️ +{totalPalet - capPalet} pal</span>}
+                </div>
+              )}
+            </div>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Anuluj</Button>
-          <Button onClick={handleCreate} disabled={submitting || selectedZl.size === 0}>
+          <Button onClick={handleCreate} disabled={submitting || selectedZl.size === 0 || isOverloaded}>
             {submitting ? 'Tworzenie...' : `Utwórz kurs (${selectedZl.size} zleceń)`}
           </Button>
         </DialogFooter>

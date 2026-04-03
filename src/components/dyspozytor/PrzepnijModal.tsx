@@ -58,8 +58,40 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
     k => k.id !== currentKurs?.id && (k.status === 'zaplanowany' || k.status === 'aktywny')
   );
 
+  // Walidacja pojemności dla przepięcia do istniejącego kursu
+  const targetKurs = allKursy.find(k => k.id === targetKursId);
+  const przystanekKg = przystanek ? Number(przystanek.masa_kg) || 0 : 0;
+  const przystanekM3 = przystanek ? Number(przystanek.objetosc_m3) || 0 : 0;
+  const przystanekPalet = przystanek ? Number(przystanek.ilosc_palet) || 0 : 0;
+
+  // Oblicz obecne obciążenie docelowego kursu
+  const targetLoad = targetKursId ? allPrzystanki
+    .filter(p => p.kurs_id === targetKursId)
+    .reduce((acc, p) => ({
+      kg: acc.kg + (Number(p.masa_kg) || 0),
+      m3: acc.m3 + (Number(p.objetosc_m3) || 0),
+      palet: acc.palet + (Number(p.ilosc_palet) || 0),
+    }), { kg: 0, m3: 0, palet: 0 }) : { kg: 0, m3: 0, palet: 0 };
+
+  const afterKg = targetLoad.kg + przystanekKg;
+  const afterM3 = targetLoad.m3 + przystanekM3;
+  const afterPalet = targetLoad.palet + przystanekPalet;
+
+  const tCapKg = targetKurs ? Number(targetKurs.ladownosc_kg) || 0 : 0;
+  const tCapM3 = targetKurs ? Number(targetKurs.objetosc_m3) || 0 : 0;
+  const tCapPalet = targetKurs ? Number(targetKurs.max_palet) || 0 : 0;
+
+  const tOverKg = tCapKg > 0 && afterKg > tCapKg;
+  const tOverM3 = tCapM3 > 0 && afterM3 > tCapM3;
+  const tOverPalet = tCapPalet > 0 && afterPalet > tCapPalet;
+  const isTargetOverloaded = !createNew && targetKursId && (tOverKg || tOverM3 || tOverPalet);
+
   const handleSubmit = async () => {
     if (!przystanek || !currentKurs || !oddzialId) return;
+    if (isTargetOverloaded) {
+      toast.error('❌ Przekroczona pojemność docelowego kursu!');
+      return;
+    }
     setSubmitting(true);
 
     if (createNew) {
@@ -156,6 +188,14 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
             {eligibleKursy.length === 0 && (
               <p className="text-xs text-muted-foreground mt-1">Brak innych kursów na ten dzień</p>
             )}
+            {isTargetOverloaded && (
+              <div className="mt-2 p-3 rounded-md text-sm bg-red-100 dark:bg-red-950/50 border border-red-400">
+                <div className="font-semibold text-red-600 mb-1">❌ Przekroczona pojemność!</div>
+                {tOverKg && <div className="text-red-600">Waga: {Math.round(afterKg)} / {tCapKg} kg (+{Math.round(afterKg - tCapKg)} kg)</div>}
+                {tOverM3 && <div className="text-red-600">Objętość: {afterM3.toFixed(1)} / {tCapM3} m³</div>}
+                {tOverPalet && <div className="text-red-600">Palety: {afterPalet} / {tCapPalet} pal (+{afterPalet - tCapPalet})</div>}
+              </div>
+            )}
           </div>
 
           {/* Option B: create new */}
@@ -196,7 +236,7 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Anuluj</Button>
-          <Button onClick={handleSubmit} disabled={submitting || (!createNew && !targetKursId)}>
+          <Button onClick={handleSubmit} disabled={submitting || (!createNew && !targetKursId) || !!isTargetOverloaded}>
             {submitting ? 'Przepinanie...' : '🔀 Przepnij'}
           </Button>
         </DialogFooter>
