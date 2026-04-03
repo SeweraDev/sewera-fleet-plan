@@ -90,7 +90,7 @@ export async function getRouteDistance(
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && data.routes?.[0]) {
-      const km = Math.round(data.routes[0].distance / 1000);
+      const km = Math.round(data.routes[0].distance / 100) / 10;
       console.log(`[osrm] ${km} km`);
       return km;
     }
@@ -127,7 +127,7 @@ export async function calculateRouteTotal(
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && data.routes?.[0]) {
-      const km = Math.round(data.routes[0].distance / 1000);
+      const km = Math.round(data.routes[0].distance / 100) / 10;
       console.log(`[osrm-route] ${waypoints.length} punktów → ${km} km`);
       return km;
     }
