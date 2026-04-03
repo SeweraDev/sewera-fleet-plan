@@ -853,12 +853,12 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 5. tel — search near delivery section (backward + forward from Adres dostawy / Budowa)
+  // 5. tel — search near delivery section ONLY when document has explicit delivery address
   let tel: string | null = null;
   const wystawilIdx = lines.findIndex((l) => /Wystawił/i.test(l));
   const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
   const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
-  if (deliveryAnchor >= 0) {
+  if (hasDeliverySection && deliveryAnchor > 0) {
     // Search backward from anchor (PDF column layout: Tel. before Adres dostawy)
     for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
       if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
