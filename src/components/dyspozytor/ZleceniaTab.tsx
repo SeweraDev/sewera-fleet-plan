@@ -16,14 +16,16 @@ import { cn } from '@/lib/utils';
 import { CalendarIcon } from 'lucide-react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 
-// Mapowanie typ pojazdu → pojemność (do pasków zajętości)
+// Mapowanie typ pojazdu → typowa pojemność (gdy brak przypisanego pojazdu)
+// Wartości orientacyjne — dokładne dane per pojazd są w tabeli flota
 const TYP_CAPACITY: Record<string, { kg: number; m3: number; pal: number }> = {
-  'Dostawczy 1,2t': { kg: 1200, m3: 8, pal: 4 },
-  'Winda 1,8t': { kg: 1800, m3: 12, pal: 6 },
-  'Winda 6,3t': { kg: 6300, m3: 28, pal: 14 },
-  'Winda MAX 15,8t': { kg: 15800, m3: 52, pal: 33 },
-  'HDS 8,9t': { kg: 8900, m3: 38, pal: 20 },
-  'HDS 11,7t': { kg: 11700, m3: 52, pal: 33 },
+  'Dostawczy 1,2t': { kg: 1200, m3: 18.5, pal: 7 },
+  'Winda 1,8t': { kg: 1800, m3: 18, pal: 7 },
+  'Winda 6,3t': { kg: 6300, m3: 32, pal: 13 },
+  'Winda MAX 15,8t': { kg: 15800, m3: 60, pal: 22 },
+  'HDS 8,9t': { kg: 8900, m3: 0, pal: 12 },
+  'HDS 9,1t': { kg: 9100, m3: 0, pal: 12 },
+  'HDS 11,7t': { kg: 11700, m3: 0, pal: 12 },
 };
 
 function capacityColor(pct: number) {
