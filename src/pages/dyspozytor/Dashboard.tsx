@@ -36,6 +36,7 @@ import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
 import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
 import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
 import { WycenTransportTab } from '@/components/shared/WycenTransportTab';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
@@ -75,12 +76,13 @@ function CapacityBar({ used, total, unit }: { used: number; total: number; unit:
   );
 }
 
-type StatusFilter = 'zaplanowany' | 'aktywny' | 'zakonczony';
+type StatusFilter = 'zaplanowany' | 'aktywny' | 'zakonczony' | 'usuniety';
 
 const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'zaplanowany', label: 'Zaplanowane' },
   { key: 'aktywny', label: 'W trasie' },
   { key: 'zakonczony', label: 'Zakończone' },
+  { key: 'usuniety', label: 'Usunięte' },
 ];
 
 function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked }: { oddzialId: number | null; oddzialNazwa?: string; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean }) {
@@ -121,11 +123,15 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
     return (a.godzina_start || '').localeCompare(b.godzina_start || '');
   });
   const counts = {
-    all: kursy.length,
+    all: kursy.filter(k => k.status !== 'usuniety').length,
     zaplanowany: kursy.filter(k => k.status === 'zaplanowany').length,
     aktywny: kursy.filter(k => k.status === 'aktywny').length,
     zakonczony: kursy.filter(k => k.status === 'zakonczony').length,
+    usuniety: kursy.filter(k => k.status === 'usuniety').length,
   };
+
+  // ConfirmDialog state for kurs deletion
+  const [deleteKursId, setDeleteKursId] = useState<string | null>(null);
 
   if (loading) return <p className="text-muted-foreground text-center py-8">Ładowanie kursów...</p>;
 
@@ -189,14 +195,9 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                     <StatusBadge status={kurs.status} />
                   </CardTitle>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>Edytuj</Button>
-                    {kurs.status === 'zaplanowany' && kPrz.length === 0 && (
-                      <Button size="sm" variant="destructive" onClick={async () => {
-                        if (!confirm('Usunąć pusty kurs?')) return;
-                        await supabase.from('kursy').update({ status: 'usuniety' } as any).eq('id', kurs.id);
-                        refetch();
-                        toast.success('Kurs usunięty');
-                      }}>Usuń</Button>
+                    {kurs.status !== 'usuniety' && <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>Edytuj</Button>}
+                    {kurs.status === 'zaplanowany' && (
+                      <Button size="sm" variant="destructive" onClick={() => setDeleteKursId(kurs.id)}>Usuń</Button>
                     )}
                     {kurs.status === 'zaplanowany' && kPrz.length > 0 && (
                       <Button size="sm" onClick={() => handleStart(kurs.id)} disabled={acting}>Wyjazd</Button>
@@ -334,13 +335,39 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         onClose={() => { setPrzepnijPrz(null); setPrzepnijKurs(null); }}
         przystanek={przepnijPrz}
         currentKurs={przepnijKurs}
-        allKursy={kursy}
+        allKursy={kursy.filter(k => k.status !== 'usuniety')}
         allPrzystanki={przystanki}
         oddzialId={oddzialId}
         dzien={dzien}
         flota={flota}
         kierowcy={kierowcy}
         onDone={refetch}
+      />
+
+      {/* Dialog potwierdzenia usunięcia kursu */}
+      <ConfirmDialog
+        open={!!deleteKursId}
+        onOpenChange={(open) => { if (!open) setDeleteKursId(null); }}
+        title="Usunąć kurs?"
+        description="Czy na pewno chcesz usunąć ten kurs? Kurs zostanie przeniesiony do zakładki Usunięte. Zlecenia z tego kursu wrócą do puli bez kursu."
+        confirmLabel="Usuń kurs"
+        destructive
+        onConfirm={async () => {
+          if (!deleteKursId) return;
+          // Odepnij przystanki (zlecenia wrócą do "bez kursu")
+          const kPrz = przystanki.filter(p => p.kurs_id === deleteKursId);
+          if (kPrz.length > 0) {
+            const zlIds = kPrz.map(p => p.zlecenie_id).filter(Boolean) as string[];
+            await supabase.from('kurs_przystanki').delete().eq('kurs_id', deleteKursId);
+            if (zlIds.length > 0) {
+              await supabase.from('zlecenia').update({ status: 'robocza' } as any).in('id', zlIds);
+            }
+          }
+          await supabase.from('kursy').update({ status: 'usuniety' } as any).eq('id', deleteKursId);
+          setDeleteKursId(null);
+          refetch();
+          toast.success('Kurs usunięty — zlecenia wróciły do puli');
+        }}
       />
     </div>
   );
@@ -604,7 +631,7 @@ export default function DyspozytorDashboard() {
       <Topbar />
       <div className="flex flex-1">
         <PageSidebar
-          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.length } : s)}
+          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.filter(k => k.status !== 'usuniety').length } : s)}
           activeId={activeId}
           onSelect={setActiveId}
         />

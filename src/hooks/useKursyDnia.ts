@@ -50,8 +50,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
     let query = supabase
       .from('kursy')
       .select('id, numer, status, godzina_start, nr_rej_zewn, kierowca_nazwa, kierowca_id, ts_wyjazd, ts_powrot, flota_id')
-      .eq('oddzial_id', oddzialId)
-      .neq('status', 'usuniety');
+      .eq('oddzial_id', oddzialId);
 
     if (dzienDo && dzienDo !== dzien) {
       query = query.gte('dzien', dzien).lte('dzien', dzienDo);

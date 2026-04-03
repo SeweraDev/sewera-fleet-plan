@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { useZleceniaOddzialu, useZlecenieWz } from '@/hooks/useZleceniaOddzialu';
 import { supabase } from '@/integrations/supabase/client';
@@ -167,11 +168,13 @@ function ZlSzczegolyDialog({
               Przypisz do kursu
             </Button>
           )}
-          <Button variant="outline" onClick={() => { onClose(); onEdit(zlecenie.id); }}>
-            Edytuj zlecenie
-          </Button>
-          {(zlecenie.status === 'robocza' || zlecenie.status === 'do_weryfikacji') && (
-            <Button variant="destructive" onClick={() => { if (confirm('Czy na pewno usunąć zlecenie ' + zlecenie.numer + '? Ta operacja jest nieodwracalna.')) { onDelete(zlecenie.id); onClose(); } }}>
+          {zlecenie.status !== 'anulowana' && (
+            <Button variant="outline" onClick={() => { onClose(); onEdit(zlecenie.id); }}>
+              Edytuj zlecenie
+            </Button>
+          )}
+          {(zlecenie.status === 'robocza' || zlecenie.status === 'do_weryfikacji' || zlecenie.status === 'potwierdzona') && (
+            <Button variant="destructive" onClick={() => onDelete(zlecenie.id)}>
               Usuń zlecenie
             </Button>
           )}
@@ -273,10 +276,18 @@ export function ZleceniaTab({
     anulowana: zlecenia.filter(z => z.status === 'anulowana').length,
   };
 
-  const handleDelete = async (id: string) => {
-    // RLS nie ma DELETE policy — anuluj zamiast usuwać
-    await supabase.from('zlecenia').update({ status: 'anulowana' } as any).eq('id', id);
+  const [deleteZlId, setDeleteZlId] = useState<string | null>(null);
+  const deleteZlNumer = zlecenia.find(z => z.id === deleteZlId)?.numer || '';
+
+  const handleDelete = (id: string) => {
+    setDeleteZlId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteZlId) return;
+    await supabase.from('zlecenia').update({ status: 'anulowana' } as any).eq('id', deleteZlId);
     toast.success('Zlecenie usunięte');
+    setDeleteZlId(null);
     refetch();
   };
 
@@ -414,6 +425,16 @@ export function ZleceniaTab({
         open={!!editZlId}
         onClose={() => setEditZlId(null)}
         onSaved={refetch}
+      />
+
+      <ConfirmDialog
+        open={!!deleteZlId}
+        onOpenChange={(open) => { if (!open) setDeleteZlId(null); }}
+        title="Usunąć zlecenie?"
+        description={`Czy na pewno chcesz usunąć zlecenie ${deleteZlNumer}? Zlecenie zostanie przeniesione do zakładki Anulowane.`}
+        confirmLabel="Usuń zlecenie"
+        destructive
+        onConfirm={confirmDelete}
       />
     </div>
   );
