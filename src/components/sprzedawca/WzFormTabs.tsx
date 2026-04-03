@@ -424,32 +424,18 @@ function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
       adres = undefined;
     }
   }
-  // Fallback adres: szukaj wzorca "ul./al./os. + nazwa + numer ... kod-pocztowy miasto" w pełnym tekście
-  if (!adres) {
-    // Elastyczny regex — OCR może wstawiać śmieci między częściami adresu
-    const addrRegex = /(?:ul\.|al\.|os\.|pl\.)\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s.]+?\d+[a-zA-Z]?[\s\S]{0,30}?(\d{2}-\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)/;
-    const addrM = text.match(addrRegex);
-    if (addrM) {
-      // Wyciągnij ul. + numer i kod + miasto osobno, połącz czysto
-      const streetM = text.match(/((?:ul\.|al\.|os\.|pl\.)\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\s.]+?\d+[a-zA-Z]?)/);
-      const cityPart = addrM[1]; // np. "41-200 Sosnowiec"
-      if (streetM) {
-        adres = `${streetM[1].trim()}, ${cityPart.trim()}`;
-      } else {
-        adres = cityPart.trim();
-      }
-    }
-  }
+  // Fallback adres WYŁĄCZONY — bez sekcji "Adres dostawy"/"Budowa" nie zgadujemy adresu
+  // (regex łapał adres siedziby odbiorcy zamiast adresu dostawy)
   if (adres && odbiorca && odbiorca.includes(adres)) {
     adres = undefined;
   }
 
-  // Telefon
+  // Telefon — szukaj TYLKO gdy dokument ma sekcję dostawy (nie łap tel. wystawcy)
   let tel: string | undefined;
   const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
-  const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
-  const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
-  if (deliveryAnchor >= 0) {
+  const budowaIdx2 = lines.findIndex(l => /^Budowa/i.test(l));
+  const deliveryAnchor = Math.max(budowaIdx2, adresIdx >= 0 ? adresIdx : 0);
+  if (hasDeliverySection && deliveryAnchor > 0) {
     for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
       if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
       const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
