@@ -30,11 +30,21 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
       .in('status', ['robocza', 'do_weryfikacji'])
       .gte('dzien', today);
 
-    // Get those that already have kurs_przystanki
-    const { data: przData } = await supabase
-      .from('kurs_przystanki')
-      .select('zlecenie_id');
-    const assigned = new Set((przData || []).map(p => p.zlecenie_id));
+    // Get those that already have kurs_przystanki in active kursy (not usuniety)
+    const { data: activeKursy } = await supabase
+      .from('kursy')
+      .select('id')
+      .neq('status', 'usuniety');
+    const activeKursIds = (activeKursy || []).map(k => k.id);
+
+    let assigned = new Set<string>();
+    if (activeKursIds.length > 0) {
+      const { data: przData } = await supabase
+        .from('kurs_przystanki')
+        .select('zlecenie_id')
+        .in('kurs_id', activeKursIds);
+      assigned = new Set((przData || []).map(p => p.zlecenie_id));
+    }
 
     const unassigned = (zlData || []).filter(z => !assigned.has(z.id));
 
