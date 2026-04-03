@@ -198,17 +198,17 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                 <thead className="bg-muted">
                   {/* Wiersz grupujący: Sewera / Zewnętrzny */}
                   <tr>
-                    <th className="p-2 border-r" colSpan={2}></th>
-                    <th className="text-center p-2 font-semibold border-b border-r" colSpan={2}>Sewera</th>
+                    <th className="p-2 border-r border-gray-400" colSpan={2}></th>
+                    <th className="text-center p-2 font-semibold border-b border-r border-gray-400" colSpan={2}>Sewera</th>
                     {pokazZew && (
                       <th className="text-center p-2 font-semibold border-b" colSpan={2}>Zewnętrzny</th>
                     )}
                   </tr>
                   <tr>
                     <th className="text-left p-3 font-medium">Oddział</th>
-                    <th className="text-center p-3 font-medium border-r">km</th>
+                    <th className="text-center p-3 font-medium border-r border-gray-400">km</th>
                     <th className="text-center p-3 font-medium">Netto</th>
-                    <th className="text-center p-3 font-medium border-r">Brutto</th>
+                    <th className="text-center p-3 font-medium border-r border-gray-400">Brutto</th>
                     {pokazZew && (
                       <>
                         <th className="text-center p-3 font-medium">Netto</th>
@@ -228,11 +228,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                             <span className="text-xs text-muted-foreground ml-1">(Twój)</span>
                           )}
                         </td>
-                        <td className="text-center p-3 tabular-nums border-r">{w.km} km</td>
+                        <td className="text-center p-3 tabular-nums border-r border-gray-400">{w.km} km</td>
                         <td className="text-center p-3 tabular-nums">
                           {w.kosztWew ? formatPLN(w.kosztWew.netto) : '—'}
                         </td>
-                        <td className="text-center p-3 tabular-nums font-bold border-r">
+                        <td className="text-center p-3 tabular-nums font-bold border-r border-gray-400">
                           {w.kosztWew ? formatPLN(w.kosztWew.brutto) : '—'}
                         </td>
                         {pokazZew && (
