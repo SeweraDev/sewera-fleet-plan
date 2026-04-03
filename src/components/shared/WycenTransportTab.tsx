@@ -284,8 +284,8 @@ function formatPLN(amount: number): string {
  * Wyniki posortowane rosnąco po cenie.
  */
 function getRowColor(idx: number, total: number): string {
-  if (total === 1) return 'bg-green-50 dark:bg-green-950/30';
-  if (idx === 0) return 'bg-green-50 dark:bg-green-950/30';
-  if (idx === total - 1) return 'bg-red-50 dark:bg-red-950/30';
-  return 'bg-yellow-50 dark:bg-yellow-950/30';
+  if (total === 1) return 'bg-green-200 dark:bg-green-900/50';
+  if (idx === 0) return 'bg-green-200 dark:bg-green-900/50';
+  if (idx === total - 1) return 'bg-red-200 dark:bg-red-900/50';
+  return 'bg-yellow-200 dark:bg-yellow-900/50';
 }
