@@ -11,7 +11,7 @@ export const ODDZIAL_COORDS: Record<string, { lat: number; lng: number; adres: s
 };
 
 // Mapowanie nazwa oddziału → kod
-const NAZWA_TO_KOD: Record<string, string> = {
+export const NAZWA_TO_KOD: Record<string, string> = {
   'Katowice': 'KAT',
   'Sosnowiec': 'SOS',
   'Gliwice': 'GL',

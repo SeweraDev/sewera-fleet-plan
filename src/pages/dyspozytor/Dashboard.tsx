@@ -35,6 +35,7 @@ import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
 import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
 import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
 import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
+import { WycenTransportTab } from '@/components/shared/WycenTransportTab';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
@@ -43,6 +44,7 @@ const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
   { id: 'zlecenia', label: '📋 Zlecenia' },
   { id: 'nowe_zlecenie', label: '➕ Nowe zlecenie' },
+  { id: 'wycen', label: '💰 Wyceń transport' },
   { id: 'flota', label: '🔧 Flota' },
 ];
 
@@ -634,6 +636,9 @@ export default function DyspozytorDashboard() {
               )}
               {activeId === 'nowe_zlecenie' && (
                 <NoweZlecenieFormDyspozytor onSuccess={() => setActiveId('zlecenia')} />
+              )}
+              {activeId === 'wycen' && (
+                <WycenTransportTab oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || profile?.branch || 'Katowice'} />
               )}
               {activeId === 'flota' && (
                 <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />

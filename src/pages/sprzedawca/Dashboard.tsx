@@ -12,11 +12,14 @@ import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
 import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
 import { MojeZleceniaTab } from '@/components/sprzedawca/MojeZleceniaTab';
 import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
+import { WycenTransportTab } from '@/components/shared/WycenTransportTab';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 
 const SIDEBAR_ITEMS = [
   { id: 'nowe', label: '➕ Nowe zlecenie' },
   { id: 'moje', label: '📋 Moje zlecenia' },
+  { id: 'wycen', label: '💰 Wyceń transport' },
 ];
 
 function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
@@ -155,6 +158,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
 
 export default function SprzedawcaDashboard() {
   const [activeId, setActiveId] = useState('nowe');
+  const { profile } = useAuth();
 
   const handleSuccess = useCallback(() => {
     setActiveId('moje');
@@ -168,6 +172,7 @@ export default function SprzedawcaDashboard() {
         <main className="flex-1 p-6 overflow-auto">
           {activeId === 'nowe' && <NoweZlecenieForm onSuccess={handleSuccess} />}
           {activeId === 'moje' && <MojeZleceniaTab />}
+          {activeId === 'wycen' && <WycenTransportTab oddzialNazwa={profile?.branch || 'Katowice'} />}
         </main>
       </div>
     </div>
