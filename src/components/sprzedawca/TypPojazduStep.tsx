@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 const ERP_TYPES = [
   { kod: 'B', opis: 'Bez windy do 1,2t', typ: 'Dostawczy 1,2t' },
@@ -37,6 +38,21 @@ export function TypPojazduStep({
 }: TypPojazduStepProps) {
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
   const [tab, setTab] = useState('pojazd');
+
+  // Pobierz typy aut zewnętrznych dla wybranego oddziału
+  const [zewTypy, setZewTypy] = useState<string[]>([]);
+  useEffect(() => {
+    if (!oddzialId) { setZewTypy([]); return; }
+    supabase
+      .from('flota_zewnetrzna')
+      .select('typ')
+      .eq('oddzial_id', oddzialId)
+      .eq('aktywny', true)
+      .then(({ data }) => {
+        const typy = [...new Set((data || []).map(f => f.typ))];
+        setZewTypy(typy);
+      });
+  }, [oddzialId]);
 
   return (
     <div className="space-y-4">
@@ -100,13 +116,18 @@ export function TypPojazduStep({
                   type="button"
                   onClick={() => setTypPojazdu('zewnetrzny')}
                   className={cn(
-                    'rounded-lg border-2 px-4 py-3 text-left text-sm font-medium transition-colors',
+                    'rounded-lg border-2 px-4 py-3 text-left transition-colors',
                     typPojazdu === 'zewnetrzny'
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border hover:border-muted-foreground/50'
                   )}
                 >
-                  Zewnętrzny
+                  <div className="text-sm font-medium">Zewnętrzny</div>
+                  {zewTypy.length > 0 && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      🚛 {zewTypy.join(', ')}
+                    </div>
+                  )}
                 </button>
               </div>
             )}
