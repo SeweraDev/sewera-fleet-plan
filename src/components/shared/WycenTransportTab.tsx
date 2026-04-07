@@ -80,9 +80,14 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         return;
       }
 
-      // 2. Pobierz flotę WSZYSTKICH oddziałów (aktywne pojazdy)
+      // 2. Pobierz flotę WSZYSTKICH oddziałów (aktywne pojazdy własne + zewnętrzne)
       const { data: flotaData } = await supabase
         .from('flota')
+        .select('typ, oddzial_id')
+        .eq('aktywny', true);
+
+      const { data: flotaZewData } = await supabase
+        .from('flota_zewnetrzna')
         .select('typ, oddzial_id')
         .eq('aktywny', true);
 
@@ -97,15 +102,19 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         if (kod) oddzialIdToKod.set(o.id, kod);
       });
 
-      // Buduj mapę: kod oddziału → Set typów systemowych
+      // Buduj mapę: kod oddziału → Set typów systemowych (własne + zewnętrzne)
       const flotaPerOddzial = new Map<string, Set<string>>();
-      (flotaData || []).forEach(f => {
-        if (!f.oddzial_id) return;
-        const kod = oddzialIdToKod.get(f.oddzial_id);
-        if (!kod) return;
-        if (!flotaPerOddzial.has(kod)) flotaPerOddzial.set(kod, new Set());
-        flotaPerOddzial.get(kod)!.add(f.typ);
-      });
+      const addToFlotaMap = (data: any[]) => {
+        data.forEach(f => {
+          if (!f.oddzial_id) return;
+          const kod = oddzialIdToKod.get(f.oddzial_id);
+          if (!kod) return;
+          if (!flotaPerOddzial.has(kod)) flotaPerOddzial.set(kod, new Set());
+          flotaPerOddzial.get(kod)!.add(f.typ);
+        });
+      };
+      addToFlotaMap(flotaData || []);
+      addToFlotaMap(flotaZewData || []);
 
       // 3. Oblicz odległość od KAŻDEGO oddziału
       const oddzialy = Object.entries(ODDZIAL_COORDS);
