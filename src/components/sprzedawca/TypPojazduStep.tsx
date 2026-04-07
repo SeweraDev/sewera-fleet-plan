@@ -112,23 +112,36 @@ export function TypPojazduStep({
                   </button>
                 ))}
 
-                <button
-                  type="button"
-                  onClick={() => setTypPojazdu('zewnetrzny')}
-                  className={cn(
-                    'rounded-lg border-2 px-4 py-3 text-left transition-colors',
-                    typPojazdu === 'zewnetrzny'
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border hover:border-muted-foreground/50'
-                  )}
-                >
-                  <div className="text-sm font-medium">Zewnętrzny</div>
-                  {zewTypy.length > 0 && (
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      🚛 {zewTypy.join(', ')}
-                    </div>
-                  )}
-                </button>
+                {zewTypy.length > 0 ? (
+                  zewTypy.map(typ => (
+                    <button
+                      key={`zew-${typ}`}
+                      type="button"
+                      onClick={() => setTypPojazdu(`zew:${typ}`)}
+                      className={cn(
+                        'rounded-lg border-2 px-4 py-3 text-left transition-colors',
+                        typPojazdu === `zew:${typ}`
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border hover:border-muted-foreground/50'
+                      )}
+                    >
+                      <div className="text-sm font-medium">Zew. {typ}</div>
+                    </button>
+                  ))
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setTypPojazdu('zewnetrzny')}
+                    className={cn(
+                      'rounded-lg border-2 px-4 py-3 text-left text-sm font-medium transition-colors',
+                      typPojazdu === 'zewnetrzny'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border hover:border-muted-foreground/50'
+                    )}
+                  >
+                    Zewnętrzny
+                  </button>
+                )}
               </div>
             )}
           </TabsContent>
