@@ -316,10 +316,44 @@ export function ZleceniaTab({
     refetch();
   };
 
+  // Podsumowanie ładunku (tylko zlecenia bez kursu, aktywne)
+  const bezKursu = zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana');
+  const sumaKg = bezKursu.reduce((s, z) => s + z.suma_kg, 0);
+  const sumaM3 = bezKursu.reduce((s, z) => s + z.suma_m3, 0);
+  const sumaPal = bezKursu.reduce((s, z) => s + z.suma_palet, 0);
+  const sumaKm = bezKursu.reduce((s, z) => s + (z.dystans_km ?? 0), 0);
+
   if (loading) return <p className="text-muted-foreground text-center py-8">Ładowanie zleceń...</p>;
 
   return (
     <div className="space-y-4">
+      {/* Baner podsumowania */}
+      {bezKursu.length > 0 && (
+        <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-4 py-3">
+          <div className="flex items-center gap-4 flex-wrap text-sm">
+            <span className="font-semibold text-blue-700 dark:text-blue-300">
+              📦 Do zaplanowania: {bezKursu.length} zleceń
+            </span>
+            <span className="text-blue-600 dark:text-blue-400">
+              ⚖️ {Math.round(sumaKg).toLocaleString('pl-PL')} kg
+            </span>
+            {sumaM3 > 0 && (
+              <span className="text-blue-600 dark:text-blue-400">
+                📐 {Math.round(sumaM3 * 10) / 10} m³
+              </span>
+            )}
+            <span className="text-blue-600 dark:text-blue-400">
+              🧱 {Math.round(sumaPal)} pal
+            </span>
+            {sumaKm > 0 && (
+              <span className="text-blue-600 dark:text-blue-400">
+                🛣️ ~{Math.round(sumaKm)} km
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2 flex-wrap">
         {ZL_STATUS_FILTERS.map(f => (
           <button
