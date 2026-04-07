@@ -92,8 +92,8 @@ export async function getRouteDistance(
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && data.routes?.[0]) {
-      const km = Math.round(data.routes[0].distance / 100) / 10;
-      console.log(`[osrm] ${km} km`);
+      const OSRM_CORRECTION = 1.2; // OSRM zaniża dystans vs Google Maps
+      const km = Math.round(data.routes[0].distance * OSRM_CORRECTION / 100) / 10;
       return km;
     }
     console.warn(`[osrm] no route`, data);
