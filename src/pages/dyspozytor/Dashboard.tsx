@@ -133,6 +133,10 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
   // ConfirmDialog state for kurs deletion
   const [deleteKursId, setDeleteKursId] = useState<string | null>(null);
 
+  // Odpinanie zlecenia z kursu (podwójne potwierdzenie)
+  const [odpinZl, setOdpinZl] = useState<{ zlId: string; przId: string; numer: string } | null>(null);
+  const [odpinStep, setOdpinStep] = useState(0); // 0=brak, 1=pierwsze pytanie, 2=drugie pytanie
+
   if (loading) return <p className="text-muted-foreground text-center py-8">Ładowanie kursów...</p>;
 
   return (
@@ -295,6 +299,14 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                                 🔀
                               </Button>
                             )}
+                            {p.zlecenie_id && kurs.status !== 'usuniety' && (
+                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
+                                setOdpinZl({ zlId: p.zlecenie_id!, przId: p.id.split('_')[0], numer: p.zl_numer || p.numer_wz || '?' });
+                                setOdpinStep(1);
+                              }}>
+                                ↩️
+                              </Button>
+                            )}
                               </div>
                             </TableCell>
                           ) : null}
@@ -342,6 +354,35 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         flota={flota}
         kierowcy={kierowcy}
         onDone={refetch}
+      />
+
+      {/* Dialog odpinania zlecenia z kursu — krok 1 */}
+      <ConfirmDialog
+        open={odpinStep === 1}
+        onOpenChange={(open) => { if (!open) { setOdpinStep(0); setOdpinZl(null); } }}
+        title="Odpiąć zlecenie z kursu?"
+        description={`Czy chcesz przenieść zlecenie ${odpinZl?.numer || ''} z powrotem do puli zleceń bez kursu?`}
+        confirmLabel="Tak, odepnij"
+        destructive
+        onConfirm={() => setOdpinStep(2)}
+      />
+      {/* Dialog odpinania zlecenia z kursu — krok 2 (potwierdzenie) */}
+      <ConfirmDialog
+        open={odpinStep === 2}
+        onOpenChange={(open) => { if (!open) { setOdpinStep(0); setOdpinZl(null); } }}
+        title="Na pewno?"
+        description={`Potwierdzasz odpięcie zlecenia ${odpinZl?.numer || ''} z kursu. Zlecenie wróci do puli "bez kursu".`}
+        confirmLabel="Potwierdzam"
+        destructive
+        onConfirm={async () => {
+          if (!odpinZl) return;
+          await supabase.from('kurs_przystanki').delete().eq('id', odpinZl.przId);
+          await supabase.from('zlecenia').update({ status: 'robocza', kurs_id: null } as any).eq('id', odpinZl.zlId);
+          setOdpinStep(0);
+          setOdpinZl(null);
+          refetch();
+          toast.success(`Zlecenie ${odpinZl.numer} odpięte z kursu`);
+        }}
       />
 
       {/* Dialog potwierdzenia usunięcia kursu */}
