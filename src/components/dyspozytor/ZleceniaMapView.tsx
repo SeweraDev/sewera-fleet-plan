@@ -1,63 +1,43 @@
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useRef } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
-
-// Fix domyślnych ikon Leaflet (webpack/vite nie kopiuje ikon)
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
 
 // Kolory pinów wg godziny dostawy
 const GODZ_COLORS: Record<string, string> = {
-  'do 8:00': '#ef4444',   // czerwony — pilne
-  'do 10:00': '#f97316',  // pomarańczowy
-  'do 12:00': '#eab308',  // żółty
-  'do 14:00': '#22c55e',  // zielony
-  'do 16:00': '#3b82f6',  // niebieski
-  'Dowolna': '#6b7280',   // szary
+  'do 8:00': '#ef4444',
+  'do 10:00': '#f97316',
+  'do 12:00': '#eab308',
+  'do 14:00': '#22c55e',
+  'do 16:00': '#3b82f6',
+  'Dowolna': '#6b7280',
 };
 
-function createColorIcon(color: string) {
-  return L.divIcon({
-    className: '',
-    html: `<div style="
-      background:${color}; width:24px; height:24px; border-radius:50%;
-      border:3px solid white; box-shadow:0 2px 6px rgba(0,0,0,.4);
-    "></div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -14],
-  });
-}
+// Ładuj Leaflet z CDN dynamicznie
+let leafletLoaded = false;
+function loadLeaflet(): Promise<any> {
+  if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
 
-const baseIcon = L.divIcon({
-  className: '',
-  html: `<div style="
-    background:#1e40af; width:30px; height:30px; border-radius:50%;
-    border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,.5);
-    display:flex; align-items:center; justify-content:center;
-    color:white; font-size:16px; font-weight:bold;
-  ">🏭</div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-  popupAnchor: [0, -17],
-});
-
-// Auto-fit bounds
-function FitBounds({ points }: { points: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (points.length > 0) {
-      const bounds = L.latLngBounds(points.map(([lat, lng]) => [lat, lng]));
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+  return new Promise((resolve) => {
+    // CSS
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
     }
-  }, [points, map]);
-  return null;
+    // JS
+    if ((window as any).L) {
+      leafletLoaded = true;
+      resolve((window as any).L);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => {
+      leafletLoaded = true;
+      resolve((window as any).L);
+    };
+    document.head.appendChild(script);
+  });
 }
 
 interface Props {
@@ -67,69 +47,126 @@ interface Props {
 }
 
 export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+
   const pins = zlecenia.filter(z => z.lat != null && z.lng != null);
 
-  const center: [number, number] = oddzialCoords
-    ? [oddzialCoords.lat, oddzialCoords.lng]
-    : [50.27, 19.02]; // Śląsk fallback
+  useEffect(() => {
+    let cancelled = false;
 
-  const allPoints: [number, number][] = [
-    ...(oddzialCoords ? [[oddzialCoords.lat, oddzialCoords.lng] as [number, number]] : []),
-    ...pins.map(p => [p.lat!, p.lng!] as [number, number]),
-  ];
+    loadLeaflet().then((L) => {
+      if (cancelled || !containerRef.current) return;
+
+      // Zniszcz starą mapę
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+
+      const center = oddzialCoords
+        ? [oddzialCoords.lat, oddzialCoords.lng]
+        : [50.27, 19.02];
+
+      const map = L.map(containerRef.current).setView(center, 11);
+      mapRef.current = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(map);
+
+      const allPoints: [number, number][] = [];
+
+      // Pin oddziału
+      if (oddzialCoords) {
+        allPoints.push([oddzialCoords.lat, oddzialCoords.lng]);
+        const baseIcon = L.divIcon({
+          className: '',
+          html: `<div style="
+            background:#1e40af; width:30px; height:30px; border-radius:50%;
+            border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,.5);
+            display:flex; align-items:center; justify-content:center;
+            color:white; font-size:16px;
+          ">🏭</div>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
+          popupAnchor: [0, -17],
+        });
+        L.marker([oddzialCoords.lat, oddzialCoords.lng], { icon: baseIcon })
+          .addTo(map)
+          .bindPopup(`<strong>🏭 ${oddzialNazwa}</strong><br/>Oddział bazowy`);
+      }
+
+      // Piny dostaw
+      pins.forEach(z => {
+        const color = GODZ_COLORS[z.preferowana_godzina || ''] || GODZ_COLORS['Dowolna'];
+        allPoints.push([z.lat!, z.lng!]);
+
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="
+            background:${color}; width:22px; height:22px; border-radius:50%;
+            border:3px solid white; box-shadow:0 2px 6px rgba(0,0,0,.4);
+          "></div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+          popupAnchor: [0, -13],
+        });
+
+        const popup = `
+          <div style="min-width:180px">
+            <strong>${z.odbiorca || 'Brak odbiorcy'}</strong><br/>
+            <span style="font-size:12px;color:#666">${z.adres || '—'}</span><br/>
+            <span style="font-size:12px">
+              ⚖️ ${Math.round(z.suma_kg)} kg
+              ${z.suma_m3 > 0 ? ` · 📐 ${Math.round(z.suma_m3 * 10) / 10} m³` : ''}
+              ${z.suma_palet > 0 ? ` · 🧱 ${z.suma_palet} pal` : ''}
+            </span><br/>
+            <span style="font-size:12px">
+              🕐 ${z.preferowana_godzina || 'Dowolna'}
+              ${z.dystans_km != null ? ` · 🛣️ ${z.dystans_km} km` : ''}
+            </span><br/>
+            <span style="font-size:11px;color:#999">${z.numer}</span>
+          </div>
+        `;
+
+        L.marker([z.lat!, z.lng!], { icon }).addTo(map).bindPopup(popup);
+      });
+
+      // Auto-fit bounds
+      if (allPoints.length > 1) {
+        map.fitBounds(allPoints, { padding: [40, 40], maxZoom: 13 });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [pins.length, oddzialCoords?.lat, oddzialNazwa]);
 
   if (pins.length === 0) {
     return (
-      <div className="rounded-lg border bg-muted/50 p-8 text-center text-sm text-muted-foreground">
-        Brak zgeokodowanych adresów — poczekaj na załadowanie współrzędnych...
+      <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">
+        Ładowanie współrzędnych... Poczekaj chwilę.
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border overflow-hidden" style={{ height: 400 }}>
-      <MapContainer center={center} zoom={11} style={{ height: '100%', width: '100%' }}>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <FitBounds points={allPoints} />
-
-        {/* Pin oddziału */}
-        {oddzialCoords && (
-          <Marker position={[oddzialCoords.lat, oddzialCoords.lng]} icon={baseIcon}>
-            <Popup>
-              <strong>🏭 {oddzialNazwa}</strong><br />
-              Oddział bazowy
-            </Popup>
-          </Marker>
-        )}
-
-        {/* Piny dostaw */}
-        {pins.map(z => {
-          const color = GODZ_COLORS[z.preferowana_godzina || ''] || GODZ_COLORS['Dowolna'];
-          return (
-            <Marker key={z.id} position={[z.lat!, z.lng!]} icon={createColorIcon(color)}>
-              <Popup>
-                <div style={{ minWidth: 180 }}>
-                  <strong>{z.odbiorca || 'Brak odbiorcy'}</strong><br />
-                  <span style={{ fontSize: 12, color: '#666' }}>{z.adres || '—'}</span><br />
-                  <span style={{ fontSize: 12 }}>
-                    ⚖️ {Math.round(z.suma_kg)} kg
-                    {z.suma_m3 > 0 && <> · 📐 {Math.round(z.suma_m3 * 10) / 10} m³</>}
-                    {z.suma_palet > 0 && <> · 🧱 {z.suma_palet} pal</>}
-                  </span><br />
-                  <span style={{ fontSize: 12 }}>
-                    🕐 {z.preferowana_godzina || 'Dowolna'}
-                    {z.dystans_km != null && <> · 🛣️ {z.dystans_km} km</>}
-                  </span><br />
-                  <span style={{ fontSize: 11, color: '#999' }}>{z.numer}</span>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </MapContainer>
+    <div className="space-y-1">
+      <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 400 }} />
+      <div className="flex gap-3 text-xs text-muted-foreground flex-wrap">
+        {Object.entries(GODZ_COLORS).map(([godz, color]) => (
+          <span key={godz} className="flex items-center gap-1">
+            <span style={{ background: color, width: 10, height: 10, borderRadius: '50%', display: 'inline-block' }} />
+            {godz}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
