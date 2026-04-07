@@ -127,8 +127,12 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
       const results: WynikOddzialu[] = [];
 
+      console.log('[WycenTransport] flotaWlasna:', Object.fromEntries([...flotaWlasna.entries()].map(([k, v]) => [k, [...v]])));
+      console.log('[WycenTransport] flotaZew:', Object.fromEntries([...flotaZew.entries()].map(([k, v]) => [k, [...v]])));
+
       for (const [kod, dane] of oddzialyFiltered) {
         const km = await getRouteDistance(dane, coords);
+        console.log(`[WycenTransport] ${kod}: ${km} km`);
         if (km === null) continue;
 
         // Sewera (wew) — tylko jeśli oddział ma auto WŁASNE (flota)
