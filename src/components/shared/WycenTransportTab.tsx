@@ -38,7 +38,7 @@ interface WynikOddzialu {
   isFallback: boolean;
 }
 
-const MAX_KM_INNE_ODDZIALY = 15;
+const MAX_KM_INNE_ODDZIALY = 25;
 const MAX_WYNIKOW = 3;
 
 // Odwrotne mapowanie kod → nazwa
