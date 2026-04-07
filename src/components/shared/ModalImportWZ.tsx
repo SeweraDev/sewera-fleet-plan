@@ -835,7 +835,9 @@ export function parseWZText(rawText: string): WZImportData {
         if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
         if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
         if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
-        if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
+        if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); continue; }
+        // Nazwa miasta/lokalizacji (np. TYCHY PSP) — zbierz i kontynuuj
+        if (addrParts.length > 0 && /^[A-ZŁŚŻŹĆŃÓĘ\s\-\.]{3,}$/i.test(l.trim())) { addrParts.unshift(l.trim()); continue; }
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
