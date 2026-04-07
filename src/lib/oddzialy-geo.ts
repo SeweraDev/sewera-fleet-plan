@@ -16,8 +16,10 @@ export const NAZWA_TO_KOD: Record<string, string> = {
   'Sosnowiec': 'SOS',
   'Gliwice': 'GL',
   'Tarnowskie Góry': 'TG',
+  'T.Góry': 'TG',
   'Chrzanów': 'CH',
   'Dąbrowa Górnicza': 'DG',
+  'D.Górnicza': 'DG',
   'Oświęcim': 'OS',
   'Redystrybucja': 'R',
 };
