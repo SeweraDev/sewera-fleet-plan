@@ -13,10 +13,10 @@ const TYP_MAP: Record<string, string | null> = {
   C: "Winda 1,8t",
   D: "Winda 6,3t",
   E: "Winda MAX 15,8t",
-  F: "HDS 11,7t",
-  G: "HDS 11,7t",
-  H: "HDS 8,9t",
-  I: "HDS 8,9t",
+  F: "HDS 12,0t",
+  G: "HDS 12,0t",
+  H: "HDS 9,0t",
+  I: "HDS 9,0t",
 };
 
 // Header synonyms → canonical field

@@ -406,7 +406,7 @@ const XLS_HEADER_PATTERNS: { patterns: RegExp[]; field: string }[] = [
 
 const XLS_TYP_MAP: Record<string, string | null> = {
   A: null, B: "Dostawczy 1,2t", C: "Winda 1,8t", D: "Winda 6,3t",
-  E: "Winda MAX 15,8t", F: "HDS 11,7t", G: "HDS 11,7t", H: "HDS 8,9t", I: "HDS 8,9t",
+  E: "Winda MAX 15,8t", F: "HDS 12,0t", G: "HDS 12,0t", H: "HDS 9,0t", I: "HDS 9,0t",
 };
 
 function matchXlsHeader(h: string): string | null {

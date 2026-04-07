@@ -71,7 +71,7 @@ const STAWKI_WEW: StawkaWew[] = [
     stawkaZaKm: 11.06,
   },
   {
-    label: 'HDS 9t',
+    label: 'HDS 9,0t',
     strefy: [
       { maxKm: 5, cena: 271.54 },
       { maxKm: 10, cena: 299.19 },
@@ -81,7 +81,7 @@ const STAWKI_WEW: StawkaWew[] = [
     stawkaZaKm: 17.76,
   },
   {
-    label: 'HDS 12t',
+    label: 'HDS 12,0t',
     strefy: [
       { maxKm: 5, cena: 365.85 },
       { maxKm: 10, cena: 402.44 },
@@ -110,13 +110,13 @@ interface StawkaZew {
 
 const STAWKI_ZEW: StawkaZew[] = [
   // HDS 12T — KAT, SOS, GL, DG
-  { typCennikowy: 'HDS 12t', oddzial: 'KAT', punkty: [{ km: 10, cena: 350 }, { km: 20, cena: 450 }], stawkaZaKmPonad20: null },
-  { typCennikowy: 'HDS 12t', oddzial: 'SOS', punkty: [{ km: 10, cena: 370 }, { km: 15, cena: 400 }, { km: 20, cena: 420 }, { km: 30, cena: 450 }], stawkaZaKmPonad20: null },
-  { typCennikowy: 'HDS 12t', oddzial: 'GL', punkty: [{ km: 5, cena: 380 }, { km: 10, cena: 380 }, { km: 15, cena: 430 }, { km: 20, cena: 480 }, { km: 30, cena: 550 }], stawkaZaKmPonad20: null },
-  { typCennikowy: 'HDS 12t', oddzial: 'DG', punkty: [{ km: 5, cena: 300 }, { km: 10, cena: 350 }, { km: 15, cena: 400 }, { km: 20, cena: 450 }], stawkaZaKmPonad20: null },
+  { typCennikowy: 'HDS 12,0t', oddzial: 'KAT', punkty: [{ km: 10, cena: 350 }, { km: 20, cena: 450 }], stawkaZaKmPonad20: null },
+  { typCennikowy: 'HDS 12,0t', oddzial: 'SOS', punkty: [{ km: 10, cena: 370 }, { km: 15, cena: 400 }, { km: 20, cena: 420 }, { km: 30, cena: 450 }], stawkaZaKmPonad20: null },
+  { typCennikowy: 'HDS 12,0t', oddzial: 'GL', punkty: [{ km: 5, cena: 380 }, { km: 10, cena: 380 }, { km: 15, cena: 430 }, { km: 20, cena: 480 }, { km: 30, cena: 550 }], stawkaZaKmPonad20: null },
+  { typCennikowy: 'HDS 12,0t', oddzial: 'DG', punkty: [{ km: 5, cena: 300 }, { km: 10, cena: 350 }, { km: 15, cena: 400 }, { km: 20, cena: 450 }], stawkaZaKmPonad20: null },
 
   // HDS 12T — Oświęcim
-  { typCennikowy: 'HDS 12t', oddzial: 'OS', punkty: [{ km: 5, cena: 300 }, { km: 15, cena: 350 }, { km: 20, cena: 450 }, { km: 30, cena: 550 }, { km: 40, cena: 650 }], stawkaZaKmPonad20: 7 },
+  { typCennikowy: 'HDS 12,0t', oddzial: 'OS', punkty: [{ km: 5, cena: 300 }, { km: 15, cena: 350 }, { km: 20, cena: 450 }, { km: 30, cena: 550 }, { km: 40, cena: 650 }], stawkaZaKmPonad20: 7 },
 
   // do 1,2T — tylko GL
   { typCennikowy: 'do 1,2t bez windy', oddzial: 'GL', punkty: [{ km: 5, cena: 100 }, { km: 10, cena: 120 }, { km: 15, cena: 140 }, { km: 20, cena: 160 }], stawkaZaKmPonad20: null },
@@ -131,10 +131,12 @@ const TYP_MAPPING: Record<string, string> = {
   'Winda 1,8t': 'z windą do 1,8t',
   'Winda 6,3t': 'z windą do 6t',
   'Winda MAX 15,8t': 'z windą do 15t',
-  'HDS 8,9t': 'HDS 9t',
-  'HDS 9,1t': 'HDS 9t',
-  'HDS 11,7t': 'HDS 12t',
-  'HDS 12T': 'HDS 12t',
+  'HDS 8,9t': 'HDS 9,0t',
+  'HDS 9,0t': 'HDS 9,0t',
+  'HDS 9,1t': 'HDS 9,0t',
+  'HDS 11,7t': 'HDS 12,0t',
+  'HDS 12,0t': 'HDS 12,0t',
+  'HDS 12T': 'HDS 12,0t',
 };
 
 // Typy dostępne w kalkulatorze (label cennikowy)
@@ -157,14 +159,14 @@ const CENNIKOWY_TO_SYSTEMOWE: Record<string, string[]> = {
   'z windą do 1,8t': ['Winda 1,8t'],
   'z windą do 6t': ['Winda 6,3t'],
   'z windą do 15t': ['Winda MAX 15,8t'],
-  'HDS 9t': ['HDS 8,9t', 'HDS 9,1t'],
-  'HDS 12t': ['HDS 11,7t', 'HDS 12T'],
+  'HDS 9,0t': ['HDS 9,0t', 'HDS 8,9t', 'HDS 9,1t'],
+  'HDS 12,0t': ['HDS 12,0t', 'HDS 11,7t', 'HDS 12T'],
 };
 
 // Hierarchia fallback: jeśli nie ma danego typu, próbuj mniejszy
 const FALLBACK_CHAIN: Record<string, string[]> = {
-  'HDS 12t': ['HDS 9t'],
-  'HDS 9t': [],
+  'HDS 12,0t': ['HDS 9,0t'],
+  'HDS 9,0t': [],
   'z windą do 15t': ['z windą do 6t', 'z windą do 1,8t'],
   'z windą do 6t': ['z windą do 1,8t'],
   'z windą do 1,8t': [],

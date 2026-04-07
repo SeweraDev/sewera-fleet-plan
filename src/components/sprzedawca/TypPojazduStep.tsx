@@ -10,10 +10,10 @@ const ERP_TYPES = [
   { kod: 'C', opis: 'Winda do 1,8t', typ: 'Winda 1,8t' },
   { kod: 'D', opis: 'Winda do 6t', typ: 'Winda 6,3t' },
   { kod: 'E', opis: 'Winda duża MAX 15,8t', typ: 'Winda MAX 15,8t' },
-  { kod: 'F', opis: 'HDS duży', typ: 'HDS 11,7t' },
-  { kod: 'G', opis: 'HDS duży + przyczepa', typ: 'HDS 11,7t' },
-  { kod: 'H', opis: 'HDS średni', typ: 'HDS 8,9t' },
-  { kod: 'I', opis: 'HDS średni + przyczepa', typ: 'HDS 8,9t' },
+  { kod: 'F', opis: 'HDS duży', typ: 'HDS 12,0t' },
+  { kod: 'G', opis: 'HDS duży + przyczepa', typ: 'HDS 12,0t' },
+  { kod: 'H', opis: 'HDS średni', typ: 'HDS 9,0t' },
+  { kod: 'I', opis: 'HDS średni + przyczepa', typ: 'HDS 9,0t' },
 ];
 
 interface TypPojazduStepProps {

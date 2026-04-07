@@ -24,9 +24,8 @@ const TYPY_POJAZDOW = [
   'Winda 1,8t',
   'Winda 6,3t',
   'Winda MAX 15,8t',
-  'HDS 8,9t',
-  'HDS 9,1t',
-  'HDS 11,7t',
+  'HDS 9,0t',
+  'HDS 12,0t',
 ];
 
 const UPRAWNIENIA = ['B', 'C', 'C_HDS'];
