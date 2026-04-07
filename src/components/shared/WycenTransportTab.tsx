@@ -36,6 +36,8 @@ interface WynikOddzialu {
   uzytTyp: string | null;
   /** Czy typ jest fallback (np. HDS 9t zamiast 12t) */
   isFallback: boolean;
+  /** Typy aut zewnętrznych dostępne w oddziale */
+  zewTypy: string[];
 }
 
 const MAX_KM_INNE_ODDZIALY = 25;
@@ -159,6 +161,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           jestMojOddzial: kod === mojKod,
           uzytTyp,
           isFallback,
+          zewTypy: [...zewTypy],
         });
       }
 
@@ -291,6 +294,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.isFallback && w.uzytTyp && (
                             <div className="text-xs text-orange-600 dark:text-orange-400">
                               ↳ auto: {w.uzytTyp}
+                            </div>
+                          )}
+                          {w.zewTypy.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              🚛 zew: {w.zewTypy.join(', ')}
                             </div>
                           )}
                         </td>
