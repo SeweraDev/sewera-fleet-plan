@@ -359,12 +359,12 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
       {/* Dialog odpinania zlecenia z kursu — krok 1 */}
       <ConfirmDialog
         open={odpinStep === 1}
-        onOpenChange={(open) => { if (!open) { setOdpinStep(0); setOdpinZl(null); } }}
+        onOpenChange={(open) => { if (!open && odpinStep === 1) { setOdpinStep(0); setOdpinZl(null); } }}
         title="Odpiąć zlecenie z kursu?"
         description={`Czy chcesz przenieść zlecenie ${odpinZl?.numer || ''} z powrotem do puli zleceń bez kursu?`}
         confirmLabel="Tak, odepnij"
         destructive
-        onConfirm={() => setOdpinStep(2)}
+        onConfirm={() => { setOdpinStep(2); }}
       />
       {/* Dialog odpinania zlecenia z kursu — krok 2 (potwierdzenie) */}
       <ConfirmDialog
@@ -376,7 +376,8 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         destructive
         onConfirm={async () => {
           if (!odpinZl) return;
-          await supabase.from('kurs_przystanki').delete().eq('id', odpinZl.przId);
+          // Usuń przystanek z kursu (po zlecenie_id żeby złapać wszystkie WZ)
+          await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', odpinZl.zlId);
           await supabase.from('zlecenia').update({ status: 'robocza', kurs_id: null } as any).eq('id', odpinZl.zlId);
           setOdpinStep(0);
           setOdpinZl(null);
