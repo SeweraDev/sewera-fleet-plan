@@ -102,19 +102,20 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         if (kod) oddzialIdToKod.set(o.id, kod);
       });
 
-      // Buduj mapę: kod oddziału → Set typów systemowych (własne + zewnętrzne)
-      const flotaPerOddzial = new Map<string, Set<string>>();
-      const addToFlotaMap = (data: any[]) => {
+      // Buduj OSOBNE mapy: własne (Sewera) vs zewnętrzne
+      const buildTypMap = (data: any[]) => {
+        const map = new Map<string, Set<string>>();
         data.forEach(f => {
           if (!f.oddzial_id) return;
           const kod = oddzialIdToKod.get(f.oddzial_id);
           if (!kod) return;
-          if (!flotaPerOddzial.has(kod)) flotaPerOddzial.set(kod, new Set());
-          flotaPerOddzial.get(kod)!.add(f.typ);
+          if (!map.has(kod)) map.set(kod, new Set());
+          map.get(kod)!.add(f.typ);
         });
+        return map;
       };
-      addToFlotaMap(flotaData || []);
-      addToFlotaMap(flotaZewData || []);
+      const flotaWlasna = buildTypMap(flotaData || []);     // cena Sewera
+      const flotaZew = buildTypMap(flotaZewData || []);      // cena Zewnętrzna
 
       // 3. Oblicz odległość od KAŻDEGO oddziału
       const oddzialy = Object.entries(ODDZIAL_COORDS);
@@ -130,9 +131,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const km = await getRouteDistance(dane, coords);
         if (km === null) continue;
 
-        // Sprawdź czy oddział ma wybrany typ lub fallback
-        const flotaTypy = flotaPerOddzial.get(kod) || new Set<string>();
-        const bestType = findBestAvailableType(typPojazdu, flotaTypy);
+        // Sewera (wew) — tylko jeśli oddział ma auto WŁASNE (flota)
+        const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
+        const bestType = findBestAvailableType(typPojazdu, wlasneTypy);
 
         let kosztWew: { netto: number; brutto: number } | null = null;
         let uzytTyp: string | null = null;
@@ -144,8 +145,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           isFallback = bestType.fallback;
         }
 
-        // Transport zew — zawsze dla wybranego typu (nie fallback)
-        const kosztZew = obliczKosztZew(km, typPojazdu, kod);
+        // Transport zew — stawka z tabeli + oddział musi mieć auto zew
+        const zewTypy = flotaZew.get(kod) || new Set<string>();
+        const hasZewVehicle = findBestAvailableType(typPojazdu, zewTypy) !== null;
+        const kosztZew = hasZewVehicle ? obliczKosztZew(km, typPojazdu, kod) : null;
 
         results.push({
           kod,
