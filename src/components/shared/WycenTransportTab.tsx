@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import {
   ODDZIAL_COORDS,
   NAZWA_TO_KOD,
@@ -16,6 +17,7 @@ import {
   obliczKosztWew,
   obliczKosztZew,
   maStawkiZew,
+  findBestAvailableType,
 } from '@/lib/stawki-transportowe';
 
 interface WycenTransportTabProps {
@@ -30,6 +32,10 @@ interface WynikOddzialu {
   kosztWew: { netto: number; brutto: number } | null;
   kosztZew: { netto: number; brutto: number } | null;
   jestMojOddzial: boolean;
+  /** Typ cennikowy użyty do kalkulacji (może być fallback) */
+  uzytTyp: string | null;
+  /** Czy typ jest fallback (np. HDS 9t zamiast 12t) */
+  isFallback: boolean;
 }
 
 const MAX_KM_INNE_ODDZIALY = 15;
@@ -74,9 +80,35 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         return;
       }
 
-      // 2. Oblicz odległość od KAŻDEGO oddziału
+      // 2. Pobierz flotę WSZYSTKICH oddziałów (aktywne pojazdy)
+      const { data: flotaData } = await supabase
+        .from('flota')
+        .select('typ, oddzial_id')
+        .eq('aktywny', true);
+
+      // Pobierz nazwy oddziałów → mapuj oddzial_id → kod
+      const { data: oddzialyData } = await supabase
+        .from('oddzialy')
+        .select('id, nazwa');
+
+      const oddzialIdToKod = new Map<number, string>();
+      (oddzialyData || []).forEach(o => {
+        const kod = NAZWA_TO_KOD[o.nazwa];
+        if (kod) oddzialIdToKod.set(o.id, kod);
+      });
+
+      // Buduj mapę: kod oddziału → Set typów systemowych
+      const flotaPerOddzial = new Map<string, Set<string>>();
+      (flotaData || []).forEach(f => {
+        if (!f.oddzial_id) return;
+        const kod = oddzialIdToKod.get(f.oddzial_id);
+        if (!kod) return;
+        if (!flotaPerOddzial.has(kod)) flotaPerOddzial.set(kod, new Set());
+        flotaPerOddzial.get(kod)!.add(f.typ);
+      });
+
+      // 3. Oblicz odległość od KAŻDEGO oddziału
       const oddzialy = Object.entries(ODDZIAL_COORDS);
-      // Deduplikacja R/KAT (te same współrzędne) — pokaż R tylko jeśli to oddział usera
       const oddzialyFiltered = oddzialy.filter(([kod]) => {
         if (kod === 'R' && mojKod !== 'R') return false;
         if (kod === 'KAT' && mojKod === 'R') return false;
@@ -89,7 +121,21 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const km = await getRouteDistance(dane, coords);
         if (km === null) continue;
 
-        const kosztWew = obliczKosztWew(km, typPojazdu);
+        // Sprawdź czy oddział ma wybrany typ lub fallback
+        const flotaTypy = flotaPerOddzial.get(kod) || new Set<string>();
+        const bestType = findBestAvailableType(typPojazdu, flotaTypy);
+
+        let kosztWew: { netto: number; brutto: number } | null = null;
+        let uzytTyp: string | null = null;
+        let isFallback = false;
+
+        if (bestType) {
+          kosztWew = obliczKosztWew(km, bestType.typ);
+          uzytTyp = bestType.typ;
+          isFallback = bestType.fallback;
+        }
+
+        // Transport zew — zawsze dla wybranego typu (nie fallback)
         const kosztZew = obliczKosztZew(km, typPojazdu, kod);
 
         results.push({
@@ -99,16 +145,17 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           kosztWew,
           kosztZew,
           jestMojOddzial: kod === mojKod,
+          uzytTyp,
+          isFallback,
         });
       }
 
-      // 3. Filtruj: mój oddział zawsze + inne ≤15 km
+      // 4. Filtruj: mój oddział zawsze + inne ≤15 km (które mają auto lub zew)
       const mojOddzial = results.find(r => r.jestMojOddzial);
       const inne = results
-        .filter(r => !r.jestMojOddzial && r.km <= MAX_KM_INNE_ODDZIALY)
-        .sort((a, b) => (a.kosztWew?.netto ?? 9999) - (b.kosztWew?.netto ?? 9999));
+        .filter(r => !r.jestMojOddzial && r.km <= MAX_KM_INNE_ODDZIALY && (r.kosztWew || r.kosztZew))
+        .sort((a, b) => (a.kosztWew?.netto ?? a.kosztZew?.netto ?? 9999) - (b.kosztWew?.netto ?? b.kosztZew?.netto ?? 9999));
 
-      // Max 3 wyniki łącznie
       const finalResults: WynikOddzialu[] = [];
       if (mojOddzial) finalResults.push(mojOddzial);
       for (const r of inne) {
@@ -116,11 +163,14 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         finalResults.push(r);
       }
 
-      // Sortuj po cenie netto wew rosnąco
-      finalResults.sort((a, b) => (a.kosztWew?.netto ?? 9999) - (b.kosztWew?.netto ?? 9999));
+      // Sortuj po najtańszej dostępnej cenie
+      finalResults.sort((a, b) => {
+        const priceA = Math.min(a.kosztWew?.netto ?? 9999, a.kosztZew?.netto ?? 9999);
+        const priceB = Math.min(b.kosztWew?.netto ?? 9999, b.kosztZew?.netto ?? 9999);
+        return priceA - priceB;
+      });
 
-      // Sprawdź czy jest jakakolwiek stawka zew
-      const jestZew = maStawkiZew(typPojazdu) && finalResults.some(r => r.kosztZew !== null);
+      const jestZew = finalResults.some(r => r.kosztZew !== null);
       setPokazZew(jestZew);
 
       setWyniki(finalResults);
@@ -196,7 +246,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted">
-                  {/* Wiersz grupujący: Sewera / Zewnętrzny */}
                   <tr>
                     <th className="p-2 border-r border-gray-400" colSpan={2}></th>
                     <th className="text-center p-2 font-semibold border-b border-r border-gray-400" colSpan={2}>Sewera</th>
@@ -226,6 +275,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.jestMojOddzial ? '📍 ' : ''}{w.nazwa}
                           {w.jestMojOddzial && (
                             <span className="text-xs text-muted-foreground ml-1">(Twój)</span>
+                          )}
+                          {w.isFallback && w.uzytTyp && (
+                            <div className="text-xs text-orange-600 dark:text-orange-400">
+                              ↳ auto: {w.uzytTyp}
+                            </div>
                           )}
                         </td>
                         <td className="text-center p-3 tabular-nums border-r border-gray-400">{w.km} km</td>
@@ -279,10 +333,6 @@ function formatPLN(amount: number): string {
   }) + ' zł';
 }
 
-/**
- * Kolorowanie wierszy: zielony (najtańszy), żółty (pośredni), czerwony (najdroższy).
- * Wyniki posortowane rosnąco po cenie.
- */
 function getRowColor(idx: number, total: number): string {
   if (total === 1) return 'bg-green-200 dark:bg-green-900/50';
   if (idx === 0) return 'bg-green-200 dark:bg-green-900/50';

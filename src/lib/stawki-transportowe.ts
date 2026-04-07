@@ -143,6 +143,60 @@ export function mapTypNaCennikowy(typ: string): string | null {
 }
 
 // ============================================================
+// FALLBACK TYPÓW — hierarchia "w dół" gdy oddział nie ma danego auta
+// ============================================================
+
+// Mapowanie typ cennikowy → typy systemowe (flota.typ)
+const CENNIKOWY_TO_SYSTEMOWE: Record<string, string[]> = {
+  'do 700kg': [],
+  'do 1,2t bez windy': ['Dostawczy 1,2t'],
+  'z windą do 1,8t': ['Winda 1,8t'],
+  'z windą do 6t': ['Winda 6,3t'],
+  'z windą do 15t': ['Winda MAX 15,8t'],
+  'HDS 9t': ['HDS 8,9t', 'HDS 9,1t'],
+  'HDS 12t': ['HDS 11,7t'],
+};
+
+// Hierarchia fallback: jeśli nie ma danego typu, próbuj mniejszy
+const FALLBACK_CHAIN: Record<string, string[]> = {
+  'HDS 12t': ['HDS 9t'],
+  'HDS 9t': [],
+  'z windą do 15t': ['z windą do 6t', 'z windą do 1,8t'],
+  'z windą do 6t': ['z windą do 1,8t'],
+  'z windą do 1,8t': [],
+  'do 1,2t bez windy': ['do 700kg'],
+  'do 700kg': [],
+};
+
+/**
+ * Znajdź najlepszy dostępny typ cennikowy dla danego oddziału.
+ * @param typCennikowy — wybrany typ (np. "HDS 12t")
+ * @param flotaTypy — Set typów systemowych dostępnych na oddziale (np. Set(["HDS 8,9t", "Winda 6,3t"]))
+ * @returns { typ: string, fallback: boolean } — typ cennikowy do użycia + czy to fallback
+ */
+export function findBestAvailableType(
+  typCennikowy: string,
+  flotaTypy: Set<string>
+): { typ: string; fallback: boolean } | null {
+  // Sprawdź czy oddział ma dokładny typ
+  const systemowe = CENNIKOWY_TO_SYSTEMOWE[typCennikowy] || [];
+  if (systemowe.some(t => flotaTypy.has(t))) {
+    return { typ: typCennikowy, fallback: false };
+  }
+
+  // Próbuj fallback chain
+  const chain = FALLBACK_CHAIN[typCennikowy] || [];
+  for (const fallbackTyp of chain) {
+    const fbSystemowe = CENNIKOWY_TO_SYSTEMOWE[fallbackTyp] || [];
+    if (fbSystemowe.some(t => flotaTypy.has(t))) {
+      return { typ: fallbackTyp, fallback: true };
+    }
+  }
+
+  return null; // oddział nie ma żadnego pasującego auta
+}
+
+// ============================================================
 // OBLICZANIE KOSZTÓW — TRANSPORT WEWNĘTRZNY
 // ============================================================
 
