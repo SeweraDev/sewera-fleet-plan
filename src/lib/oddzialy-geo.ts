@@ -83,6 +83,9 @@ export async function geocodeAddress(adres: string): Promise<{ lat: number; lng:
 }
 
 // Odległość po drogach → OSRM (darmowy publiczny serwer)
+// Korekta ×1.1 — OSRM zaniża dystans vs trasy ciężarówek
+const OSRM_CORRECTION = 1.1;
+
 export async function getRouteDistance(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number }
@@ -92,7 +95,7 @@ export async function getRouteDistance(
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && data.routes?.[0]) {
-      const km = Math.round(data.routes[0].distance / 100) / 10;
+      const km = Math.round(data.routes[0].distance * OSRM_CORRECTION / 100) / 10;
       return km;
     }
     console.warn(`[osrm] no route`, data);
@@ -112,7 +115,7 @@ export async function calculateRouteTotal(
   const from = getOddzialCoordsByName(oddzialNazwa);
   if (!from) return null;
 
-  // Geocoduj wszystkie adresy (sekwencyjnie — Nominatim rate limit)
+  // Geocoduj wszystkie adresy (sekwencyjnie)
   const waypoints: { lat: number; lng: number }[] = [from];
   for (const adres of adresy) {
     const coords = await geocodeAddress(adres);
@@ -128,8 +131,7 @@ export async function calculateRouteTotal(
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && data.routes?.[0]) {
-      const km = Math.round(data.routes[0].distance / 100) / 10;
-      console.log(`[osrm-route] ${waypoints.length} punktów → ${km} km`);
+      const km = Math.round(data.routes[0].distance * OSRM_CORRECTION / 100) / 10;
       return km;
     }
   } catch (e) {
