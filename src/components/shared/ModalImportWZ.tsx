@@ -816,8 +816,13 @@ export function parseWZText(rawText: string): WZImportData {
       for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
         const l = lines[i];
         if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano|Lp\.)/i.test(l)) break;
-        if (/^Budowa/i.test(l) || /ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
-          addrParts.push(l);
+        if (/^(Magazyn|Forma\s+płatn|NIP:|NR BDO:)/i.test(l)) break;
+        const trimmed = l.trim();
+        if (trimmed.length > 0 && (
+          /^Budowa/i.test(l) || /ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0
+          || /^[A-ZŁŚŻŹĆŃÓĘ\s\-\.]{3,}$/i.test(trimmed) // nazwa miasta/lokalizacji
+        )) {
+          addrParts.push(trimmed);
         }
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
