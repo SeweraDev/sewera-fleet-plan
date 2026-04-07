@@ -134,6 +134,7 @@ const TYP_MAPPING: Record<string, string> = {
   'HDS 8,9t': 'HDS 9t',
   'HDS 9,1t': 'HDS 9t',
   'HDS 11,7t': 'HDS 12t',
+  'HDS 12T': 'HDS 12t',
 };
 
 // Typy dostępne w kalkulatorze (label cennikowy)
@@ -157,7 +158,7 @@ const CENNIKOWY_TO_SYSTEMOWE: Record<string, string[]> = {
   'z windą do 6t': ['Winda 6,3t'],
   'z windą do 15t': ['Winda MAX 15,8t'],
   'HDS 9t': ['HDS 8,9t', 'HDS 9,1t'],
-  'HDS 12t': ['HDS 11,7t'],
+  'HDS 12t': ['HDS 11,7t', 'HDS 12T'],
 };
 
 // Hierarchia fallback: jeśli nie ma danego typu, próbuj mniejszy

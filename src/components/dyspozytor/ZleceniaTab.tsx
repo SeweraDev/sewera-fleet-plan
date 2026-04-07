@@ -27,6 +27,7 @@ const TYP_CAPACITY: Record<string, { kg: number; m3: number; pal: number }> = {
   'HDS 8,9t': { kg: 8900, m3: 0, pal: 12 },
   'HDS 9,1t': { kg: 9100, m3: 0, pal: 12 },
   'HDS 11,7t': { kg: 11700, m3: 0, pal: 12 },
+  'HDS 12T': { kg: 12000, m3: 0, pal: 12 },
 };
 
 function capacityColor(pct: number) {
