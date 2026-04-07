@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -16,6 +16,9 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CalendarIcon } from 'lucide-react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
+import { NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
+
+const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView').then(m => ({ default: m.ZleceniaMapView })));
 
 // Mapowanie typ pojazdu → typowa pojemność (gdy brak przypisanego pojazdu)
 // Wartości orientacyjne — dokładne dane per pojazd są w tabeli flota
@@ -236,11 +239,13 @@ function DeadlineExtendPicker({ zlecenie, onDone }: { zlecenie: ZlecenieOddzialu
 
 export function ZleceniaTab({
   oddzialId,
+  oddzialNazwa,
   dzien,
   pastOnly = false,
   onOpenKursModal,
 }: {
   oddzialId: number;
+  oddzialNazwa?: string;
   dzien?: string;
   pastOnly?: boolean;
   onOpenKursModal?: (zlecenieId: string) => void;
@@ -251,6 +256,7 @@ export function ZleceniaTab({
   const [editZlId, setEditZlId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'dzien' | 'status' | 'godzina' | 'kg' | 'numer' | 'km'>('dzien');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [showMap, setShowMap] = useState(false);
 
   const toggleSort = (col: typeof sortBy) => {
     if (sortBy === col) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
@@ -354,6 +360,17 @@ export function ZleceniaTab({
         </div>
       )}
 
+      {/* Mapa dostaw */}
+      {showMap && (
+        <Suspense fallback={<div className="rounded-lg border bg-muted/50 p-8 text-center text-sm">Ładowanie mapy...</div>}>
+          <ZleceniaMapView
+            zlecenia={bezKursu}
+            oddzialCoords={oddzialNazwa ? (ODDZIAL_COORDS[NAZWA_TO_KOD[oddzialNazwa] || ''] || null) : null}
+            oddzialNazwa={oddzialNazwa || ''}
+          />
+        </Suspense>
+      )}
+
       <div className="flex gap-2 flex-wrap">
         {ZL_STATUS_FILTERS.map(f => (
           <button
@@ -368,6 +385,16 @@ export function ZleceniaTab({
             {f.label} ({counts[f.key]})
           </button>
         ))}
+        <button
+          onClick={() => setShowMap(v => !v)}
+          className={`ml-auto px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            showMap
+              ? 'bg-blue-600 text-white'
+              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          }`}
+        >
+          🗺️ Mapa
+        </button>
       </div>
 
       {filtered.length === 0 ? (

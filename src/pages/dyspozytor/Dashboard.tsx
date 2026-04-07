@@ -742,6 +742,7 @@ export default function DyspozytorDashboard() {
               {activeId === 'zlecenia' && (
                 <ZleceniaTab
                   oddzialId={oddzialId}
+                  oddzialNazwa={oddzialNazwa}
                   dzien={dzien}
                   onOpenKursModal={(zlId) => { setPreSelectedZlId(zlId); setShowModal(true); }}
                 />

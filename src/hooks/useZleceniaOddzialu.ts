@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateDistance } from '@/lib/oddzialy-geo';
+import { calculateDistance, geocodeAddress } from '@/lib/oddzialy-geo';
 
 export interface ZlecenieOddzialuDto {
   id: string;
@@ -18,6 +18,8 @@ export interface ZlecenieOddzialuDto {
   suma_m3: number;
   suma_palet: number;
   dystans_km: number | null;
+  lat: number | null;
+  lng: number | null;
   deadline_wz: string | null;
   ma_wz: boolean;
   flaga_brak_wz: boolean;
@@ -136,6 +138,8 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
         suma_m3: wzInfo?.suma_m3 || 0,
         suma_palet: wzInfo?.suma_palet || 0,
         dystans_km: null,
+        lat: null,
+        lng: null,
         deadline_wz: (z as any).deadline_wz || null,
         ma_wz: !!(z as any).ma_wz,
         flaga_brak_wz: !!(z as any).flaga_brak_wz,
@@ -152,10 +156,14 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
         for (const z of zlWithAddress) {
           const adres = wzMap.get(z.id)?.adres;
           if (!adres) continue;
+          const coords = await geocodeAddress(adres);
           const km = await calculateDistance(oddzialNazwa, adres);
-          if (km != null) {
-            setZlecenia(prev => prev.map(zl => zl.id === z.id ? { ...zl, dystans_km: km } : zl));
-          }
+          setZlecenia(prev => prev.map(zl => zl.id === z.id ? {
+            ...zl,
+            dystans_km: km ?? zl.dystans_km,
+            lat: coords?.lat ?? zl.lat,
+            lng: coords?.lng ?? zl.lng,
+          } : zl));
         }
       })();
     }
