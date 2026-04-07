@@ -18,7 +18,8 @@ import { CalendarIcon } from 'lucide-react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 import { NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 
-import { ZleceniaMapView } from '@/components/dyspozytor/ZleceniaMapView';
+import { lazy, Suspense } from 'react';
+const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView').then(m => ({ default: m.ZleceniaMapView })));
 
 // Mapowanie typ pojazdu → typowa pojemność (gdy brak przypisanego pojazdu)
 // Wartości orientacyjne — dokładne dane per pojazd są w tabeli flota
@@ -362,11 +363,13 @@ export function ZleceniaTab({
 
       {/* Mapa dostaw */}
       {showMap && (
-        <ZleceniaMapView
-          zlecenia={bezKursu}
-          oddzialCoords={oddzialNazwa ? (ODDZIAL_COORDS[NAZWA_TO_KOD[oddzialNazwa] || ''] || null) : null}
-          oddzialNazwa={oddzialNazwa || ''}
-        />
+        <Suspense fallback={<div className="rounded-lg border bg-muted/50 p-6 text-center text-sm">Ładowanie mapy...</div>}>
+          <ZleceniaMapView
+            zlecenia={bezKursu}
+            oddzialCoords={oddzialNazwa ? (ODDZIAL_COORDS[NAZWA_TO_KOD[oddzialNazwa] || ''] || null) : null}
+            oddzialNazwa={oddzialNazwa || ''}
+          />
+        </Suspense>
       )}
 
       <div className="flex gap-2 flex-wrap">
