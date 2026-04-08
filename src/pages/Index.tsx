@@ -14,3 +14,4 @@ const PlaceholderIndex = () => {
 const Index = PlaceholderIndex;
 
 export default Index;
+.
