@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
+import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 
 const GODZ_COLORS: Record<string, string> = {
   'do 8:00': '#ef4444',
@@ -85,15 +86,34 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
 
       const allPoints: [number, number][] = [];
 
-      if (oddzialCoords) {
-        allPoints.push([oddzialCoords.lat, oddzialCoords.lng]);
-        const baseIcon = L.divIcon({
+      // Piny wszystkich oddziałów Sewera
+      const shownCodes = new Set<string>();
+      for (const [kod, coords] of Object.entries(ODDZIAL_COORDS)) {
+        // R i KAT mają te same współrzędne — pokaż raz
+        const coordKey = coords.lat + ',' + coords.lng;
+        if (shownCodes.has(coordKey)) continue;
+        shownCodes.add(coordKey);
+
+        const isMine = oddzialCoords
+          && Math.abs(coords.lat - oddzialCoords.lat) < 0.001
+          && Math.abs(coords.lng - oddzialCoords.lng) < 0.001;
+
+        const size = isMine ? 30 : 22;
+        const bg = isMine ? '#1e40af' : '#60a5fa';
+        const border = isMine ? '3px solid white' : '2px solid white';
+        const shadow = isMine ? '0 2px 8px rgba(0,0,0,.5)' : '0 1px 4px rgba(0,0,0,.3)';
+        const fontSize = isMine ? '14px' : '10px';
+        const label = isMine ? kod : kod;
+
+        const icon = L.divIcon({
           className: '',
-          html: '<div style="background:#1e40af;width:30px;height:30px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:white;font-size:16px">&#127981;</div>',
-          iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -17],
+          html: '<div style="background:' + bg + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:white;font-size:' + fontSize + ';font-weight:bold">' + label + '</div>',
+          iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2 - 2],
         });
-        L.marker([oddzialCoords.lat, oddzialCoords.lng], { icon: baseIcon })
-          .addTo(map).bindPopup('<strong>' + oddzialNazwa + '</strong><br/>Oddzial bazowy');
+
+        L.marker([coords.lat, coords.lng], { icon: icon, zIndexOffset: isMine ? 1000 : 0 })
+          .addTo(map)
+          .bindPopup('<strong>' + kod + '</strong><br/>' + coords.adres + (isMine ? '<br/><em>Twoj oddzial</em>' : ''));
       }
 
       // Grupuj wg lokalizacji
