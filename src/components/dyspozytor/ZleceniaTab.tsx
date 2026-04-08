@@ -318,7 +318,6 @@ export function ZleceniaTab({
   const sumaKg = bezKursu.reduce((s, z) => s + z.suma_kg, 0);
   const sumaM3 = bezKursu.reduce((s, z) => s + z.suma_m3, 0);
   const sumaPal = bezKursu.reduce((s, z) => s + z.suma_palet, 0);
-  const sumaKm = bezKursu.reduce((s, z) => s + (z.dystans_km ?? 0), 0);
 
   if (loading) return <p className="text-muted-foreground text-center py-8">Ładowanie zleceń...</p>;
 
@@ -342,11 +341,6 @@ export function ZleceniaTab({
             <span className="text-blue-600 dark:text-blue-400">
               🧱 {Math.round(sumaPal)} pal
             </span>
-            {sumaKm > 0 && (
-              <span className="text-blue-600 dark:text-blue-400">
-                🛣️ ~{Math.round(sumaKm)} km
-              </span>
-            )}
           </div>
         </div>
       )}
@@ -420,9 +414,6 @@ export function ZleceniaTab({
                   </TableHead>
                   <TableHead className="text-right">m³</TableHead>
                   <TableHead className="text-right">Pal.</TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('km')}>
-                    km {sortBy === 'km' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-                  </TableHead>
                   <TableHead>Typ</TableHead>
                   <TableHead>Kurs</TableHead>
                   <TableHead>WZ</TableHead>
@@ -444,7 +435,6 @@ export function ZleceniaTab({
                     <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
                     <TableCell className="text-right">{z.suma_m3 ? Math.round(z.suma_m3 * 10) / 10 : '—'}</TableCell>
                     <TableCell className="text-right">{z.suma_palet || '—'}</TableCell>
-                    <TableCell className="text-right text-xs">{z.dystans_km != null ? `${z.dystans_km}` : '...'}</TableCell>
                     <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell>
                       {z.kurs_numer

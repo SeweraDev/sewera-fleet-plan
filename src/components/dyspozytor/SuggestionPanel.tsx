@@ -89,7 +89,6 @@ export function SuggestionPanel({ orders, availableTypes }: Props) {
                   <span>{Math.round(ts.totalKg).toLocaleString('pl-PL')} kg</span>
                   {ts.totalM3 > 0 && <span>{Math.round(ts.totalM3 * 10) / 10} m3</span>}
                   {ts.totalPal > 0 && <span>{ts.totalPal} pal</span>}
-                  {ts.totalKm > 0 && <span className="text-muted-foreground">~{Math.round(ts.totalKm)} km</span>}
                   {ts.capacity && (
                     <span className={'ml-auto font-medium '
                       + (ts.minKursy > 1 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400')}>
