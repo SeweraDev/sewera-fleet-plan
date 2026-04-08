@@ -702,7 +702,7 @@ export function parseWZText(rawText: string): WZImportData {
 
   // Priority: find "Odbiorca" or "Nabywca" label and collect ALL lines after it
   // Zawsze zbieramy pełne dane — obcinanie adresu robimy później gdy adres dostawy jest inny
-  const odbLabelIdx = lines.findIndex((l) => /^(?:Odbiorca|Nabywca)\s*$/i.test(l));
+  const odbLabelIdx = lines.findIndex((l) => /^(?:Odbiorca|Nabywca)\s*$/i.test(l) || /(?:^|\s)(?:Odbiorca|Nabywca)\s*$/i.test(l));
   if (odbLabelIdx >= 0) {
     const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
     const nameParts: string[] = [];
@@ -782,15 +782,15 @@ export function parseWZText(rawText: string): WZImportData {
     const hasInitials = /\b[A-Z]\.[A-Z]\.?\b/.test(line);
     const allCapsName = line.split(/\s+/).filter((w) => /^[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}$/.test(w)).length >= 2;
     if (hasLegalForm || capsWords >= 3 || (hasInitials && allCapsName)) {
-      // Zbierz TYLKO nazwę firmy (bez adresu — adres wyciągamy z sekcji Adres dostawy)
+      // Zbierz nazwę firmy + dane teleadresowe (obcinanie robimy w post-processing)
       const parts = [line];
-      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
         const nl = lines[j];
         if (/NIP:|NR BDO:|Nr\s+ewid|Adres\s+dostawy|Budowa|Magazyn|Informacje|Termin/i.test(nl)) break;
-        // Linia z adresem — nie dodawaj do nazwy firmy
-        if (/^(?:ul|al|os|pl)\.\s/i.test(nl) || /^\d{2}-\d{3}\s/.test(nl)) break;
-        // Kontynuacja nazwy firmy (np. "KOMANDYTOWA" na osobnej linii)
-        if (/^[A-ZĄĆĘŁŃÓŚŹŻ]{3,}$/i.test(nl)) {
+        if (/^(Lp\.|Kod\s+towaru|Nazwa\s+towaru|Ilość|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(nl)) break;
+        if (/^\d+\.\s/.test(nl)) break; // product line
+        // Adres (ul./kod) lub kontynuacja nazwy — zbierz
+        if (/^(?:ul|al|os|pl)\.\s/i.test(nl) || /^\d{2}-\d{3}\s/.test(nl) || /^[A-ZĄĆĘŁŃÓŚŹŻ]{3,}$/i.test(nl)) {
           parts.push(nl);
           continue;
         }
