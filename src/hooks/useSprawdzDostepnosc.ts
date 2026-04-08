@@ -95,7 +95,7 @@ export function useSprawdzDostepnosc() {
     }
     const { data: allVehicles } = await query;
     if (!allVehicles || allVehicles.length === 0) {
-      setResult({ vehicles: [], anyFits: false, loading: false });
+      setResult({ vehicles: [], anyFits: false, loading: false, nextAvailable: null, searchingNext: false, freeSlots: [] });
       return;
     }
 
@@ -109,7 +109,7 @@ export function useSprawdzDostepnosc() {
     const vehicles = allVehicles.filter(v => !blockedIds.has(v.id));
 
     if (vehicles.length === 0) {
-      setResult({ vehicles: [], anyFits: false, loading: false });
+      setResult({ vehicles: [], anyFits: false, loading: false, nextAvailable: null, searchingNext: false, freeSlots: [] });
       return;
     }
 

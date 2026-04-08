@@ -75,7 +75,7 @@ export function EdytujKursModal({ open, onClose, kurs, dzien, oddzialId, flota, 
 
     const { error } = await supabase
       .from('kursy')
-      .update(updates)
+      .update(updates as any)
       .eq('id', kurs.id);
 
     if (error) {

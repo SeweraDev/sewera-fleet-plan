@@ -19,13 +19,13 @@ interface WzFormTabsProps {
 
 
 const EMPTY_WZ: WzInput = {
-  numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, uwagi: '',
+  numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '',
 };
 
 function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const addWz = () => setWzList([...wzList, { ...EMPTY_WZ }]);
 
-  const updateWz = (idx: number, field: keyof WzInput, value: string | number) => {
+  const updateWz = (idx: number, field: keyof WzInput, value: string | number | boolean) => {
     const copy = [...wzList];
     (copy[idx] as any)[field] = value;
     setWzList(copy);
@@ -161,7 +161,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview };
+    const newWz: WzInput = { ...preview, bez_palet: false, luzne_karton: false };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -373,7 +373,7 @@ function WzXlsTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     const newWzList: WzInput[] = selectedRows.map(r => ({
       numer_wz: r.numer_wz || '', nr_zamowienia: '', odbiorca: r.odbiorca || '',
       adres: r.adres || '', tel: '', masa_kg: r.masa_kg || 0,
-      objetosc_m3: 0, ilosc_palet: 0, uwagi: r.uwagi || '',
+      objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: r.uwagi || '',
     }));
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList(newWzList);
@@ -486,7 +486,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           }
         },
       });
-      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      await worker.setParameters({ tessedit_pageseg_mode: '6' as any });
       const { data: { text } } = await worker.recognize(file);
       await worker.terminate();
 
@@ -536,7 +536,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview };
+    const newWz: WzInput = { ...preview, bez_palet: false, luzne_karton: false };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -697,7 +697,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview };
+    const newWz: WzInput = { ...preview, bez_palet: false, luzne_karton: false };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
