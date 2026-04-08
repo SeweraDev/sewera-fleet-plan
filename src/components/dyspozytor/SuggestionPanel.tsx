@@ -68,10 +68,11 @@ interface Props {
   flota?: FlotaItem[];
   oddzialId: number;
   dzien: string;
+  oddzialCoords?: { lat: number; lng: number } | null;
   onRefresh: () => void;
 }
 
-export function SuggestionPanel({ orders, availableTypes, flota, oddzialId, dzien, onRefresh }: Props) {
+export function SuggestionPanel({ orders, availableTypes, flota, oddzialId, dzien, oddzialCoords, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -81,8 +82,8 @@ export function SuggestionPanel({ orders, availableTypes, flota, oddzialId, dzie
   );
 
   const typeSummary = useMemo(
-    () => computeTypeSummary(orders),
-    [orders]
+    () => computeTypeSummary(orders, oddzialCoords?.lat, oddzialCoords?.lng),
+    [orders, oddzialCoords?.lat, oddzialCoords?.lng]
   );
 
   if (suggestions.length === 0 && typeSummary.length === 0) return null;
@@ -133,37 +134,18 @@ export function SuggestionPanel({ orders, availableTypes, flota, oddzialId, dzie
     setBusy(null);
   };
 
-  // Utwórz kursy dla typu — rozdziel na min. N kursów
-  const handleCreateKursyForType = async (typ: string, orderIds: string[], minKursy: number) => {
-    const key = 'kursy-' + typ;
+  // Utwórz kursy wg zaplanowanych tras (z kierunkami)
+  const handleCreateKursyFromRoutes = async (ts: import('@/lib/suggestRoutes').TypeSummary) => {
+    const key = 'kursy-' + ts.typ;
     setBusy(key);
     try {
-      const vehicle = findFlotaByType(typ);
-      const cap = vehicle ? vehicle.ladownosc_kg : 0;
-
-      // Rozdziel zlecenia na kursy wg pojemności
-      const typOrders = orders.filter(o => orderIds.includes(o.id));
-      const kursy: string[][] = [];
-      let currentKurs: string[] = [];
-      let currentKg = 0;
-
-      for (const o of typOrders) {
-        if (cap > 0 && currentKg + o.suma_kg > cap && currentKurs.length > 0) {
-          kursy.push(currentKurs);
-          currentKurs = [];
-          currentKg = 0;
-        }
-        currentKurs.push(o.id);
-        currentKg += o.suma_kg;
-      }
-      if (currentKurs.length > 0) kursy.push(currentKurs);
-
+      const vehicle = findFlotaByType(ts.typ);
       let created = 0;
-      for (const ids of kursy) {
-        await createKurs(oddzialId, dzien, ids, vehicle?.id);
+      for (const route of ts.routes) {
+        await createKurs(oddzialId, dzien, route.orderIds, vehicle?.id);
         created++;
       }
-      toast.success(created + ' ' + (created === 1 ? 'kurs' : 'kursy') + ' ' + typ + ' utworzone');
+      toast.success(created + ' ' + (created === 1 ? 'kurs' : 'kursy') + ' ' + ts.label + ' utworzone');
       onRefresh();
     } catch (e: any) {
       toast.error('Blad: ' + e.message);
@@ -198,40 +180,55 @@ export function SuggestionPanel({ orders, availableTypes, flota, oddzialId, dzie
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">Zlecenia per typ pojazdu:</p>
               {typeSummary.map(ts => {
-                const orderIds = orders.filter(o => (o.typ_pojazdu || '_brak') === ts.typ).map(o => o.id);
                 const busyKey = 'kursy-' + ts.typ;
+                const SECTOR_ARROWS: Record<string, string> = {
+                  N: '↑', NE: '↗', E: '→', SE: '↘', S: '↓', SW: '↙', W: '←', NW: '↖', '?': '?'
+                };
                 return (
-                  <div
-                    key={ts.typ}
-                    className={'rounded-md border px-3 py-2 text-sm flex items-center gap-3 flex-wrap '
-                      + (ts.typ === '_brak'
-                        ? 'bg-gray-50 dark:bg-gray-900/30 border-gray-200 dark:border-gray-700'
-                        : 'bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700')}
-                  >
-                    <span className="font-semibold min-w-[120px]">
-                      {ts.typ === '_brak' ? '❓' : '🚛'} {ts.label}
-                    </span>
-                    <span className="text-muted-foreground">{ts.count} zl.</span>
-                    <span>{Math.round(ts.totalKg).toLocaleString('pl-PL')} kg</span>
-                    {ts.totalM3 > 0 && <span>{Math.round(ts.totalM3 * 10) / 10} m3</span>}
-                    {ts.totalPal > 0 && <span>{ts.totalPal} pal</span>}
-                    {ts.totalKm > 0 && <span className="text-muted-foreground">~{Math.round(ts.totalKm)} km</span>}
-                    {ts.capacity && (
-                      <span className={'font-medium '
-                        + (ts.minKursy > 1 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400')}>
-                        min. {ts.minKursy} {ts.minKursy === 1 ? 'kurs' : ts.minKursy < 5 ? 'kursy' : 'kursow'}
+                  <div key={ts.typ} className="space-y-1">
+                    <div
+                      className={'rounded-md border px-3 py-2 text-sm flex items-center gap-3 flex-wrap '
+                        + (ts.typ === '_brak'
+                          ? 'bg-gray-50 dark:bg-gray-900/30 border-gray-200 dark:border-gray-700'
+                          : 'bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700')}
+                    >
+                      <span className="font-semibold min-w-[120px]">
+                        {ts.typ === '_brak' ? '❓' : '🚛'} {ts.label}
                       </span>
-                    )}
-                    {ts.typ !== '_brak' && ts.capacity && (
-                      <button
-                        type="button"
-                        disabled={busy === busyKey}
-                        onClick={() => handleCreateKursyForType(ts.typ, orderIds, ts.minKursy)}
-                        className="ml-auto px-2 py-1 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                      >
-                        {busy === busyKey ? 'Tworzenie...' : 'Utwórz ' + ts.minKursy + ' ' + (ts.minKursy === 1 ? 'kurs' : 'kursy')}
-                      </button>
-                    )}
+                      <span className="text-muted-foreground">{ts.count} zl.</span>
+                      <span>{Math.round(ts.totalKg).toLocaleString('pl-PL')} kg</span>
+                      {ts.totalM3 > 0 && <span>{Math.round(ts.totalM3 * 10) / 10} m3</span>}
+                      {ts.totalPal > 0 && <span>{ts.totalPal} pal</span>}
+                      {ts.totalKm > 0 && <span className="text-muted-foreground">~{Math.round(ts.totalKm)} km</span>}
+                      {ts.capacity && (
+                        <span className={'font-medium '
+                          + (ts.minKursy > 1 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400')}>
+                          {ts.minKursy} {ts.minKursy === 1 ? 'kurs' : ts.minKursy < 5 ? 'kursy' : 'kursow'}
+                        </span>
+                      )}
+                      {ts.typ !== '_brak' && ts.routes.length > 0 && (
+                        <button
+                          type="button"
+                          disabled={busy === busyKey}
+                          onClick={() => handleCreateKursyFromRoutes(ts)}
+                          className="ml-auto px-2 py-1 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          {busy === busyKey ? 'Tworzenie...' : 'Utwórz ' + ts.routes.length + ' ' + (ts.routes.length === 1 ? 'kurs' : 'kursy')}
+                        </button>
+                      )}
+                    </div>
+                    {/* Rozpisanie tras per kurs */}
+                    {ts.routes.length > 1 && ts.routes.map((r, ri) => (
+                      <div key={ri} className="ml-6 rounded border border-dashed px-3 py-1.5 text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-foreground">
+                          {SECTOR_ARROWS[r.sector] || ''} Kurs {ri + 1}:
+                        </span>
+                        <span>{r.orderNumbers.join(' + ')}</span>
+                        <span>{Math.round(r.totalKg).toLocaleString('pl-PL')} kg</span>
+                        {r.totalM3 > 0 && <span>{Math.round(r.totalM3 * 10) / 10} m3</span>}
+                        {r.totalKm > 0 && <span>~{Math.round(r.totalKm)} km</span>}
+                      </div>
+                    ))}
                   </div>
                 );
               })}
