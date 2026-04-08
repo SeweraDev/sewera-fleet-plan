@@ -48,9 +48,12 @@ export function useFlotaOddzialu(oddzialId: number | null) {
       objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
       max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
     }));
+    // Ujednolicenie nazw typów zew → wewnętrzne
+    const TYP_NORMALIZE: Record<string, string> = { 'HDS 12T': 'HDS 12,0t' };
     const zew = (resZew.data || []).map(d => ({
       ...d,
       nr_rej: d.nr_rej + ' (zew)',
+      typ: TYP_NORMALIZE[d.typ] || d.typ,
       ladownosc_kg: Number(d.ladownosc_kg),
       objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
       max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,

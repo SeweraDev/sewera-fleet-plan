@@ -37,7 +37,7 @@ interface Props {
 
 const TYPY_POJAZDOW = [
   'Dostawczy 1,2t', 'Winda 1,8t', 'Winda 6,3t', 'Winda MAX 15,8t',
-  'HDS 9,0t', 'HDS 12,0t', 'HDS 12T',
+  'HDS 9,0t', 'HDS 12,0t',
 ];
 
 interface ZlData {
