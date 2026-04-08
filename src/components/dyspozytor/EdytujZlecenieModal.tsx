@@ -35,11 +35,17 @@ interface Props {
   onSaved: () => void;
 }
 
+const TYPY_POJAZDOW = [
+  'Dostawczy 1,2t', 'Winda 1,8t', 'Winda 6,3t', 'Winda MAX 15,8t',
+  'HDS 9,0t', 'HDS 12,0t', 'HDS 12T',
+];
+
 interface ZlData {
   numer: string;
   status: string;
   dzien: string;
   preferowana_godzina: string | null;
+  typ_pojazdu: string | null;
   nadawca_id: string | null;
 }
 
@@ -61,6 +67,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [wzList, setWzList] = useState<WzData[]>([]);
   const [status, setStatus] = useState('');
   const [godzina, setGodzina] = useState('');
+  const [typPojazdu, setTypPojazdu] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [nadawcaNazwa, setNadawcaNazwa] = useState('');
@@ -71,7 +78,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
     setLoading(true);
 
     Promise.all([
-      supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, nadawca_id').eq('id', zlecenieId).single(),
+      supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, typ_pojazdu, nadawca_id').eq('id', zlecenieId).single(),
       supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia').eq('zlecenie_id', zlecenieId),
     ]).then(async ([zlRes, wzRes]) => {
       const zl = zlRes.data;
@@ -79,6 +86,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         setZlecenie(zl as ZlData);
         setStatus(zl.status);
         setGodzina(zl.preferowana_godzina || 'dowolna');
+        setTypPojazdu(zl.typ_pojazdu || 'brak');
         if (zl.nadawca_id) {
           const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', zl.nadawca_id).single();
           setNadawcaNazwa(prof?.full_name || '—');
@@ -134,6 +142,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       .update({
         status,
         preferowana_godzina: godzina === 'dowolna' ? null : godzina,
+        typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
       })
       .eq('id', zlecenieId);
 
@@ -191,8 +200,8 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                 </div>
               </div>
 
-              {/* Status + godzina */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Status + godzina + typ pojazdu */}
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label>Status</Label>
                   <Select value={status} onValueChange={setStatus}>
@@ -208,6 +217,16 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {GODZINY.map(g => <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Typ pojazdu</Label>
+                  <Select value={typPojazdu} onValueChange={setTypPojazdu}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="brak">Nie wybrano</SelectItem>
+                      {TYPY_POJAZDOW.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
