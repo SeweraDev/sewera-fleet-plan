@@ -552,18 +552,19 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
     setDecodedPreview(decoded.slice(0, 200));
     console.log('[WzPasteTab v5] raw chars:', text.length, '| PUA:', hasPUA, '| decoded preview:', decoded.slice(0, 150));
 
-    // Zawsze uruchom lokalny parser jako bazę
-    const local = parseWzTextLocal(text);
+    // Użyj głównego parsera (single source of truth)
+    const { parseWZText } = await import("@/components/shared/ModalImportWZ");
+    const mapped = parseWZText(text);
     const localPreview: ParsePreview = {
-      numer_wz: local.numer_wz || '',
-      nr_zamowienia: local.nr_zamowienia || '',
-      odbiorca: local.odbiorca || '',
-      adres: local.adres || '',
-      tel: local.tel || '',
-      masa_kg: local.masa_kg || 0,
-      objetosc_m3: 0,
-      ilosc_palet: local.ilosc_palet || 0,
-      uwagi: local.uwagi || '',
+      numer_wz: mapped.numer_wz || '',
+      nr_zamowienia: mapped.nr_zamowienia || '',
+      odbiorca: mapped.odbiorca || '',
+      adres: mapped.adres || '',
+      tel: mapped.osoba_kontaktowa ? `${mapped.osoba_kontaktowa}${mapped.tel ? ', tel. ' + mapped.tel : ''}` : (mapped.tel || ''),
+      masa_kg: mapped.masa_kg || 0,
+      objetosc_m3: mapped.objetosc_m3 || 0,
+      ilosc_palet: mapped.ilosc_palet || 0,
+      uwagi: mapped.uwagi || '',
     };
 
     try {
