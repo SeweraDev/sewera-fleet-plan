@@ -710,8 +710,11 @@ export function parseWZText(rawText: string): WZImportData {
       if (/^(Adres\s+dostawy|Informacje|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(l)) break;
       if (/^Nr\s+ewid/i.test(l)) break;
       if (/^NIP:/i.test(l)) break;
-      if (SEWERA_CHECK.test(l)) { nameParts.length = 0; continue; } // skip SEWERA block, reset
+      if (SEWERA_CHECK.test(l)) { nameParts.length = 0; continue; }
       if (l.length < 2) continue;
+      // Linia z adresem (ul./al./os./pl. lub kod pocztowy) — to nie nazwa firmy
+      if (/^(?:ul|al|os|pl)\.\s/i.test(l)) break;
+      if (/^\d{2}-\d{3}\s/.test(l)) break;
       nameParts.push(l);
     }
     if (nameParts.length) odbiorca = nameParts.join(", ");
@@ -857,6 +860,20 @@ export function parseWZText(rawText: string): WZImportData {
     // Final guard: if adres duplicates odbiorca address, clear it
     if (adres && odbiorca && odbiorca.includes(adres)) {
       adres = null;
+    }
+    // Fallback: jeśli adres pusty ale w bloku Odbiorca są linie z adresem — użyj ich
+    if (!adres && odbLabelIdx >= 0) {
+      const addrFromOdb: string[] = [];
+      for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 8, lines.length); i++) {
+        const l = lines[i];
+        if (/^(Adres\s+dostawy|Informacje|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(l)) break;
+        if (/^(NIP:|NR BDO:|Nr\s+ewid)/i.test(l)) break;
+        if (/SEWERA|KOŚCIUSZKI\s*326/i.test(l)) { addrFromOdb.length = 0; continue; }
+        if (/^(?:ul|al|os|pl)\.\s/i.test(l) || /^\d{2}-\d{3}\s/.test(l)) {
+          addrFromOdb.push(l.trim());
+        }
+      }
+      if (addrFromOdb.length) adres = addrFromOdb.join(', ');
     }
   }
 
