@@ -700,9 +700,8 @@ export function parseWZText(rawText: string): WZImportData {
   // 3. odbiorca — try labeled section first ("Odbiorca" / "Nabywca"), then fallback
   let odbiorca: string | null = null;
 
-  // Priority: find "Odbiorca" or "Nabywca" label and collect lines after it
-  // Sprawdź najpierw czy jest sekcja Adres dostawy — wpływa na zbieranie danych
-  const hasDeliverySectionEarly = lines.some((l) => /Adres\s+dostawy/i.test(l)) || lines.some((l) => /^Budowa/i.test(l));
+  // Priority: find "Odbiorca" or "Nabywca" label and collect ALL lines after it
+  // Zawsze zbieramy pełne dane — obcinanie adresu robimy później gdy adres dostawy jest inny
   const odbLabelIdx = lines.findIndex((l) => /^(?:Odbiorca|Nabywca)\s*$/i.test(l));
   if (odbLabelIdx >= 0) {
     const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
@@ -714,12 +713,6 @@ export function parseWZText(rawText: string): WZImportData {
       if (/^NIP:/i.test(l)) break;
       if (SEWERA_CHECK.test(l)) { nameParts.length = 0; continue; }
       if (l.length < 2) continue;
-      // Jeśli JEST sekcja Adres dostawy — obetnij przy adresie (zbierz tylko nazwę)
-      if (hasDeliverySectionEarly) {
-        if (/^(?:ul|al|os|pl)\.\s/i.test(l)) break;
-        if (/^\d{2}-\d{3}\s/.test(l)) break;
-      }
-      // Jeśli BRAK sekcji Adres dostawy — zbierz WSZYSTKO (pełne dane teleadresowe)
       nameParts.push(l);
     }
     if (nameParts.length) odbiorca = nameParts.join(", ");
