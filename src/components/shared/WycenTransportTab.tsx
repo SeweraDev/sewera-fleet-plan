@@ -118,6 +118,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       };
       const flotaWlasna = buildTypMap(flotaData || []);     // cena Sewera
       const flotaZew = buildTypMap(flotaZewData || []);      // cena Zewnętrzna
+      console.log('[WycenTransport] flotaWlasna:', Object.fromEntries([...flotaWlasna.entries()].map(([k,v]) => [k, [...v]])));
+      console.log('[WycenTransport] flotaZew:', Object.fromEntries([...flotaZew.entries()].map(([k,v]) => [k, [...v]])));
+      console.log('[WycenTransport] typPojazdu (cennikowy):', typPojazdu);
 
       // 3. Oblicz odległość od KAŻDEGO oddziału
       const oddzialy = Object.entries(ODDZIAL_COORDS);
