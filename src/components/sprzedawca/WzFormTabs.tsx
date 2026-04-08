@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -79,6 +79,381 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
   );
 }
 
+/* ─── PDF Tab ─── */
+function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ParsePreview | null>(null);
+
+  const handleFile = useCallback(async (file: File) => {
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.pdf')) {
+      setError('Wymagany plik PDF');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Plik za duży (max 10 MB)');
+      return;
+    }
+    setParsing(true);
+    setError(null);
+    setPreview(null);
+
+    try {
+      const pdfjs = await import('pdfjs-dist');
+      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+      const pages: string[] = [];
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const page = await pdfDoc.getPage(i);
+        const content = await page.getTextContent();
+        const lines: string[] = [];
+        let currentLine = '';
+        let lastY: number | null = null;
+        for (const item of content.items as any[]) {
+          if (!item.str && item.str !== '') continue;
+          const y = item.transform ? item.transform[5] : null;
+          if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) {
+            if (currentLine.trim()) lines.push(currentLine.trim());
+            currentLine = item.str;
+          } else {
+            currentLine += (currentLine && item.str && !currentLine.endsWith(' ') ? ' ' : '') + item.str;
+          }
+          if (y !== null) lastY = y;
+          if (item.hasEOL) {
+            if (currentLine.trim()) lines.push(currentLine.trim());
+            currentLine = '';
+            lastY = null;
+          }
+        }
+        if (currentLine.trim()) lines.push(currentLine.trim());
+        pages.push(lines.join('\n'));
+      }
+      const rawText = pages.join('\n');
+
+      if (!rawText || rawText.trim().length < 10) {
+        setParsing(false);
+        setError('Nie można odczytać PDF — plik może być zeskanowanym obrazem. Użyj zakładki OCR.');
+        return;
+      }
+
+      const { parseWZText } = await import('@/components/shared/ModalImportWZ');
+      const mapped = parseWZText(rawText);
+
+      setPreview({
+        numer_wz: mapped.numer_wz || '',
+        nr_zamowienia: mapped.nr_zamowienia || '',
+        odbiorca: mapped.odbiorca || '',
+        adres: mapped.adres || '',
+        tel: mapped.osoba_kontaktowa ? `${mapped.osoba_kontaktowa}${mapped.tel ? ', tel. ' + mapped.tel : ''}` : (mapped.tel || ''),
+        masa_kg: mapped.masa_kg || 0,
+        objetosc_m3: mapped.objetosc_m3 || 0,
+        ilosc_palet: mapped.ilosc_palet || 0,
+        uwagi: mapped.uwagi || '',
+      });
+    } catch (err) {
+      setError('Błąd odczytu PDF: ' + (err as Error).message);
+    }
+    setParsing(false);
+  }, []);
+
+  const handleConfirm = () => {
+    if (!preview) return;
+    const newWz: WzInput = { ...preview };
+    if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
+      setWzList([newWz]);
+    } else {
+      setWzList([...wzList, newWz]);
+    }
+    setPreview(null);
+  };
+
+  const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
+    { key: 'numer_wz', label: 'Nr WZ' },
+    { key: 'nr_zamowienia', label: 'Nr zamówienia' },
+    { key: 'odbiorca', label: 'Odbiorca' },
+    { key: 'adres', label: 'Adres dostawy' },
+    { key: 'tel', label: 'Telefon / kontakt' },
+    { key: 'masa_kg', label: 'Masa (kg)', type: 'number' },
+    { key: 'objetosc_m3', label: 'Objętość (m³)', type: 'number' },
+    { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
+    { key: 'uwagi', label: 'Uwagi' },
+  ];
+
+  return (
+    <div className="space-y-3 pt-2">
+      {!preview && !parsing && (
+        <div
+          className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+          onClick={() => fileRef.current?.click()}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+        >
+          <input ref={fileRef} type="file" accept=".pdf" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+          <div className="text-3xl mb-2">📄</div>
+          <p className="text-sm font-medium text-muted-foreground">Przeciągnij PDF lub kliknij aby wybrać</p>
+          <p className="text-xs text-muted-foreground mt-1">PDF do 10 MB</p>
+        </div>
+      )}
+
+      {parsing && (
+        <div className="text-center py-4">
+          <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+          <p className="text-sm text-muted-foreground mt-2">Analizuję PDF...</p>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {preview && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Sprawdź i popraw dane z PDF:</p>
+          <div className="space-y-2">
+            {previewFields.map(f => {
+              const val = preview[f.key];
+              const found = val !== '' && val !== 0;
+              return (
+                <div key={f.key} className="flex items-center gap-2">
+                  <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
+                  <Label className="text-xs w-32 shrink-0">{f.label}</Label>
+                  <Input
+                    className="h-8 text-sm flex-1"
+                    type={f.type || 'text'}
+                    value={val?.toString() ?? ''}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      setPreview(prev => prev ? { ...prev, [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw } : prev);
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setPreview(null); setError(null); }}>Nowy plik</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── XLS Tab ─── */
+const XLS_HEADER_PATTERNS: { patterns: RegExp[]; field: string }[] = [
+  { patterns: [/^kierowca$/i, /^kier$/i], field: 'kierowca' },
+  { patterns: [/^kurs$/i], field: 'kurs' },
+  { patterns: [/^nazwa\s*kontrahenta$/i, /^kontrahent$/i], field: 'odbiorca' },
+  { patterns: [/^miejscowo/i, /^miasto$/i], field: 'miasto' },
+  { patterns: [/^ulica$/i, /^adres$/i], field: 'ulica' },
+  { patterns: [/^nr\s*wz$/i, /^wz$/i], field: 'nr_wz' },
+  { patterns: [/^masa$/i, /^waga$/i], field: 'masa' },
+  { patterns: [/^typ\s*samochodu$/i, /^rodzaj\s*samochodu$/i, /^klasyfikacja$/i, /^typ$/i], field: 'typ' },
+  { patterns: [/^rodzaj\s*dostawy$/i], field: 'rodzaj_dostawy' },
+  { patterns: [/^uwagi/i], field: 'uwagi' },
+];
+
+const XLS_TYP_MAP: Record<string, string | null> = {
+  A: null, B: 'Dostawczy 1,2t', C: 'Winda 1,8t', D: 'Winda 6,3t',
+  E: 'Winda MAX 15,8t', F: 'HDS 12,0t', G: 'HDS 12,0t', H: 'HDS 9,0t', I: 'HDS 9,0t',
+};
+
+function matchXlsHeader(h: string): string | null {
+  const t = (h || '').replace(/[\s\n\r]+/g, ' ').trim();
+  for (const hp of XLS_HEADER_PATTERNS) {
+    for (const p of hp.patterns) { if (p.test(t)) return hp.field; }
+  }
+  return null;
+}
+
+function WzXlsTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
+  const [rows, setRows] = useState<{ numer_wz: string; odbiorca: string; adres: string; masa_kg: number; uwagi: string; typ_pojazdu: string | null }[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = useCallback(async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Plik za duży (max 10 MB)');
+      return;
+    }
+    setParsing(true);
+    setError(null);
+    setRows([]);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      if (rawRows.length < 2) { setError('Plik jest pusty'); setParsing(false); return; }
+
+      let headerIdx = -1;
+      const colMap = new Map<number, string>();
+      for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+        const tempMap = new Map<number, string>();
+        for (let j = 0; j < (rawRows[i]?.length || 0); j++) {
+          const field = matchXlsHeader(String(rawRows[i][j] || ''));
+          if (field) tempMap.set(j, field);
+        }
+        if (tempMap.size >= 3) {
+          headerIdx = i;
+          tempMap.forEach((v, k) => colMap.set(k, v));
+          break;
+        }
+      }
+
+      if (headerIdx === -1) { setError('Nie rozpoznano nagłówków kolumn'); setParsing(false); return; }
+
+      const fieldCol: Record<string, number> = {};
+      colMap.forEach((field, idx) => { fieldCol[field] = idx; });
+      const get = (row: any[], field: string): string => {
+        const idx = fieldCol[field]; return idx !== undefined ? String(row[idx] ?? '').trim() : '';
+      };
+      const getNum = (row: any[], field: string): number => {
+        const v = get(row, field); if (!v) return 0;
+        const n = parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+        return isNaN(n) ? 0 : Math.ceil(n);
+      };
+
+      const allWz: typeof rows = [];
+      let currentTyp: string | null = null;
+
+      for (let i = headerIdx + 1; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.every((c: any) => !c && c !== 0)) continue;
+
+        const nrWz = get(row, 'nr_wz');
+        const odbiorca = get(row, 'odbiorca');
+        const masa = getNum(row, 'masa');
+        const typKod = get(row, 'typ').toUpperCase().trim().charAt(0);
+
+        if (!nrWz && !odbiorca && masa) continue;
+        if (!nrWz && !odbiorca) continue;
+
+        if (typKod && XLS_TYP_MAP[typKod] !== undefined) currentTyp = XLS_TYP_MAP[typKod];
+
+        const miasto = get(row, 'miasto');
+        const ulica = get(row, 'ulica');
+        const rodzajDostawy = get(row, 'rodzaj_dostawy');
+        const uwagi = get(row, 'uwagi');
+
+        allWz.push({
+          numer_wz: nrWz,
+          odbiorca,
+          adres: [ulica, miasto].filter(Boolean).join(', '),
+          masa_kg: masa,
+          uwagi: [rodzajDostawy, uwagi].filter(Boolean).join('; '),
+          typ_pojazdu: currentTyp,
+        });
+      }
+
+      setRows(allWz);
+      setSelected(new Set(allWz.map((_, i) => i)));
+    } catch (err) {
+      setError('Błąd odczytu pliku: ' + (err as Error).message);
+    }
+    setParsing(false);
+  }, []);
+
+  const toggleRow = (i: number) => {
+    const s = new Set(selected);
+    s.has(i) ? s.delete(i) : s.add(i);
+    setSelected(s);
+  };
+
+  const handleImport = () => {
+    const selectedRows = rows.filter((_, i) => selected.has(i));
+    const newWzList: WzInput[] = selectedRows.map(r => ({
+      numer_wz: r.numer_wz || '', nr_zamowienia: '', odbiorca: r.odbiorca || '',
+      adres: r.adres || '', tel: '', masa_kg: r.masa_kg || 0,
+      objetosc_m3: 0, ilosc_palet: 0, uwagi: r.uwagi || '',
+    }));
+    if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
+      setWzList(newWzList);
+    } else {
+      setWzList([...wzList, ...newWzList]);
+    }
+    setRows([]);
+    setSelected(new Set());
+  };
+
+  return (
+    <div className="space-y-3 pt-2">
+      {rows.length === 0 && !parsing && (
+        <div
+          className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+          onClick={() => fileRef.current?.click()}
+        >
+          <input ref={fileRef} type="file" accept=".xls,.xlsx" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+          <div className="text-3xl mb-2">📊</div>
+          <p className="text-sm font-medium text-muted-foreground">Wybierz plik Excel</p>
+          <p className="text-xs text-muted-foreground mt-1">XLS, XLSX do 10 MB</p>
+        </div>
+      )}
+
+      {parsing && (
+        <div className="text-center py-4">
+          <div className="animate-spin inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+          <p className="text-sm text-muted-foreground mt-2">Analizuję arkusz...</p>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {rows.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{rows.length} WZ znalezionych</p>
+          <div className="max-h-60 overflow-auto border rounded-md">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 sticky top-0">
+                <tr>
+                  <th className="px-2 py-1 w-8"></th>
+                  <th className="px-2 py-1 text-left">Nr WZ</th>
+                  <th className="px-2 py-1 text-left">Odbiorca</th>
+                  <th className="px-2 py-1 text-left">Adres</th>
+                  <th className="px-2 py-1 text-right">Kg</th>
+                  <th className="px-2 py-1 text-left">Typ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} className="border-t border-muted/50 cursor-pointer hover:bg-muted/30"
+                    onClick={() => toggleRow(i)}>
+                    <td className="px-2 py-1"><Checkbox checked={selected.has(i)} /></td>
+                    <td className="px-2 py-1 font-mono">{r.numer_wz || '—'}</td>
+                    <td className="px-2 py-1 max-w-[120px] truncate">{r.odbiorca || '—'}</td>
+                    <td className="px-2 py-1 max-w-[120px] truncate">{r.adres || '—'}</td>
+                    <td className="px-2 py-1 text-right">{r.masa_kg || '—'}</td>
+                    <td className="px-2 py-1 text-muted-foreground">{r.typ_pojazdu || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleImport} disabled={selected.size === 0}>
+              Importuj zaznaczone ({selected.size} WZ)
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setRows([]); setSelected(new Set()); }}>
+              Nowy plik
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── OCR Tab ─── */
 function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -317,222 +692,6 @@ function decodePUA(raw: string): string {
   }).join('');
 }
 
-// Parser tekstu WZ v5 (identyczny z ModalImportWZ) — dla tekstu skopiowanego z PDF
-function parseWzTextLocal(rawText: string): Partial<ParsePreview> {
-  const text = decodePUA(rawText)
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/(\n\s*){3,}/g, '\n\n');
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-
-  // Nr WZ — ONLY match WZ, WZS, or PZ prefixed document numbers
-  let numer_wz: string | undefined;
-  const wzM = text.match(/(WZS?|PZ)\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
-  if (wzM) numer_wz = `${wzM[1]} ${wzM[2]}`;
-
-  // Nr zamówienia
-  let nr_zamowienia: string | undefined;
-  const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/i);
-  if (zamLabel) nr_zamowienia = zamLabel[1];
-  if (!nr_zamowienia) {
-    const zamPattern = text.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
-    if (zamPattern) nr_zamowienia = zamPattern[1];
-  }
-
-  // Odbiorca — pomiń blok SEWERA
-  let odbiorca: string | undefined;
-  const SELLER_MARKERS = /SEWERA|KOŚCIUSZKI\s*326|NR\s*BDO:\s*000044503/i;
-  const SKIP_PATTERNS = [
-    SELLER_MARKERS, /ODDZIAŁ/i, /^ul\./i, /^al\./i, /^os\./i, /^pl\./i,
-    /NIP:/i, /NR BDO:/i, /Adres\s+dostawy/i, /Waga\s+netto/i,
-    /Nr\s+zam/i, /PALETA/i, /Tel\./i, /Os\.\s*kontaktowa/i,
-    /^\d{2}-\d{3}/, /Katowice,\s*\d/, /Uwagi/i, /kontaktowa/i,
-    /Budowa/i, /^\d+\s+(SZT|KG|M|OP|KPL)/i, /Magazyn/i,
-    /^RAZEM/i, /Wystawił/i, /Na podstawie/i, /Nr oferty/i,
-    /^\d+\.\s/, /Lp\./, /Kod\s+towaru/i, /Kod\s+EAN/i, /Nazwa\s+towaru/i,
-    /Termin\s+zap/i, /Wydano\s+na/i, /Informacje/i, /^Cena\s/i, /^Netto$/i,
-  ];
-  let seweraIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (SELLER_MARKERS.test(lines[i])) { seweraIdx = i; break; }
-  }
-  const searchStart = seweraIdx >= 0 ? seweraIdx + 1 : 0;
-  for (let i = searchStart; i < lines.length; i++) {
-    const line = lines[i];
-    if (SKIP_PATTERNS.some(p => p.test(line))) continue;
-    if (/\(.*(?:SPÓŁKA|SP\.|S\.A\.|S\.C\.)/i.test(line)) continue;
-    if (/^[A-Z]{1,3}-\d/.test(line)) continue;
-    const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\.|KOMANDYT/i.test(line);
-    const capsWords = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
-    const hasInitials = /\b[A-Z]\.[A-Z]\.?\b/.test(line);
-    const allCapsName = line.split(/\s+/).filter(w => /^[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}$/.test(w)).length >= 2;
-    // OCR guard: odrzuć kandydatów z dużą ilością znaków specjalnych (garbage)
-    const specialChars = (line.match(/[):;=\[\]{}|]/g) || []).length;
-    if (specialChars >= 2) continue;
-    // OCR guard: odrzuć jeśli >50% słów to 1-2 znaki (śmieci OCR)
-    const words = line.split(/\s+/).filter(Boolean);
-    const shortWords = words.filter(w => w.length <= 2 && !/^(i|w|z|o|u|sp|SA|ul|al|os|II|ZB)$/i.test(w)).length;
-    if (words.length > 0 && shortWords / words.length > 0.4) continue;
-    if (hasLegalForm || capsWords >= 3 || (hasInitials && allCapsName)) { odbiorca = line; break; }
-  }
-
-  // Adres dostawy
-  // Adres dostawy — ONLY when document has explicit "Adres dostawy" or "Budowa" section
-  let adres: string | undefined;
-  const adresIdx = lines.findIndex(l => /Adres\s+dostawy/i.test(l));
-  const hasBudowa = lines.some(l => /^Budowa/i.test(l));
-  const hasDeliverySection = adresIdx >= 0 || hasBudowa;
-
-  if (hasDeliverySection) {
-    if (adresIdx >= 0) {
-      const addrParts: string[] = [];
-      for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
-        const l = lines[i];
-        if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano|Lp\.)/i.test(l)) break;
-        if (/^Budowa/i.test(l) || /ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
-          addrParts.push(l);
-        }
-      }
-      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
-    }
-    if (!adres && adresIdx >= 0) {
-      const addrParts: string[] = [];
-      for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
-        const l = lines[i];
-        if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
-        if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
-        if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
-        if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); break; }
-      }
-      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
-    }
-    if (!adres && hasBudowa) {
-      const budowaIdx = lines.findIndex(l => /^Budowa/i.test(l));
-      const addrParts: string[] = [];
-      for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
-        const l = lines[i];
-        if (/^(Os\.\s*kontaktowa|Tel\.|Magazyn|Termin|Nr\s+zam)/i.test(l)) break;
-        if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
-          addrParts.push(l);
-        }
-      }
-      if (addrParts.length) adres = addrParts.join(', ').replace(/,\s*,/g, ',');
-    }
-    // Guard: if adres duplicates odbiorca address, clear it
-    if (adres && odbiorca && odbiorca.includes(adres)) {
-      adres = undefined;
-    }
-  }
-  // Fallback adres WYŁĄCZONY — bez sekcji "Adres dostawy"/"Budowa" nie zgadujemy adresu
-  // (regex łapał adres siedziby odbiorcy zamiast adresu dostawy)
-  if (adres && odbiorca && odbiorca.includes(adres)) {
-    adres = undefined;
-  }
-
-  // Telefon — szukaj TYLKO gdy dokument ma sekcję dostawy (nie łap tel. wystawcy)
-  let tel: string | undefined;
-  const wystawilIdx = lines.findIndex(l => /Wystawił/i.test(l));
-  const budowaIdx2 = lines.findIndex(l => /^Budowa/i.test(l));
-  const deliveryAnchor = Math.max(budowaIdx2, adresIdx >= 0 ? adresIdx : 0);
-  if (hasDeliverySection && deliveryAnchor > 0) {
-    for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
-      if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
-      const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
-      if (telM) { tel = telM[1].trim(); break; }
-    }
-    if (!tel) {
-      const telEndIdx = lines.findIndex((l, i) => i > deliveryAnchor && /Nr\s+zam|Uwagi|PALETA|Waga|Lp\./i.test(l));
-      const effectiveEnd = Math.min(
-        telEndIdx >= 0 ? telEndIdx : deliveryAnchor + 10,
-        wystawilIdx >= 0 ? wystawilIdx : lines.length
-      );
-      for (let i = deliveryAnchor; i < effectiveEnd && i < lines.length; i++) {
-        const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
-        if (telM) { tel = telM[1].trim(); break; }
-      }
-    }
-  }
-
-  // Masa — last standalone number before "RAZEM:" line
-  let masa_kg = 0;
-  const razemIdx = lines.findIndex(l => /^RAZEM/i.test(l));
-  if (razemIdx > 0) {
-    for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
-      const s = lines[i].replace(/\s/g, '');
-      const m = s.match(/^([\d,.]+)$/);
-      if (m) { masa_kg = Math.ceil(parseFloat(m[1].replace(',', '.'))); break; }
-    }
-  }
-  if (masa_kg === 0) {
-    const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
-    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(',', '.')) || 0);
-  }
-
-  // Palety
-  let ilosc_palet = 0;
-  for (const line of lines) {
-    if (/PALETA/i.test(line)) {
-      const palQty = line.match(/(\d+)\s*(?:SZT|szt)/i);
-      if (palQty) { ilosc_palet = parseInt(palQty[1]); break; }
-    }
-  }
-
-  // Uwagi
-  let uwagi: string | undefined;
-  const uwagiIdx = lines.findIndex(l => /^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(l));
-  if (uwagiIdx >= 0) {
-    const afterLines: string[] = [];
-    for (let i = uwagiIdx + 1; i < lines.length; i++) {
-      const l = lines[i];
-      if (/Na\s+podstawie\s+art|^Wystawił/i.test(l)) break;
-      if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
-      if (/Nr\s+oferty/i.test(l)) continue;
-      afterLines.push(l);
-    }
-    uwagi = afterLines.join('\n').trim() || undefined;
-  }
-
-  // ─── Post-processing: obcięcie adresu z artefaktów OCR ───
-  if (adres) {
-    // OCR często łączy kolumny tabeli w jedną linię — obetnij przy znanych markerach
-    const cutMarkers = [/kontaktowa/i, /Kod\s*towaru/i, /Nazwa\s*towaru/i, /AE\s/i, /mp\s/i, /Ilo[sś][cć]/i, /Cena/i, /Netto/i, /wz\s/i];
-    for (const marker of cutMarkers) {
-      const cutIdx = adres.search(marker);
-      if (cutIdx > 10) { adres = adres.substring(0, cutIdx).replace(/[,\s]+$/, ''); break; }
-    }
-    // Usuń izolowane 1-2 znakowe artefakty OCR (zj, R, S, itp.) ale zachowaj numery i skróty adresowe
-    // Wzorzec: po kodzie pocztowym i mieście obetnij resztę
-    const pcMatch = adres.match(/(\d{2}-\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźżA-Z]+)/);
-    if (pcMatch) {
-      const pcEnd = adres.indexOf(pcMatch[1]) + pcMatch[1].length;
-      adres = adres.substring(0, pcEnd).trim();
-    } else {
-      // Fallback: usuń końcowe krótkie śmieci
-      adres = adres.replace(/[,\s]+[a-zA-Z]{1,2}$/, '').trim();
-    }
-    // Usuń izolowane krótkie słowa pomiędzy częściami adresu (OCR artefakty jak "zj R")
-    adres = adres.replace(/,\s*[a-zA-Z]{1,2}\s+[A-Z]{1}\s+(?=\d{2}-\d{3})/, ', ');
-    adres = adres.replace(/\s+[a-z]{1,2}\s+[A-Z]{1}\s+/, ' ');
-  }
-
-  // ─── Fallback odbiorca z regex (OCR garble) ───
-  if (!odbiorca) {
-    // Szukaj firmy z formą prawną w pełnym tekście
-    const firmM = text.match(/([A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ\s\.\-&]{3,}(?:SP\.\s*Z\s*O\.O\.|SPÓŁKA|SP\.\s*K|S\.A\.?|S\.C\.))/i);
-    if (firmM) odbiorca = firmM[1].trim();
-  }
-
-  // ─── Fallback tel z pełnego tekstu ───
-  if (!tel) {
-    const telM = text.match(/(?:tel\.?|Tel\.?)\s*:?\s*([\d][\d\s\-]{7,}[\d])/i);
-    if (telM) tel = telM[1].replace(/\s+/g, '');
-  }
-
-  return { numer_wz, nr_zamowienia, odbiorca, adres, tel, masa_kg, ilosc_palet, uwagi };
-}
-
-
 function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const [text, setText] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -723,12 +882,16 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
 
       <Tabs defaultValue="reczne">
         <TabsList className="w-full">
-          <TabsTrigger value="ocr" className="flex-1 text-xs">📷 Zdjęcie (OCR)</TabsTrigger>
-          <TabsTrigger value="paste" className="flex-1 text-xs">📋 Wklej tekst</TabsTrigger>
-          <TabsTrigger value="reczne" className="flex-1 text-xs">✏️ Ręcznie</TabsTrigger>
+          <TabsTrigger value="pdf" className="flex-1 text-xs">PDF</TabsTrigger>
+          <TabsTrigger value="ocr" className="flex-1 text-xs">OCR</TabsTrigger>
+          <TabsTrigger value="xls" className="flex-1 text-xs">XLS</TabsTrigger>
+          <TabsTrigger value="paste" className="flex-1 text-xs">Wklej</TabsTrigger>
+          <TabsTrigger value="reczne" className="flex-1 text-xs">Ręcznie</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="pdf"><WzPdfTab wzList={wzList} setWzList={setWzList} /></TabsContent>
         <TabsContent value="ocr"><WzOcrTab wzList={wzList} setWzList={setWzList} /></TabsContent>
+        <TabsContent value="xls"><WzXlsTab wzList={wzList} setWzList={setWzList} /></TabsContent>
         <TabsContent value="paste"><WzPasteTab wzList={wzList} setWzList={setWzList} /></TabsContent>
         <TabsContent value="reczne"><WzManualForm wzList={wzList} setWzList={setWzList} /></TabsContent>
       </Tabs>

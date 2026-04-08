@@ -11,9 +11,7 @@ import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
 import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
 import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
 import { MojeZleceniaTab } from '@/components/sprzedawca/MojeZleceniaTab';
-import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
 import { WycenTransportTab } from '@/components/shared/WycenTransportTab';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 
 const SIDEBAR_ITEMS = [
@@ -31,34 +29,9 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '',
   }]);
-  const [showImport, setShowImport] = useState(false);
-
   const { oddzialy, loading: loadingOddzialy } = useOddzialy();
   const { flota, loading: loadingFlota } = useFlotaOddzialu(oddzialId);
   const { create, submitting, error } = useCreateZlecenie(onSuccess);
-
-  const handleImport = useCallback((data: WZImportData[]) => {
-    const newWzList: WzInput[] = data.map(d => ({
-      numer_wz: d.numer_wz || '',
-      nr_zamowienia: d.nr_zamowienia || '',
-      odbiorca: d.odbiorca || '',
-      adres: d.adres || '',
-      tel: d.tel || '',
-      masa_kg: d.masa_kg || 0,
-      objetosc_m3: d.objetosc_m3 || 0,
-      ilosc_palet: d.ilosc_palet || 0,
-      bez_palet: false,
-      luzne_karton: false,
-      uwagi: d.uwagi || '',
-    }));
-
-    if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
-      setWzList(newWzList);
-    } else {
-      setWzList([...wzList, ...newWzList]);
-    }
-    toast.success(`Zaimportowano ${newWzList.length} WZ`);
-  }, [wzList]);
 
   const handleGoToCheck = () => {
     const invalid = wzList.find(w => {
@@ -117,25 +90,12 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
           />
         )}
         {step === 3 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm text-foreground">Pozycje WZ ({wzList.length})</h3>
-              <Button size="sm" onClick={() => setShowImport(true)}>
-                📥 Importuj WZ
-              </Button>
-            </div>
-            <WzFormTabs
-              wzList={wzList} setWzList={setWzList}
-              error={error} submitting={submitting}
-              onBack={() => setStep(2)}
-              onSubmit={handleGoToCheck}
-            />
-            <ModalImportWZ
-              isOpen={showImport}
-              onClose={() => setShowImport(false)}
-              onImport={handleImport}
-            />
-          </div>
+          <WzFormTabs
+            wzList={wzList} setWzList={setWzList}
+            error={error} submitting={submitting}
+            onBack={() => setStep(2)}
+            onSubmit={handleGoToCheck}
+          />
         )}
         {step === 4 && oddzialId && (
           <DostepnoscStep
