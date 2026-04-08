@@ -352,7 +352,16 @@ export function ZleceniaTab({
       )}
 
       {/* Podpowiedzi dyspozytora */}
-      {statusFilter === 'bez_kursu' && <SuggestionPanel orders={bezKursu} availableTypes={availableTypes} />}
+      {statusFilter === 'bez_kursu' && (
+        <SuggestionPanel
+          orders={bezKursu}
+          availableTypes={availableTypes}
+          flota={flota}
+          oddzialId={oddzialId}
+          dzien={dzien || new Date().toISOString().split('T')[0]}
+          onRefresh={refetch}
+        />
+      )}
 
       {/* Mapa dostaw */}
       {showMap && (
