@@ -414,6 +414,9 @@ export function ZleceniaTab({
                   </TableHead>
                   <TableHead className="text-right">m³</TableHead>
                   <TableHead className="text-right">Pal.</TableHead>
+                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('km')}>
+                    km {sortBy === 'km' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </TableHead>
                   <TableHead>Typ</TableHead>
                   <TableHead>Kurs</TableHead>
                   <TableHead>WZ</TableHead>
@@ -435,6 +438,7 @@ export function ZleceniaTab({
                     <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
                     <TableCell className="text-right">{z.suma_m3 ? Math.round(z.suma_m3 * 10) / 10 : '—'}</TableCell>
                     <TableCell className="text-right">{z.suma_palet || '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{z.dystans_km != null ? z.dystans_km : '...'}</TableCell>
                     <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell>
                       {z.kurs_numer
