@@ -784,15 +784,13 @@ export function parseWZText(rawText: string): WZImportData {
     const hasInitials = /\b[A-Z]\.[A-Z]\.?\b/.test(line);
     const allCapsName = line.split(/\s+/).filter((w) => /^[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}$/.test(w)).length >= 2;
     if (hasLegalForm || capsWords >= 3 || (hasInitials && allCapsName)) {
-      // Zbierz nazwę + adres siedziby (kolejne linie: ul., kod pocztowy, NIP)
+      // Zbierz TYLKO nazwę firmy (bez adresu — adres wyciągamy z sekcji Adres dostawy)
       const parts = [line];
       for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
         const nl = lines[j];
         if (/NIP:|NR BDO:|Nr\s+ewid|Adres\s+dostawy|Budowa|Magazyn|Informacje|Termin/i.test(nl)) break;
-        if (/ul\.|al\.|os\.|pl\./i.test(nl) || /^\d{2}-\d{3}/.test(nl)) {
-          parts.push(nl);
-          continue;
-        }
+        // Linia z adresem — nie dodawaj do nazwy firmy
+        if (/^(?:ul|al|os|pl)\.\s/i.test(nl) || /^\d{2}-\d{3}\s/.test(nl)) break;
         // Kontynuacja nazwy firmy (np. "KOMANDYTOWA" na osobnej linii)
         if (/^[A-ZĄĆĘŁŃÓŚŹŻ]{3,}$/i.test(nl)) {
           parts.push(nl);
