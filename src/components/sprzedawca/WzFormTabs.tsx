@@ -151,6 +151,8 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         masa_kg: mapped.masa_kg || 0,
         objetosc_m3: mapped.objetosc_m3 || 0,
         ilosc_palet: mapped.ilosc_palet || 0,
+        bez_palet: false,
+        luzne_karton: false,
         uwagi: mapped.uwagi || '',
       });
     } catch (err) {
@@ -161,7 +163,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, bez_palet: false, luzne_karton: false };
+    const newWz: WzInput = { ...preview };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -169,18 +171,6 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     }
     setPreview(null);
   };
-
-  const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
-    { key: 'numer_wz', label: 'Nr WZ' },
-    { key: 'nr_zamowienia', label: 'Nr zamówienia' },
-    { key: 'odbiorca', label: 'Odbiorca' },
-    { key: 'adres', label: 'Adres dostawy' },
-    { key: 'tel', label: 'Telefon / kontakt' },
-    { key: 'masa_kg', label: 'Masa (kg)', type: 'number' },
-    { key: 'objetosc_m3', label: 'Objętość (m³)', type: 'number' },
-    { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
-    { key: 'uwagi', label: 'Uwagi' },
-  ];
 
   return (
     <div className="space-y-3 pt-2">
@@ -211,27 +201,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       {preview && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">Sprawdź i popraw dane z PDF:</p>
-          <div className="space-y-2">
-            {previewFields.map(f => {
-              const val = preview[f.key];
-              const found = val !== '' && val !== 0;
-              return (
-                <div key={f.key} className="flex items-center gap-2">
-                  <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
-                  <Label className="text-xs w-32 shrink-0">{f.label}</Label>
-                  <Input
-                    className="h-8 text-sm flex-1"
-                    type={f.type || 'text'}
-                    value={val?.toString() ?? ''}
-                    onChange={e => {
-                      const raw = e.target.value;
-                      setPreview(prev => prev ? { ...prev, [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw } : prev);
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          <PreviewFields preview={preview} setPreview={setPreview} />
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
             <Button size="sm" variant="ghost" onClick={() => { setPreview(null); setError(null); }}>Nowy plik</Button>
@@ -522,21 +492,9 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setStep('preview');
   };
 
-  const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
-    { key: 'numer_wz', label: 'Nr WZ' },
-    { key: 'nr_zamowienia', label: 'Nr zamówienia' },
-    { key: 'odbiorca', label: 'Odbiorca' },
-    { key: 'adres', label: 'Adres dostawy' },
-    { key: 'tel', label: 'Telefon / kontakt' },
-    { key: 'masa_kg', label: 'Masa (kg)', type: 'number' },
-    { key: 'objetosc_m3', label: 'Objętość (m³)', type: 'number' },
-    { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
-    { key: 'uwagi', label: 'Uwagi' },
-  ];
-
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, bez_palet: false, luzne_karton: false };
+    const newWz: WzInput = { ...preview };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -607,27 +565,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       {step === 'preview' && preview && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">Sprawdź i popraw dane:</p>
-          <div className="space-y-2">
-            {previewFields.map(f => {
-              const val = preview[f.key];
-              const found = val !== '' && val !== 0;
-              return (
-                <div key={f.key} className="flex items-center gap-2">
-                  <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
-                  <Label className="text-xs w-32 shrink-0">{f.label}</Label>
-                  <Input
-                    className="h-8 text-sm flex-1"
-                    type={f.type || 'text'}
-                    value={val?.toString() ?? ''}
-                    onChange={e => {
-                      const raw = e.target.value;
-                      setPreview(prev => prev ? { ...prev, [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw } : prev);
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          <PreviewFields preview={preview} setPreview={setPreview} />
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
             <Button size="sm" variant="outline" onClick={() => setStep('text')}>Popraw tekst</Button>
@@ -664,8 +602,74 @@ type ParsePreview = {
   masa_kg: number;
   objetosc_m3: number;
   ilosc_palet: number;
+  bez_palet: boolean;
+  luzne_karton: boolean;
   uwagi: string;
 };
+
+const PREVIEW_FIELDS: { key: keyof ParsePreview; label: string; type?: string }[] = [
+  { key: 'numer_wz', label: 'Nr WZ' },
+  { key: 'nr_zamowienia', label: 'Nr zamówienia' },
+  { key: 'odbiorca', label: 'Odbiorca' },
+  { key: 'adres', label: 'Adres dostawy' },
+  { key: 'tel', label: 'Telefon / kontakt' },
+  { key: 'masa_kg', label: 'Masa (kg)', type: 'number' },
+  { key: 'objetosc_m3', label: 'Objętość (m³)', type: 'number' },
+  { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
+  { key: 'uwagi', label: 'Uwagi' },
+];
+
+function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPreview: (fn: (p: ParsePreview | null) => ParsePreview | null) => void }) {
+  return (
+    <div className="space-y-2">
+      {PREVIEW_FIELDS.map(f => {
+        const val = preview[f.key];
+        const isM3 = f.key === 'objetosc_m3';
+        const isPal = f.key === 'ilosc_palet';
+        const disabled = (isM3 && preview.luzne_karton) || (isPal && preview.bez_palet);
+        const found = val !== '' && val !== 0 && !disabled;
+        return (
+          <div key={f.key}>
+            <div className="flex items-center gap-2">
+              <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
+              <Label className="text-xs w-32 shrink-0">{f.label}{isM3 && !preview.luzne_karton ? ' *' : ''}{isPal && !preview.bez_palet ? ' *' : ''}</Label>
+              <Input
+                className="h-8 text-sm flex-1"
+                type={f.type || 'text'}
+                disabled={disabled}
+                value={disabled ? '0' : (val?.toString() ?? '')}
+                onChange={e => {
+                  const raw = e.target.value;
+                  setPreview(prev => prev ? { ...prev, [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw } : prev);
+                }}
+              />
+            </div>
+            {isM3 && (
+              <div className="ml-10 mt-1">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <Checkbox checked={preview.luzne_karton} onCheckedChange={(checked) => {
+                    setPreview(prev => prev ? { ...prev, luzne_karton: !!checked, objetosc_m3: checked ? 0 : prev.objetosc_m3 } : prev);
+                  }} />
+                  <span className="text-[11px] text-muted-foreground">Luźne/karton (bez m³)</span>
+                </label>
+              </div>
+            )}
+            {isPal && (
+              <div className="ml-10 mt-1">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <Checkbox checked={preview.bez_palet} onCheckedChange={(checked) => {
+                    setPreview(prev => prev ? { ...prev, bez_palet: !!checked, ilosc_palet: checked ? 0 : prev.ilosc_palet } : prev);
+                  }} />
+                  <span className="text-[11px] text-muted-foreground">Bez palet</span>
+                </label>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const [text, setText] = useState('');
@@ -697,7 +701,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, bez_palet: false, luzne_karton: false };
+    const newWz: WzInput = { ...preview };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -706,18 +710,6 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
     setText('');
     setPreview(null);
   };
-
-  const previewFields: { key: keyof ParsePreview; label: string; type?: string }[] = [
-    { key: 'numer_wz', label: 'Nr WZ' },
-    { key: 'nr_zamowienia', label: 'Nr zamówienia' },
-    { key: 'odbiorca', label: 'Odbiorca' },
-    { key: 'adres', label: 'Adres dostawy' },
-    { key: 'tel', label: 'Telefon / kontakt' },
-    { key: 'masa_kg', label: 'Masa (kg)', type: 'number' },
-    { key: 'objetosc_m3', label: 'Objętość (m³)', type: 'number' },
-    { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
-    { key: 'uwagi', label: 'Uwagi' },
-  ];
 
   return (
     <div className="space-y-3">
@@ -747,33 +739,10 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
       {preview && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">Sprawdź i popraw odczytane dane:</p>
-          <div className="space-y-2">
-            {previewFields.map(f => {
-              const val = preview[f.key];
-              const found = val !== '' && val !== 0;
-              return (
-                <div key={f.key} className="flex items-center gap-2">
-                  <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
-                  <Label className="text-xs w-32 shrink-0">{f.label}</Label>
-                  <Input
-                    className="h-8 text-sm flex-1"
-                    type={f.type || 'text'}
-                    value={val?.toString() ?? ''}
-                    onChange={e => {
-                      const raw = e.target.value;
-                      setPreview(prev => prev ? {
-                        ...prev,
-                        [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw,
-                      } : prev);
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          <PreviewFields preview={preview} setPreview={setPreview} />
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleConfirm}>✅ Użyj tych danych</Button>
-            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>← Wróć do tekstu</Button>
+            <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
+            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>Wróć do tekstu</Button>
           </div>
         </div>
       )}
