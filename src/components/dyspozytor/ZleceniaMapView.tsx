@@ -92,32 +92,48 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
           .bindPopup('<strong>' + oddzialNazwa + '</strong><br/>Oddzial bazowy');
       }
 
+      // Grupuj piny wg lokalizacji (zaokrąglone do ~10m)
+      const groups = new Map<string, typeof pins>();
       pins.forEach(z => {
         if (z.lat == null || z.lng == null) return;
-        const color = GODZ_COLORS[z.preferowana_godzina || ''] || GODZ_COLORS['Dowolna'];
-        allPoints.push([z.lat, z.lng]);
+        const key = z.lat.toFixed(4) + ',' + z.lng.toFixed(4);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(z);
+      });
 
+      groups.forEach((groupPins) => {
+        const first = groupPins[0];
+        if (first.lat == null || first.lng == null) return;
+        allPoints.push([first.lat, first.lng]);
+
+        const color = GODZ_COLORS[first.preferowana_godzina || ''] || GODZ_COLORS['Dowolna'];
+        const count = groupPins.length;
+        const badge = count > 1
+          ? '<span style="position:absolute;top:-6px;right:-6px;background:#1e40af;color:white;border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:1px solid white">' + count + '</span>'
+          : '';
         const icon = L.divIcon({
           className: '',
-          html: '<div style="background:' + color + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',
+          html: '<div style="position:relative;background:' + color + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + badge + '</div>',
           iconSize: [22, 22],
           iconAnchor: [11, 11],
           popupAnchor: [0, -13],
         });
 
-        const kg = Math.round(z.suma_kg);
-        const m3 = z.suma_m3 > 0 ? ' · ' + (Math.round(z.suma_m3 * 10) / 10) + ' m3' : '';
-        const pal = z.suma_palet > 0 ? ' · ' + z.suma_palet + ' pal' : '';
-        const km = z.dystans_km != null ? ' · ' + z.dystans_km + ' km' : '';
-        const popup = '<div style="min-width:180px">'
-          + '<strong>' + (z.odbiorca || 'Brak odbiorcy') + '</strong><br/>'
-          + '<span style="font-size:12px;color:#666">' + (z.adres || '') + '</span><br/>'
-          + '<span style="font-size:12px">' + kg + ' kg' + m3 + pal + '</span><br/>'
-          + '<span style="font-size:12px">' + (z.preferowana_godzina || 'Dowolna') + km + '</span><br/>'
-          + '<span style="font-size:11px;color:#999">' + z.numer + '</span>'
-          + '</div>';
+        const popupParts = groupPins.map(z => {
+          const kg = Math.round(z.suma_kg);
+          const m3 = z.suma_m3 > 0 ? ' · ' + (Math.round(z.suma_m3 * 10) / 10) + ' m3' : '';
+          const pal = z.suma_palet > 0 ? ' · ' + z.suma_palet + ' pal' : '';
+          const km = z.dystans_km != null ? ' · ' + z.dystans_km + ' km' : '';
+          return '<div style="min-width:180px' + (groupPins.length > 1 ? ';padding:4px 0;border-bottom:1px solid #eee' : '') + '">'
+            + '<strong>' + (z.odbiorca || 'Brak odbiorcy') + '</strong><br/>'
+            + '<span style="font-size:12px;color:#666">' + (z.adres || '') + '</span><br/>'
+            + '<span style="font-size:12px">' + kg + ' kg' + m3 + pal + '</span><br/>'
+            + '<span style="font-size:12px">' + (z.preferowana_godzina || 'Dowolna') + km + '</span><br/>'
+            + '<span style="font-size:11px;color:#999">' + z.numer + '</span>'
+            + '</div>';
+        });
 
-        L.marker([z.lat, z.lng], { icon: icon }).addTo(map).bindPopup(popup);
+        L.marker([first.lat, first.lng], { icon: icon }).addTo(map).bindPopup(popupParts.join(''));
       });
 
       if (allPoints.length > 1) {
