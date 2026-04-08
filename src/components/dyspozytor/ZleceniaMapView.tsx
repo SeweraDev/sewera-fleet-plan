@@ -1,4 +1,4 @@
-import { useEffect, useRef, Component, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 
 // Kolory pinów wg godziny dostawy
@@ -17,14 +17,12 @@ function loadLeaflet(): Promise<any> {
   if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
 
   return new Promise((resolve, reject) => {
-    // CSS
     if (!document.querySelector('link[href*="leaflet"]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    // JS
     if ((window as any).L) {
       leafletLoaded = true;
       resolve((window as any).L);
@@ -36,7 +34,7 @@ function loadLeaflet(): Promise<any> {
       leafletLoaded = true;
       resolve((window as any).L);
     };
-    script.onerror = () => reject(new Error('Nie udało się załadować Leaflet'));
+    script.onerror = () => reject(new Error('Leaflet CDN error'));
     document.head.appendChild(script);
   });
 }
@@ -47,9 +45,10 @@ interface Props {
   oddzialNazwa: string;
 }
 
-export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props) {
+export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const pins = zlecenia.filter(z => z.lat != null && z.lng != null);
 
@@ -59,7 +58,6 @@ export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props
     loadLeaflet().then((L) => {
       if (cancelled || !containerRef.current || !L) return;
 
-      // Zniszcz starą mapę
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -78,68 +76,53 @@ export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props
 
       const allPoints: [number, number][] = [];
 
-      // Pin oddziału
       if (oddzialCoords) {
         allPoints.push([oddzialCoords.lat, oddzialCoords.lng]);
         const baseIcon = L.divIcon({
           className: '',
-          html: `<div style="
-            background:#1e40af; width:30px; height:30px; border-radius:50%;
-            border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,.5);
-            display:flex; align-items:center; justify-content:center;
-            color:white; font-size:16px;
-          ">🏭</div>`,
+          html: '<div style="background:#1e40af;width:30px;height:30px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:white;font-size:16px">&#127981;</div>',
           iconSize: [30, 30],
           iconAnchor: [15, 15],
           popupAnchor: [0, -17],
         });
         L.marker([oddzialCoords.lat, oddzialCoords.lng], { icon: baseIcon })
           .addTo(map)
-          .bindPopup(`<strong>🏭 ${oddzialNazwa}</strong><br/>Oddział bazowy`);
+          .bindPopup('<strong>' + oddzialNazwa + '</strong><br/>Oddzial bazowy');
       }
 
-      // Piny dostaw
       pins.forEach(z => {
+        if (z.lat == null || z.lng == null) return;
         const color = GODZ_COLORS[z.preferowana_godzina || ''] || GODZ_COLORS['Dowolna'];
-        allPoints.push([z.lat!, z.lng!]);
+        allPoints.push([z.lat, z.lng]);
 
         const icon = L.divIcon({
           className: '',
-          html: `<div style="
-            background:${color}; width:22px; height:22px; border-radius:50%;
-            border:3px solid white; box-shadow:0 2px 6px rgba(0,0,0,.4);
-          "></div>`,
+          html: '<div style="background:' + color + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',
           iconSize: [22, 22],
           iconAnchor: [11, 11],
           popupAnchor: [0, -13],
         });
 
-        const popup = `
-          <div style="min-width:180px">
-            <strong>${z.odbiorca || 'Brak odbiorcy'}</strong><br/>
-            <span style="font-size:12px;color:#666">${z.adres || '—'}</span><br/>
-            <span style="font-size:12px">
-              ⚖️ ${Math.round(z.suma_kg)} kg
-              ${z.suma_m3 > 0 ? ` · 📐 ${Math.round(z.suma_m3 * 10) / 10} m³` : ''}
-              ${z.suma_palet > 0 ? ` · 🧱 ${z.suma_palet} pal` : ''}
-            </span><br/>
-            <span style="font-size:12px">
-              🕐 ${z.preferowana_godzina || 'Dowolna'}
-              ${z.dystans_km != null ? ` · 🛣️ ${z.dystans_km} km` : ''}
-            </span><br/>
-            <span style="font-size:11px;color:#999">${z.numer}</span>
-          </div>
-        `;
+        const kg = Math.round(z.suma_kg);
+        const m3 = z.suma_m3 > 0 ? ' · ' + (Math.round(z.suma_m3 * 10) / 10) + ' m3' : '';
+        const pal = z.suma_palet > 0 ? ' · ' + z.suma_palet + ' pal' : '';
+        const km = z.dystans_km != null ? ' · ' + z.dystans_km + ' km' : '';
+        const popup = '<div style="min-width:180px">'
+          + '<strong>' + (z.odbiorca || 'Brak odbiorcy') + '</strong><br/>'
+          + '<span style="font-size:12px;color:#666">' + (z.adres || '') + '</span><br/>'
+          + '<span style="font-size:12px">' + kg + ' kg' + m3 + pal + '</span><br/>'
+          + '<span style="font-size:12px">' + (z.preferowana_godzina || 'Dowolna') + km + '</span><br/>'
+          + '<span style="font-size:11px;color:#999">' + z.numer + '</span>'
+          + '</div>';
 
-        L.marker([z.lat!, z.lng!], { icon }).addTo(map).bindPopup(popup);
+        L.marker([z.lat, z.lng], { icon: icon }).addTo(map).bindPopup(popup);
       });
 
-      // Auto-fit bounds
       if (allPoints.length > 1) {
         map.fitBounds(allPoints, { padding: [40, 40], maxZoom: 13 });
       }
-    }).catch((err) => {
-      console.warn('[ZleceniaMapView] Leaflet load error:', err);
+    }).catch(() => {
+      if (!cancelled) setError('Nie udalo sie zaladowac mapy');
     });
 
     return () => {
@@ -151,10 +134,18 @@ export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props
     };
   }, [pins.length, oddzialCoords?.lat, oddzialNazwa]);
 
+  if (error) {
+    return (
+      <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">
+        {error}
+      </div>
+    );
+  }
+
   if (pins.length === 0) {
     return (
       <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-        Ładowanie współrzędnych... Poczekaj chwilę.
+        Ladowanie wspolrzednych... Poczekaj chwile.
       </div>
     );
   }
@@ -171,29 +162,5 @@ export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props
         ))}
       </div>
     </div>
-  );
-}
-
-// Error boundary — chroni stronę przed crashem mapy
-class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-          Nie udało się załadować mapy. Odśwież stronę, aby spróbować ponownie.
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-export default function ZleceniaMapViewSafe(props: Props) {
-  return (
-    <MapErrorBoundary>
-      <ZleceniaMapView {...props} />
-    </MapErrorBoundary>
   );
 }
