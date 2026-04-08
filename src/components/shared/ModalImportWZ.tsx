@@ -1032,10 +1032,16 @@ export function parseWZText(rawText: string): WZImportData {
     uwagi,
   });
 
-  // Jeśli JEST sekcja "Adres dostawy" — obetnij adres z odbiorca (zostaw tylko nazwę firmy)
-  if (hasDeliverySection && odbiorca) {
+  // Sprawdź czy adres dostawy = adres siedziby (zawarty w odbiorca)
+  // Jeśli tak — to nie jest prawdziwy adres dostawy, wyczyść
+  if (adres && odbiorca && odbiorca.includes(adres.split(',')[0].trim())) {
+    adres = null;
+  }
+
+  // Jeśli JEST sekcja "Adres dostawy" I mamy PRAWDZIWY adres dostawy — obetnij adres z odbiorca
+  if (hasDeliverySection && adres && odbiorca) {
     // Wyczyść adres dostawy z odbiorca jeśli się powtarza
-    if (adres && odbiorca.includes(adres)) {
+    if (odbiorca.includes(adres)) {
       odbiorca = odbiorca.replace(adres, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '').trim();
     }
     // Obetnij adres siedziby (ul./al./os./pl. + kod pocztowy)
@@ -1044,7 +1050,7 @@ export function parseWZText(rawText: string): WZImportData {
       odbiorca = odbiorca.substring(0, ulMatch.index).trim();
     }
   }
-  // Jeśli BRAK sekcji "Adres dostawy" — zostaw odbiorca z pełnymi danymi teleadresowymi
+  // Jeśli BRAK adresu dostawy (lub adres = siedziby) — zostaw odbiorca z pełnymi danymi teleadresowymi
 
   // Wyciągnij telefony z uwag (zawsze, niezależnie od sekcji adresu)
   if (uwagi && !tel) {
