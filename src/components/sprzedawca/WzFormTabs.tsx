@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
-import { supabase } from '@/integrations/supabase/client';
 
 interface WzFormTabsProps {
   wzList: WzInput[];
@@ -668,53 +667,21 @@ type ParsePreview = {
   uwagi: string;
 };
 
-// Dekoduje znaki PUA z PDF (generyczny: offset = Unicode codepoint)
-function decodePUA(raw: string): string {
-  const win1250: Record<number, string> = {
-    0x80:'€',0x82:'‚',0x84:'„',0x85:'…',0x86:'†',0x87:'‡',
-    0x89:'‰',0x8A:'Š',0x8B:'‹',0x8C:'Ś',0x8D:'Ť',0x8E:'Ž',0x8F:'Ź',
-    0x91:'\u2018',0x92:'\u2019',0x93:'\u201C',0x94:'\u201D',
-    0x95:'•',0x96:'–',0x97:'—',0x99:'™',
-    0x9A:'š',0x9B:'›',0x9C:'ś',0x9D:'ť',0x9E:'ž',0x9F:'ź',
-  };
-  const bases = [0xE000, 0xF000, 0x10000, 0x100000];
-  return Array.from(raw).map(ch => {
-    const cp = ch.codePointAt(0) ?? 0;
-    for (const base of bases) {
-      const off = cp - base;
-      if (off >= 0x20 && off <= 0x24F) {
-        if (off >= 0x80 && off <= 0x9F) return win1250[off] ?? '';
-        return String.fromCodePoint(off);
-      }
-    }
-    if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0x10000) return '';
-    return ch;
-  }).join('');
-}
-
 function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
   const [text, setText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ParsePreview | null>(null);
-  const [decodedPreview, setDecodedPreview] = useState<string>('');
-
-  const hasPUA = Array.from(text).some(ch => { const cp = ch.codePointAt(0) ?? 0; return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0x10000; });
-
   const handleParse = async () => {
     if (text.length === 0) return;
     setParsing(true);
     setError(null);
     setPreview(null);
 
-    const decoded = decodePUA(text);
-    setDecodedPreview(decoded.slice(0, 200));
-    console.log('[WzPasteTab v5] raw chars:', text.length, '| PUA:', hasPUA, '| decoded preview:', decoded.slice(0, 150));
-
-    // Użyj głównego parsera (single source of truth)
+    // Single source of truth — parseWZText z ModalImportWZ (bez edge function)
     const { parseWZText } = await import("@/components/shared/ModalImportWZ");
     const mapped = parseWZText(text);
-    const localPreview: ParsePreview = {
+    setPreview({
       numer_wz: mapped.numer_wz || '',
       nr_zamowienia: mapped.nr_zamowienia || '',
       odbiorca: mapped.odbiorca || '',
@@ -724,59 +691,8 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
       objetosc_m3: mapped.objetosc_m3 || 0,
       ilosc_palet: mapped.ilosc_palet || 0,
       uwagi: mapped.uwagi || '',
-    };
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-wz-pdf`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({ text }),
-        }
-      );
-      const json = await res.json();
-
-      if (!json.error) {
-        const edgePreview: ParsePreview = {
-          numer_wz: json.nr_wz || '',
-          nr_zamowienia: json.nr_zamowienia || '',
-          odbiorca: json.odbiorca || '',
-          adres: json.adres_dostawy || '',
-          tel: json.osoba_kontaktowa || json.tel || '',
-          masa_kg: json.masa_kg || 0,
-          objetosc_m3: json.objetosc_m3 || 0,
-          ilosc_palet: json.ilosc_palet || 0,
-          uwagi: json.uwagi || '',
-        };
-
-        // Użyj edge jeśli dała więcej danych, w przeciwnym razie lokalny jako fallback
-        const merged: ParsePreview = {
-          numer_wz: edgePreview.numer_wz || localPreview.numer_wz,
-          nr_zamowienia: edgePreview.nr_zamowienia || localPreview.nr_zamowienia,
-          odbiorca: edgePreview.odbiorca || localPreview.odbiorca,
-          adres: edgePreview.adres || localPreview.adres,
-          tel: edgePreview.tel || localPreview.tel,
-          masa_kg: edgePreview.masa_kg || localPreview.masa_kg,
-          objetosc_m3: edgePreview.objetosc_m3 || localPreview.objetosc_m3,
-          ilosc_palet: edgePreview.ilosc_palet || localPreview.ilosc_palet,
-          uwagi: edgePreview.uwagi || localPreview.uwagi,
-        };
-        setPreview(merged);
-      } else {
-        // Edge function zwróciła błąd — użyj lokalnego parsera
-        setPreview(localPreview);
-      }
-    } catch {
-      // Brak połączenia — użyj lokalnego parsera
-      setPreview(localPreview);
-    } finally {
-      setParsing(false);
-    }
+    });
+    setParsing(false);
   };
 
   const handleConfirm = () => {
@@ -813,21 +729,11 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
             value={text}
             onChange={e => { setText(e.target.value); setError(null); }}
           />
-          {hasPUA && (
-            <p className="text-xs text-blue-600 dark:text-blue-400">🔑 Wykryto znaki PUA (font PDF) — zostaną zdekodowane</p>
-          )}
           <div className="flex items-center gap-2">
             <Button onClick={handleParse} disabled={text.length === 0 || parsing} size="sm">
               {parsing ? 'Analizuję...' : 'Parsuj tekst'}
             </Button>
-            <span className="text-xs text-muted-foreground">parser v5</span>
           </div>
-          {decodedPreview && (
-            <details className="text-xs text-muted-foreground">
-              <summary className="cursor-pointer">Podgląd zdekodowanego tekstu</summary>
-              <pre className="whitespace-pre-wrap text-xs bg-muted p-2 rounded max-h-28 overflow-auto mt-1">{decodedPreview}</pre>
-            </details>
-          )}
           {parsing && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full" />
