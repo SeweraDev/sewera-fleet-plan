@@ -71,6 +71,22 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
       (flotaData || []).forEach(f => flotaMap.set(f.id, { nr_rej: f.nr_rej, typ: f.typ, ladownosc_kg: Number(f.ladownosc_kg), objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null, max_palet: (f as any).max_palet != null ? Number((f as any).max_palet) : null }));
     }
 
+    // Get flota_zewnetrzna info for external vehicles
+    const zewNrRej = (kursyData || []).filter(k => !(k as any).flota_id && k.nr_rej_zewn).map(k => k.nr_rej_zewn!);
+    let flotaZewMap = new Map<string, { typ: string; ladownosc_kg: number; objetosc_m3: number | null; max_palet: number | null }>();
+    if (zewNrRej.length > 0) {
+      const { data: zewData } = await supabase
+        .from('flota_zewnetrzna')
+        .select('nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet')
+        .in('nr_rej', zewNrRej);
+      (zewData || []).forEach(f => flotaZewMap.set(f.nr_rej, {
+        typ: f.typ,
+        ladownosc_kg: Number(f.ladownosc_kg),
+        objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null,
+        max_palet: (f as any).max_palet != null ? Number((f as any).max_palet) : null,
+      }));
+    }
+
     // Fetch kierowcy phone numbers
     const kierowcaIds = (kursyData || []).map(k => k.kierowca_id).filter(Boolean) as string[];
     let kierowcaMap = new Map<string, { tel: string | null }>();
@@ -84,6 +100,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
 
     const mapped: KursDto[] = (kursyData || []).map(k => {
       const f = flotaMap.get((k as any).flota_id || '');
+      const fz = k.nr_rej_zewn ? flotaZewMap.get(k.nr_rej_zewn) : null;
       const kier = k.kierowca_id ? kierowcaMap.get(k.kierowca_id) : null;
       return {
         id: k.id,
@@ -95,10 +112,10 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
         kierowca_nazwa: k.kierowca_nazwa,
         kierowca_id: k.kierowca_id,
         nr_rej: f?.nr_rej || k.nr_rej_zewn || '',
-        pojazd_typ: f?.typ || '',
-        ladownosc_kg: f?.ladownosc_kg || 0,
-        objetosc_m3: f?.objetosc_m3 ?? null,
-        max_palet: f?.max_palet ?? null,
+        pojazd_typ: f?.typ || fz?.typ || '',
+        ladownosc_kg: f?.ladownosc_kg || fz?.ladownosc_kg || 0,
+        objetosc_m3: f?.objetosc_m3 ?? fz?.objetosc_m3 ?? null,
+        max_palet: f?.max_palet ?? fz?.max_palet ?? null,
         kierowca_tel: kier?.tel ?? null,
         godzina_start: (k as any).godzina_start || null,
       };
