@@ -353,15 +353,7 @@ export function ZleceniaTab({
 
       {/* Podpowiedzi dyspozytora */}
       {statusFilter === 'bez_kursu' && (
-        <SuggestionPanel
-          orders={bezKursu}
-          availableTypes={availableTypes}
-          flota={flota}
-          oddzialId={oddzialId}
-          dzien={dzien || new Date().toISOString().split('T')[0]}
-          oddzialCoords={oddzialNazwa ? (ODDZIAL_COORDS[NAZWA_TO_KOD[oddzialNazwa] || ''] || null) : null}
-          onRefresh={refetch}
-        />
+        <SuggestionPanel orders={bezKursu} availableTypes={availableTypes} />
       )}
 
       {/* Mapa dostaw */}

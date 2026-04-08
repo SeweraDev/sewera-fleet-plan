@@ -223,131 +223,6 @@ export function computeSuggestions(orders: OrderInput[], availableTypes?: string
   return suggestions;
 }
 
-// Kąt (bearing) z punktu A do B w stopniach (0=północ, 90=wschód)
-function bearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const y = Math.sin(dLng) * Math.cos(lat2 * Math.PI / 180);
-  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180)
-    - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLng);
-  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
-}
-
-// Planowanie kursów — grupowanie wg kierunku + pojemności
-export interface PlannedRoute {
-  orderIds: string[];
-  orderNumbers: string[];
-  totalKg: number;
-  totalM3: number;
-  totalPal: number;
-  totalKm: number;
-  sector: string; // np. "N", "NE", "E"
-}
-
-const SECTOR_NAMES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-
-function getSector(angle: number): string {
-  const idx = Math.round(angle / 45) % 8;
-  return SECTOR_NAMES[idx];
-}
-
-type FullOrder = OrderInput & { dystans_km: number | null };
-
-export function planRoutes(
-  orders: FullOrder[],
-  baseLat: number | null,
-  baseLng: number | null,
-  capacity: { kg: number; m3: number; pal: number }
-): PlannedRoute[] {
-  // Oblicz kierunek per zlecenie
-  const withBearing = orders
-    .filter(o => o.lat != null && o.lng != null)
-    .map(o => ({
-      ...o,
-      angle: baseLat != null && baseLng != null
-        ? bearing(baseLat, baseLng, o.lat!, o.lng!)
-        : 0,
-    }));
-
-  // Zlecenia bez współrzędnych
-  const noCoords = orders.filter(o => o.lat == null || o.lng == null);
-
-  // Grupuj wg sektora (8 kierunków po 45°)
-  const sectors = new Map<string, typeof withBearing>();
-  for (const o of withBearing) {
-    const sec = getSector(o.angle);
-    if (!sectors.has(sec)) sectors.set(sec, []);
-    sectors.get(sec)!.push(o);
-  }
-
-  const routes: PlannedRoute[] = [];
-
-  // Dla każdego sektora — pakuj zlecenia do kursów wg pojemności
-  for (const [sec, sectorOrders] of sectors) {
-    // Sortuj wg odległości (najbliższe pierwsze — lepsze pakowanie)
-    sectorOrders.sort((a, b) => (a.dystans_km ?? 999) - (b.dystans_km ?? 999));
-
-    let currentRoute: typeof sectorOrders = [];
-    let currentKg = 0;
-    let currentM3 = 0;
-    let currentPal = 0;
-
-    for (const o of sectorOrders) {
-      const wouldKg = currentKg + o.suma_kg;
-      const wouldM3 = currentM3 + o.suma_m3;
-      const wouldPal = currentPal + o.suma_palet;
-
-      const fitsKg = capacity.kg === 0 || wouldKg <= capacity.kg;
-      const fitsM3 = capacity.m3 === 0 || wouldM3 <= capacity.m3;
-      const fitsPal = capacity.pal === 0 || wouldPal <= capacity.pal;
-
-      if (currentRoute.length > 0 && (!fitsKg || !fitsM3 || !fitsPal)) {
-        routes.push(makeRoute(currentRoute, sec));
-        currentRoute = [];
-        currentKg = 0;
-        currentM3 = 0;
-        currentPal = 0;
-      }
-      currentRoute.push(o);
-      currentKg += o.suma_kg;
-      currentM3 += o.suma_m3;
-      currentPal += o.suma_palet;
-    }
-    if (currentRoute.length > 0) {
-      routes.push(makeRoute(currentRoute, sec));
-    }
-  }
-
-  // Zlecenia bez współrzędnych — osobne kursy (nie da się optymalizować)
-  if (noCoords.length > 0) {
-    let cur: FullOrder[] = [];
-    let curKg = 0;
-    for (const o of noCoords) {
-      if (cur.length > 0 && capacity.kg > 0 && curKg + o.suma_kg > capacity.kg) {
-        routes.push(makeRoute(cur, '?'));
-        cur = [];
-        curKg = 0;
-      }
-      cur.push(o);
-      curKg += o.suma_kg;
-    }
-    if (cur.length > 0) routes.push(makeRoute(cur, '?'));
-  }
-
-  return routes;
-}
-
-function makeRoute(orders: FullOrder[], sector: string): PlannedRoute {
-  return {
-    orderIds: orders.map(o => o.id),
-    orderNumbers: orders.map(o => o.numer),
-    totalKg: orders.reduce((s, o) => s + o.suma_kg, 0),
-    totalM3: orders.reduce((s, o) => s + o.suma_m3, 0),
-    totalPal: orders.reduce((s, o) => s + o.suma_palet, 0),
-    totalKm: orders.reduce((s, o) => s + (o.dystans_km ?? 0), 0),
-    sector,
-  };
-}
-
 // Podsumowanie per typ pojazdu
 export interface TypeSummary {
   typ: string;
@@ -359,13 +234,10 @@ export interface TypeSummary {
   totalKm: number;
   minKursy: number;
   capacity: { kg: number; m3: number; pal: number } | null;
-  routes: PlannedRoute[];
 }
 
 export function computeTypeSummary(
-  orders: Array<OrderInput & { dystans_km: number | null }>,
-  baseLat?: number | null,
-  baseLng?: number | null
+  orders: Array<OrderInput & { dystans_km: number | null }>
 ): TypeSummary[] {
   const groups = new Map<string, typeof orders>();
 
@@ -383,11 +255,13 @@ export function computeTypeSummary(
     const totalKm = items.reduce((s, o) => s + (o.dystans_km ?? 0), 0);
     const cap = typ !== '_brak' ? TYP_CAPACITY[typ] || null : null;
 
-    // Planuj kursy wg kierunku + pojemności
-    const routes = cap
-      ? planRoutes(items, baseLat ?? null, baseLng ?? null, cap)
-      : [];
-    const minKursy = routes.length || 1;
+    let minKursy = 1;
+    if (cap && cap.kg > 0) {
+      minKursy = Math.max(1, Math.ceil(totalKg / cap.kg));
+      if (cap.pal > 0 && totalPal > 0) {
+        minKursy = Math.max(minKursy, Math.ceil(totalPal / cap.pal));
+      }
+    }
 
     result.push({
       typ,
@@ -399,11 +273,9 @@ export function computeTypeSummary(
       totalKm,
       minKursy,
       capacity: cap,
-      routes,
     });
   }
 
-  // Sortuj: z typem (alfabetycznie) → bez typu na końcu
   result.sort((a, b) => {
     if (a.typ === '_brak') return 1;
     if (b.typ === '_brak') return -1;
