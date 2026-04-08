@@ -1057,8 +1057,10 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // Wyciągnij adres dostawy i telefony z uwag (gdy brak sekcji "Adres dostawy")
-  if (uwagi && !hasDeliverySection) {
+  // Wyciągnij adres dostawy i telefony z uwag
+  // Warunek: brak sekcji Adres dostawy LUB adres = adres siedziby (z Odbiorca)
+  const adresIsHQ = adres && odbiorca && odbiorca.includes(adres.split(',')[0]);
+  if (uwagi && (!hasDeliverySection || !adres || adresIsHQ)) {
     const uwagiLines = uwagi.split(/[\n,]/).map(l => l.trim()).filter(Boolean);
     const phoneNumbers: string[] = [];
     const addressParts: string[] = [];
