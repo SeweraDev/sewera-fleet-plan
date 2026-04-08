@@ -1,9 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
-import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
+import { ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
 
-const MY_COLOR = '#1e3a5f';
-const OTHER_BRANCH_COLOR = '#60a5fa';
+// Kolory oddziałów — wyraziste, niepodobne do siebie
+const ODDZIAL_COLORS: Record<string, string> = {
+  KAT: '#dc2626',  // czerwony
+  R:   '#7c3aed',  // fioletowy
+  SOS: '#1e40af',  // granatowy
+  GL:  '#059669',  // zielony
+  DG:  '#ea580c',  // pomarańczowy
+  TG:  '#0891b2',  // turkusowy
+  CH:  '#be185d',  // różowy
+  OS:  '#ca8a04',  // złoty
+};
+const DEFAULT_COLOR = '#6b7280';
 
 let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
@@ -57,32 +67,43 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
 
       const allPoints: [number, number][] = [];
 
-      // Piny wszystkich oddziałów Sewera
-      const shownCodes = new Set<string>();
+      // Piny wszystkich oddziałów Sewera — każdy w swoim kolorze
+      const myKod = oddzialNazwa ? (NAZWA_TO_KOD[oddzialNazwa] || '') : '';
+      const myColor = ODDZIAL_COLORS[myKod] || DEFAULT_COLOR;
+      const shownCoords = new Set<string>();
+
+      // KAT i R mają te same współrzędne — pokaż oba kody
+      const coordLabels = new Map<string, string[]>();
       for (const [kod, coords] of Object.entries(ODDZIAL_COORDS)) {
-        const coordKey = coords.lat + ',' + coords.lng;
-        if (shownCodes.has(coordKey)) continue;
-        shownCodes.add(coordKey);
+        const key = coords.lat.toFixed(4) + ',' + coords.lng.toFixed(4);
+        if (!coordLabels.has(key)) coordLabels.set(key, []);
+        coordLabels.get(key)!.push(kod);
+      }
 
-        const isMine = oddzialCoords
-          && Math.abs(coords.lat - oddzialCoords.lat) < 0.001
-          && Math.abs(coords.lng - oddzialCoords.lng) < 0.001;
+      for (const [kod, coords] of Object.entries(ODDZIAL_COORDS)) {
+        const coordKey = coords.lat.toFixed(4) + ',' + coords.lng.toFixed(4);
+        if (shownCoords.has(coordKey)) continue;
+        shownCoords.add(coordKey);
 
-        const size = isMine ? 30 : 22;
-        const bg = isMine ? MY_COLOR : OTHER_BRANCH_COLOR;
+        const codes = coordLabels.get(coordKey) || [kod];
+        const isMine = codes.includes(myKod);
+        const color = ODDZIAL_COLORS[codes[0]] || DEFAULT_COLOR;
+        const label = codes.join('/');
+
+        const size = isMine ? 32 : 24;
         const border = isMine ? '3px solid white' : '2px solid white';
         const shadow = isMine ? '0 2px 8px rgba(0,0,0,.5)' : '0 1px 4px rgba(0,0,0,.3)';
-        const fontSize = isMine ? '14px' : '10px';
+        const fontSize = isMine ? '11px' : '9px';
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="background:' + bg + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:white;font-size:' + fontSize + ';font-weight:bold">' + kod + '</div>',
+          html: '<div style="background:' + color + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:white;font-size:' + fontSize + ';font-weight:bold;letter-spacing:-0.5px">' + label + '</div>',
           iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2 - 2],
         });
 
         L.marker([coords.lat, coords.lng], { icon: icon, zIndexOffset: isMine ? 1000 : 0 })
           .addTo(map)
-          .bindPopup('<strong>' + kod + '</strong><br/>' + coords.adres + (isMine ? '<br/><em>Twoj oddzial</em>' : ''));
+          .bindPopup('<strong>' + label + '</strong><br/>' + coords.adres + (isMine ? '<br/><em>Twoj oddzial</em>' : ''));
       }
 
       // Grupuj piny zleceń wg lokalizacji
@@ -101,12 +122,12 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
 
         const count = groupPins.length;
         const badge = count > 1
-          ? '<span style="position:absolute;top:-6px;right:-6px;background:white;color:' + MY_COLOR + ';border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid ' + MY_COLOR + '">' + count + '</span>'
+          ? '<span style="position:absolute;top:-6px;right:-6px;background:white;color:' + myColor + ';border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid ' + myColor + '">' + count + '</span>'
           : '';
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="position:relative;background:' + MY_COLOR + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + badge + '</div>',
+          html: '<div style="position:relative;background:' + myColor + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + badge + '</div>',
           iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13],
         });
 
