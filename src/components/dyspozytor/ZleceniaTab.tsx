@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { useZleceniaOddzialu, useZlecenieWz } from '@/hooks/useZleceniaOddzialu';
+import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -239,6 +240,8 @@ export function ZleceniaTab({
   onOpenKursModal?: (zlecenieId: string) => void;
 }) {
   const { zlecenia, loading, refetch } = useZleceniaOddzialu(oddzialId, pastOnly, dzien);
+  const { flota } = useFlotaOddzialu(oddzialId);
+  const availableTypes = useMemo(() => [...new Set(flota.map(f => f.typ))], [flota]);
   const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('bez_kursu');
   const [selectedZl, setSelectedZl] = useState<ZlecenieOddzialuDto | null>(null);
   const [editZlId, setEditZlId] = useState<string | null>(null);
@@ -349,7 +352,7 @@ export function ZleceniaTab({
       )}
 
       {/* Podpowiedzi dyspozytora */}
-      {statusFilter === 'bez_kursu' && <SuggestionPanel orders={bezKursu} />}
+      {statusFilter === 'bez_kursu' && <SuggestionPanel orders={bezKursu} availableTypes={availableTypes} />}
 
       {/* Mapa dostaw */}
       {showMap && (

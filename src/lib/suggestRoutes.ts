@@ -73,9 +73,15 @@ function isSameLocation(a: OrderInput, b: OrderInput): boolean {
   return false;
 }
 
-// Znajdź najmniejszy pojazd który pomieści ładunek
-function findSmallestFittingType(kg: number, m3: number, pal: number): string | null {
-  for (const [name, cap] of SORTED_TYPES) {
+// Znajdź najmniejszy pojazd który pomieści ładunek (tylko z dostępnych)
+function findSmallestFittingType(
+  kg: number, m3: number, pal: number,
+  availableTypes?: string[]
+): string | null {
+  const types = availableTypes
+    ? SORTED_TYPES.filter(([name]) => availableTypes.includes(name))
+    : SORTED_TYPES;
+  for (const [name, cap] of types) {
     if (kg <= cap.kg
       && (cap.m3 === 0 || m3 <= cap.m3)
       && (cap.pal === 0 || pal <= cap.pal)) {
@@ -109,7 +115,7 @@ function groupByLocation(orders: OrderInput[]): OrderInput[][] {
   return groups;
 }
 
-export function computeSuggestions(orders: OrderInput[]): RouteSuggestion[] {
+export function computeSuggestions(orders: OrderInput[], availableTypes?: string[]): RouteSuggestion[] {
   const suggestions: RouteSuggestion[] = [];
 
   // 1. Przekroczenie wagi
@@ -154,7 +160,7 @@ export function computeSuggestions(orders: OrderInput[]): RouteSuggestion[] {
     const adres = group[0].adres || '?';
     const label = adres.length > 40 ? adres.substring(0, 37) + '...' : adres;
 
-    const fittingType = findSmallestFittingType(totalKg, totalM3, totalPal);
+    const fittingType = findSmallestFittingType(totalKg, totalM3, totalPal, availableTypes);
 
     if (fittingType) {
       suggestions.push({
@@ -196,7 +202,7 @@ export function computeSuggestions(orders: OrderInput[]): RouteSuggestion[] {
       });
     } else {
       // Sugeruj na podstawie wagi
-      const suggested = findSmallestFittingType(o.suma_kg, o.suma_m3, o.suma_palet);
+      const suggested = findSmallestFittingType(o.suma_kg, o.suma_m3, o.suma_palet, availableTypes);
       if (suggested) {
         suggestions.push({
           type: 'no_type',
@@ -215,4 +221,68 @@ export function computeSuggestions(orders: OrderInput[]): RouteSuggestion[] {
   suggestions.sort((a, b) => ORDER[a.type] - ORDER[b.type]);
 
   return suggestions;
+}
+
+// Podsumowanie per typ pojazdu
+export interface TypeSummary {
+  typ: string;
+  label: string;
+  count: number;
+  totalKg: number;
+  totalM3: number;
+  totalPal: number;
+  totalKm: number;
+  minKursy: number;
+  capacity: { kg: number; m3: number; pal: number } | null;
+}
+
+export function computeTypeSummary(
+  orders: Array<OrderInput & { dystans_km: number | null }>
+): TypeSummary[] {
+  const groups = new Map<string, typeof orders>();
+
+  for (const o of orders) {
+    const typ = o.typ_pojazdu || '_brak';
+    if (!groups.has(typ)) groups.set(typ, []);
+    groups.get(typ)!.push(o);
+  }
+
+  const result: TypeSummary[] = [];
+  for (const [typ, items] of groups) {
+    const totalKg = items.reduce((s, o) => s + o.suma_kg, 0);
+    const totalM3 = items.reduce((s, o) => s + o.suma_m3, 0);
+    const totalPal = items.reduce((s, o) => s + o.suma_palet, 0);
+    const totalKm = items.reduce((s, o) => s + (o.dystans_km ?? 0), 0);
+    const cap = typ !== '_brak' ? TYP_CAPACITY[typ] || null : null;
+
+    // Min. kursów = ceil(totalKg / pojemność) ale min 1
+    let minKursy = 1;
+    if (cap && cap.kg > 0) {
+      minKursy = Math.max(1, Math.ceil(totalKg / cap.kg));
+      if (cap.pal > 0 && totalPal > 0) {
+        minKursy = Math.max(minKursy, Math.ceil(totalPal / cap.pal));
+      }
+    }
+
+    result.push({
+      typ,
+      label: typ === '_brak' ? 'Bez typu' : typ,
+      count: items.length,
+      totalKg,
+      totalM3,
+      totalPal,
+      totalKm,
+      minKursy,
+      capacity: cap,
+    });
+  }
+
+  // Sortuj: z typem (alfabetycznie) → bez typu na końcu
+  result.sort((a, b) => {
+    if (a.typ === '_brak') return 1;
+    if (b.typ === '_brak') return -1;
+    return a.typ.localeCompare(b.typ);
+  });
+
+  return result;
 }
