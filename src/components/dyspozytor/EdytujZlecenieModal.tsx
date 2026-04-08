@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
+import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -47,6 +48,7 @@ interface ZlData {
   preferowana_godzina: string | null;
   typ_pojazdu: string | null;
   nadawca_id: string | null;
+  oddzial_id: number | null;
 }
 
 interface WzData {
@@ -72,13 +74,14 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [loading, setLoading] = useState(false);
   const [nadawcaNazwa, setNadawcaNazwa] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const originalWzRef = useRef<WzData[]>([]);
 
   useEffect(() => {
     if (!open || !zlecenieId) return;
     setLoading(true);
 
     Promise.all([
-      supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, typ_pojazdu, nadawca_id').eq('id', zlecenieId).single(),
+      supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, typ_pojazdu, nadawca_id, oddzial_id').eq('id', zlecenieId).single(),
       supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia').eq('zlecenie_id', zlecenieId),
     ]).then(async ([zlRes, wzRes]) => {
       const zl = zlRes.data;
@@ -107,6 +110,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         nr_zamowienia: w.nr_zamowienia || '',
       }));
       setWzList(wzData);
+      originalWzRef.current = wzData.map(w => ({ ...w }));
       setLoading(false);
     });
   }, [open, zlecenieId]);
@@ -160,6 +164,67 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           uwagi: w.uwagi || null,
         })
         .eq('id', w.id);
+    }
+
+    // Sprawdź czy zmniejszono ilości — jeśli tak, utwórz zlecenie z resztą
+    const reszty: { odbiorca: string; adres: string; tel: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number; uwagi: string; numer_wz: string; nr_zamowienia: string }[] = [];
+    for (const w of wzList) {
+      const orig = originalWzRef.current.find(o => o.id === w.id);
+      if (!orig) continue;
+      const diffKg = orig.masa_kg - w.masa_kg;
+      const diffM3 = orig.objetosc_m3 - w.objetosc_m3;
+      const diffPal = orig.ilosc_palet - w.ilosc_palet;
+      if (diffKg > 0 || diffM3 > 0 || diffPal > 0) {
+        reszty.push({
+          odbiorca: w.odbiorca,
+          adres: w.adres,
+          tel: w.tel,
+          masa_kg: Math.max(0, diffKg),
+          objetosc_m3: Math.max(0, diffM3),
+          ilosc_palet: Math.max(0, diffPal),
+          uwagi: 'Reszta z ' + (zlecenie?.numer || ''),
+          numer_wz: w.numer_wz,
+          nr_zamowienia: w.nr_zamowienia,
+        });
+      }
+    }
+
+    if (reszty.length > 0 && zlecenie?.oddzial_id) {
+      try {
+        const numer = await generateNumerZlecenia(zlecenie.oddzial_id);
+        const { data: noweZl } = await supabase
+          .from('zlecenia')
+          .insert({
+            numer,
+            oddzial_id: zlecenie.oddzial_id,
+            dzien: zlecenie.dzien,
+            preferowana_godzina: godzina === 'dowolna' ? null : godzina,
+            typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
+            status: 'robocza',
+            nadawca_id: zlecenie.nadawca_id,
+          })
+          .select('id')
+          .single();
+        if (noweZl) {
+          for (const r of reszty) {
+            await supabase.from('zlecenia_wz').insert({
+              zlecenie_id: noweZl.id,
+              odbiorca: r.odbiorca,
+              adres: r.adres,
+              tel: r.tel || null,
+              masa_kg: r.masa_kg,
+              objetosc_m3: r.objetosc_m3,
+              ilosc_palet: r.ilosc_palet,
+              uwagi: r.uwagi,
+              numer_wz: r.numer_wz,
+              nr_zamowienia: r.nr_zamowienia,
+            });
+          }
+          toast({ title: 'Utworzono zlecenie z reszta: ' + numer });
+        }
+      } catch (e) {
+        console.warn('Nie udalo sie utworzyc zlecenia z reszta', e);
+      }
     }
 
     setSaving(false);
