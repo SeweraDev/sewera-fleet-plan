@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { computeSuggestions, computeTypeSummary, type RouteSuggestion } from '@/lib/suggestRoutes';
+import { computeSuggestions, computeTypeSummary } from '@/lib/suggestRoutes';
 
 interface Order {
   id: string;
@@ -14,24 +14,6 @@ interface Order {
   dystans_km: number | null;
 }
 
-const STYLES: Record<RouteSuggestion['type'], { bg: string; border: string; icon: string }> = {
-  overweight: {
-    bg: 'bg-red-50 dark:bg-red-950/30',
-    border: 'border-red-200 dark:border-red-800',
-    icon: '⚠️',
-  },
-  merge: {
-    bg: 'bg-green-50 dark:bg-green-950/30',
-    border: 'border-green-200 dark:border-green-800',
-    icon: '🔗',
-  },
-  no_type: {
-    bg: 'bg-yellow-50 dark:bg-yellow-950/30',
-    border: 'border-yellow-200 dark:border-yellow-800',
-    icon: '💡',
-  },
-};
-
 interface Props {
   orders: Order[];
   availableTypes?: string[];
@@ -40,7 +22,7 @@ interface Props {
 export function SuggestionPanel({ orders, availableTypes }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
-  const suggestions = useMemo(
+  const warnings = useMemo(
     () => computeSuggestions(orders, availableTypes),
     [orders, availableTypes]
   );
@@ -50,9 +32,7 @@ export function SuggestionPanel({ orders, availableTypes }: Props) {
     [orders]
   );
 
-  if (suggestions.length === 0 && typeSummary.length === 0) return null;
-
-  const warnings = suggestions.filter(s => s.type === 'overweight').length;
+  if (warnings.length === 0 && typeSummary.length === 0) return null;
 
   return (
     <div className="rounded-lg border bg-card p-3 space-y-3">
@@ -62,11 +42,11 @@ export function SuggestionPanel({ orders, availableTypes }: Props) {
         className="flex items-center gap-2 w-full text-left"
       >
         <span className="font-semibold text-sm">
-          Podpowiedzi ({suggestions.length})
+          Podsumowanie
         </span>
-        {warnings > 0 && (
+        {warnings.length > 0 && (
           <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300">
-            {warnings} ostrz.
+            {warnings.length} ostrz.
           </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground">
@@ -76,6 +56,20 @@ export function SuggestionPanel({ orders, availableTypes }: Props) {
 
       {!collapsed && (
         <>
+          {/* Ostrzeżenia */}
+          {warnings.length > 0 && (
+            <div className="space-y-1.5">
+              {warnings.map((s, i) => (
+                <div
+                  key={i}
+                  className="rounded-md border px-3 py-2 text-sm bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                >
+                  <span>⚠️ {s.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Podsumowanie per typ pojazdu */}
           {typeSummary.length > 0 && (
             <div className="space-y-1">
@@ -104,23 +98,6 @@ export function SuggestionPanel({ orders, availableTypes }: Props) {
                   )}
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* Podpowiedzi szczegółowe */}
-          {suggestions.length > 0 && (
-            <div className="space-y-1.5">
-              {suggestions.map((s, i) => {
-                const style = STYLES[s.type];
-                return (
-                  <div
-                    key={i}
-                    className={'rounded-md border px-3 py-2 text-sm ' + style.bg + ' ' + style.border}
-                  >
-                    <span>{style.icon} {s.message}</span>
-                  </div>
-                );
-              })}
             </div>
           )}
         </>
