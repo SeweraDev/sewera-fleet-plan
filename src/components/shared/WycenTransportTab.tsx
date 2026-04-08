@@ -18,6 +18,7 @@ import {
   obliczKosztZew,
   maStawkiZew,
   findBestAvailableType,
+  mapTypNaCennikowy,
 } from '@/lib/stawki-transportowe';
 
 interface WycenTransportTabProps {
@@ -118,9 +119,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       };
       const flotaWlasna = buildTypMap(flotaData || []);     // cena Sewera
       const flotaZew = buildTypMap(flotaZewData || []);      // cena Zewnętrzna
-      console.log('[WycenTransport] flotaWlasna:', Object.fromEntries([...flotaWlasna.entries()].map(([k,v]) => [k, [...v]])));
-      console.log('[WycenTransport] flotaZew:', Object.fromEntries([...flotaZew.entries()].map(([k,v]) => [k, [...v]])));
-      console.log('[WycenTransport] typPojazdu (cennikowy):', typPojazdu);
 
       // 3. Oblicz odległość od KAŻDEGO oddziału
       const oddzialy = Object.entries(ODDZIAL_COORDS);
@@ -152,8 +150,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
         // Transport zew — stawka z tabeli + oddział musi mieć auto zew
         const zewTypy = flotaZew.get(kod) || new Set<string>();
-        const hasZewVehicle = findBestAvailableType(typPojazdu, zewTypy) !== null;
-        const kosztZew = hasZewVehicle ? obliczKosztZew(km, typPojazdu, kod) : null;
+        const bestZewType = findBestAvailableType(typPojazdu, zewTypy);
+        const kosztZew = bestZewType ? obliczKosztZew(km, typPojazdu, kod) : null;
+        // Pokaż tylko zew typy pasujące do zapytania
+        const matchingZewTypy = bestZewType ? [...zewTypy].filter(t => {
+          const mapped = mapTypNaCennikowy(t);
+          return mapped === typPojazdu || mapped === bestZewType.typ;
+        }) : [];
 
         results.push({
           kod,
@@ -164,7 +167,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           jestMojOddzial: kod === mojKod,
           uzytTyp,
           isFallback,
-          zewTypy: [...zewTypy],
+          zewTypy: matchingZewTypy,
         });
       }
 
