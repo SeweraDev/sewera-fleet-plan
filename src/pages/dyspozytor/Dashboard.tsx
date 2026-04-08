@@ -415,15 +415,38 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
   );
 }
 
-function NowyKursModal({ 
-  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId, isBlocked 
-}: { 
+function NowyKursModal({
+  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId, isBlocked
+}: {
   open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean;
 }) {
   const { kierowcy: allKierowcy } = useKierowcyOddzialu(oddzialId);
   const { flota: allFlota } = useFlotaOddzialu(oddzialId);
+  // Pobierz flotę zewnętrzną
+  const [flotaZew, setFlotaZew] = useState<Pojazd[]>([]);
+  useEffect(() => {
+    if (!oddzialId) { setFlotaZew([]); return; }
+    supabase
+      .from('flota_zewnetrzna')
+      .select('id, nr_rej, typ, ladownosc_kg, max_palet, objetosc_m3, oddzial_id, aktywny')
+      .eq('oddzial_id', oddzialId)
+      .eq('aktywny', true)
+      .then(({ data }) => {
+        setFlotaZew((data || []).map(d => ({
+          id: d.id,
+          nr_rej: d.nr_rej + ' (zew)',
+          typ: d.typ,
+          ladownosc_kg: Number(d.ladownosc_kg),
+          objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
+          max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
+          oddzial_id: d.oddzial_id,
+          aktywny: d.aktywny,
+        })));
+      });
+  }, [oddzialId]);
   const kierowcy = isBlocked ? allKierowcy.filter(k => !isBlocked('kierowca', k.id, dzien)) : allKierowcy;
-  const flota = isBlocked ? allFlota.filter(f => !isBlocked('pojazd', f.id, dzien)) : allFlota;
+  const flotaWlasna = isBlocked ? allFlota.filter(f => !isBlocked('pojazd', f.id, dzien)) : allFlota;
+  const flota = [...flotaWlasna, ...flotaZew];
   const { zlecenia, refetch: refetchZl } = useZleceniaBezKursu(oddzialId);
   const { create, submitting, error } = useCreateKurs(() => { onCreated(); onClose(); });
 
