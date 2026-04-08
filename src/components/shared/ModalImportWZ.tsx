@@ -1043,6 +1043,20 @@ export function parseWZText(rawText: string): WZImportData {
     uwagi,
   });
 
+  // Wyczyść adres z odbiorca jeśli odbiorca zawiera adres
+  if (odbiorca && adres && odbiorca.includes(adres)) {
+    odbiorca = odbiorca.replace(adres, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '').trim();
+  }
+  // Jeśli odbiorca nadal zawiera ul./kod pocztowy — obetnij
+  if (odbiorca) {
+    const ulMatch = odbiorca.match(/,\s*(?:ul|al|os|pl)\.\s/i);
+    if (ulMatch && ulMatch.index != null) {
+      const adresFromOdb = odbiorca.substring(ulMatch.index + 2).trim();
+      odbiorca = odbiorca.substring(0, ulMatch.index).trim();
+      if (!adres) adres = adresFromOdb;
+    }
+  }
+
   return {
     numer_wz,
     nr_zamowienia,
