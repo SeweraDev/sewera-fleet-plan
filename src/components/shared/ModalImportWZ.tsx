@@ -701,20 +701,25 @@ export function parseWZText(rawText: string): WZImportData {
   let odbiorca: string | null = null;
 
   // Priority: find "Odbiorca" or "Nabywca" label and collect lines after it
+  // Sprawdź najpierw czy jest sekcja Adres dostawy — wpływa na zbieranie danych
+  const hasDeliverySectionEarly = lines.some((l) => /Adres\s+dostawy/i.test(l)) || lines.some((l) => /^Budowa/i.test(l));
   const odbLabelIdx = lines.findIndex((l) => /^(?:Odbiorca|Nabywca)\s*$/i.test(l));
   if (odbLabelIdx >= 0) {
     const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
     const nameParts: string[] = [];
-    for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 6, lines.length); i++) {
+    for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 8, lines.length); i++) {
       const l = lines[i];
       if (/^(Adres\s+dostawy|Informacje|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(l)) break;
       if (/^Nr\s+ewid/i.test(l)) break;
       if (/^NIP:/i.test(l)) break;
       if (SEWERA_CHECK.test(l)) { nameParts.length = 0; continue; }
       if (l.length < 2) continue;
-      // Linia z adresem (ul./al./os./pl. lub kod pocztowy) — to nie nazwa firmy
-      if (/^(?:ul|al|os|pl)\.\s/i.test(l)) break;
-      if (/^\d{2}-\d{3}\s/.test(l)) break;
+      // Jeśli JEST sekcja Adres dostawy — obetnij przy adresie (zbierz tylko nazwę)
+      if (hasDeliverySectionEarly) {
+        if (/^(?:ul|al|os|pl)\.\s/i.test(l)) break;
+        if (/^\d{2}-\d{3}\s/.test(l)) break;
+      }
+      // Jeśli BRAK sekcji Adres dostawy — zbierz WSZYSTKO (pełne dane teleadresowe)
       nameParts.push(l);
     }
     if (nameParts.length) odbiorca = nameParts.join(", ");
@@ -811,20 +816,18 @@ export function parseWZText(rawText: string): WZImportData {
   const hasDeliverySection = adresIdx >= 0 || hasBudowa;
 
   if (hasDeliverySection) {
-    // Priority 1: lines AFTER "Adres dostawy" header
+    // Priority 1: ALL lines AFTER "Adres dostawy" header (zbieraj agresywnie)
     if (adresIdx >= 0) {
+      const STOP = /^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano|Lp\.|Magazyn|Forma\s+płatn|NIP:|NR BDO:|Ilość|JM|Kod\s+towaru|Nazwa\s+towaru|Sprzedawca|Nabywca|Odbiorca)/i;
       const addrParts: string[] = [];
       for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
-        const l = lines[i];
-        if (/^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano|Lp\.)/i.test(l)) break;
-        if (/^(Magazyn|Forma\s+płatn|NIP:|NR BDO:)/i.test(l)) break;
-        const trimmed = l.trim();
-        if (trimmed.length > 0 && (
-          /^Budowa/i.test(l) || /ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0
-          || /^[A-ZŁŚŻŹĆŃÓĘ\s\-\.]{3,}$/i.test(trimmed) // nazwa miasta/lokalizacji
-        )) {
-          addrParts.push(trimmed);
-        }
+        const l = lines[i].trim();
+        if (!l) continue;
+        if (STOP.test(l)) break;
+        // Skip lines that are clearly product data (digit + SZT/KG etc)
+        if (/^\d+\s+(SZT|KG|M|OP|KPL)/i.test(l)) break;
+        if (/^\d+\.\s/.test(l)) break; // product line "1. ..."
+        addrParts.push(l);
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
@@ -844,9 +847,9 @@ export function parseWZText(rawText: string): WZImportData {
     }
     // Priority 3: "Budowa" line as delivery location
     if (!adres && hasBudowa) {
-      const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
+      const budowaIdx2 = lines.findIndex((l) => /^Budowa/i.test(l));
       const addrParts: string[] = [];
-      for (let i = budowaIdx + 1; i < Math.min(budowaIdx + 5, lines.length); i++) {
+      for (let i = budowaIdx2 + 1; i < Math.min(budowaIdx2 + 5, lines.length); i++) {
         const l = lines[i];
         if (/^(Os\.\s*kontaktowa|Tel\.|Magazyn|Termin|Nr\s+zam)/i.test(l)) break;
         if (/ul\.|al\.|os\.|pl\./i.test(l) || /\d{2}-\d{3}/.test(l) || addrParts.length > 0) {
@@ -858,20 +861,6 @@ export function parseWZText(rawText: string): WZImportData {
     // Final guard: if adres duplicates odbiorca address, clear it
     if (adres && odbiorca && odbiorca.includes(adres)) {
       adres = null;
-    }
-    // Fallback: jeśli adres pusty ale w bloku Odbiorca są linie z adresem — użyj ich
-    if (!adres && odbLabelIdx >= 0) {
-      const addrFromOdb: string[] = [];
-      for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 8, lines.length); i++) {
-        const l = lines[i];
-        if (/^(Adres\s+dostawy|Informacje|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(l)) break;
-        if (/^(NIP:|NR BDO:|Nr\s+ewid)/i.test(l)) break;
-        if (/SEWERA|KOŚCIUSZKI\s*326/i.test(l)) { addrFromOdb.length = 0; continue; }
-        if (/^(?:ul|al|os|pl)\.\s/i.test(l) || /^\d{2}-\d{3}\s/.test(l)) {
-          addrFromOdb.push(l.trim());
-        }
-      }
-      if (addrFromOdb.length) adres = addrFromOdb.join(', ');
     }
   }
 
@@ -1043,31 +1032,25 @@ export function parseWZText(rawText: string): WZImportData {
     uwagi,
   });
 
-  // Sprawdź czy adres to adres siedziby (zawarty w odbiorca) — PRZED czyszczeniem
-  const adresIsHQ = adres && odbiorca && odbiorca.includes(adres.split(',')[0]);
-
-  // Wyczyść adres z odbiorca jeśli odbiorca zawiera adres
-  if (odbiorca && adres && odbiorca.includes(adres)) {
-    odbiorca = odbiorca.replace(adres, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '').trim();
-  }
-  // Jeśli odbiorca nadal zawiera ul./kod pocztowy — obetnij
-  if (odbiorca) {
+  // Jeśli JEST sekcja "Adres dostawy" — obetnij adres z odbiorca (zostaw tylko nazwę firmy)
+  if (hasDeliverySection && odbiorca) {
+    // Wyczyść adres dostawy z odbiorca jeśli się powtarza
+    if (adres && odbiorca.includes(adres)) {
+      odbiorca = odbiorca.replace(adres, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '').trim();
+    }
+    // Obetnij adres siedziby (ul./al./os./pl. + kod pocztowy)
     const ulMatch = odbiorca.match(/,\s*(?:ul|al|os|pl)\.\s/i);
     if (ulMatch && ulMatch.index != null) {
-      const adresFromOdb = odbiorca.substring(ulMatch.index + 2).trim();
       odbiorca = odbiorca.substring(0, ulMatch.index).trim();
-      if (!adres) adres = adresFromOdb;
     }
   }
+  // Jeśli BRAK sekcji "Adres dostawy" — zostaw odbiorca z pełnymi danymi teleadresowymi
 
-  // Wyciągnij adres dostawy i telefony z uwag
-  if (uwagi && (!hasDeliverySection || !adres || adresIsHQ)) {
+  // Wyciągnij telefony z uwag (zawsze, niezależnie od sekcji adresu)
+  if (uwagi && !tel) {
     const uwagiLines = uwagi.split(/[\n,]/).map(l => l.trim()).filter(Boolean);
     const phoneNumbers: string[] = [];
-    const addressParts: string[] = [];
-
     for (const line of uwagiLines) {
-      // Wyciągnij numery telefonów — szukaj 9-cyfrowych grup (z opcjonalnymi spacjami)
       const phoneRegex = /(\d{3}\s?\d{3}\s?\d{3})/g;
       let pm;
       while ((pm = phoneRegex.exec(line)) !== null) {
@@ -1076,29 +1059,12 @@ export function parseWZText(rawText: string): WZImportData {
           phoneNumbers.push(digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'));
         }
       }
-      // Linia bez numeru telefonu i bez "Nr zamówienia" → potencjalny adres
-      const lineClean = line.replace(/\d{3}\s?\d{3}\s?\d{3}/g, '').trim();
-      if (lineClean.length > 3
-        && !/^Nr\s+(zamówienia|oferty)/i.test(lineClean)
-        && !/^R\d+\//i.test(lineClean)
-        && !/^OFS?\//i.test(lineClean)) {
-        addressParts.push(lineClean);
-      }
     }
-
-    // Jeśli znaleziono adres w uwagach — nadpisz adres siedziby
-    if (addressParts.length > 0) {
-      const adresFromUwagi = addressParts.join(', ');
-      adres = adresFromUwagi;
-      // Wyczyść uwagi — zostaw tylko to co nie jest adresem/telefonem
-      uwagi = null;
-    }
-
-    // Telefony z uwag
-    if (phoneNumbers.length > 0 && !tel) {
+    if (phoneNumbers.length > 0) {
       tel = phoneNumbers.join(', ');
     }
   }
+  // Uwagi — ZAWSZE zachowuj (nigdy nie zeruj)
 
   return {
     numer_wz,
