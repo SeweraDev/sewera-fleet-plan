@@ -1043,6 +1043,9 @@ export function parseWZText(rawText: string): WZImportData {
     uwagi,
   });
 
+  // Sprawdź czy adres to adres siedziby (zawarty w odbiorca) — PRZED czyszczeniem
+  const adresIsHQ = adres && odbiorca && odbiorca.includes(adres.split(',')[0]);
+
   // Wyczyść adres z odbiorca jeśli odbiorca zawiera adres
   if (odbiorca && adres && odbiorca.includes(adres)) {
     odbiorca = odbiorca.replace(adres, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '').trim();
@@ -1058,8 +1061,6 @@ export function parseWZText(rawText: string): WZImportData {
   }
 
   // Wyciągnij adres dostawy i telefony z uwag
-  // Warunek: brak sekcji Adres dostawy LUB adres = adres siedziby (z Odbiorca)
-  const adresIsHQ = adres && odbiorca && odbiorca.includes(adres.split(',')[0]);
   if (uwagi && (!hasDeliverySection || !adres || adresIsHQ)) {
     const uwagiLines = uwagi.split(/[\n,]/).map(l => l.trim()).filter(Boolean);
     const phoneNumbers: string[] = [];
