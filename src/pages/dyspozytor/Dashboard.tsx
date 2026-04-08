@@ -474,12 +474,14 @@ function NowyKursModal({
       setConfirmedOverload(true);
       return;
     }
+    const vehicle = flota.find(f => f.id === flotaId);
+    const isZew = vehicle?.jest_zewnetrzny;
     create({
       oddzial_id: oddzialId,
       dzien,
       kierowca_id: kierowcaId || null,
-      flota_id: flotaId || null,
-      nr_rej_zewn: null,
+      flota_id: isZew ? null : (flotaId || null),
+      nr_rej_zewn: isZew ? (vehicle?.nr_rej_raw || null) : null,
       zlecenie_ids: Array.from(selectedZl),
     });
   };

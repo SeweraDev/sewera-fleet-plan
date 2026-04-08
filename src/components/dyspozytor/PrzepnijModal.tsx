@@ -93,12 +93,15 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
     if (createNew) {
       // Create new kurs
       const selectedKierowca = kierowcy.find(k => k.id === newKierowcaId);
+      const selectedVehicle = flota.find(f => f.id === newFlotaId);
+      const isZew = selectedVehicle?.jest_zewnetrzny;
       const { data: newKurs, error: e1 } = await supabase
         .from('kursy')
         .insert({
           oddzial_id: oddzialId,
           dzien,
-          flota_id: newFlotaId || null,
+          flota_id: isZew ? null : (newFlotaId || null),
+          nr_rej_zewn: isZew ? (selectedVehicle?.nr_rej_raw || null) : null,
           kierowca_id: newKierowcaId || null,
           kierowca_nazwa: selectedKierowca?.imie_nazwisko || null,
           status: 'zaplanowany',

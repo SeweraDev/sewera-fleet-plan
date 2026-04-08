@@ -10,6 +10,8 @@ export interface Pojazd {
   max_palet: number | null;
   oddzial_id: number | null;
   aktywny: boolean;
+  jest_zewnetrzny?: boolean;
+  nr_rej_raw?: string;
 }
 
 export function useFlotaOddzialu(oddzialId: number | null) {
@@ -47,8 +49,9 @@ export function useFlotaOddzialu(oddzialId: number | null) {
       ladownosc_kg: Number(d.ladownosc_kg),
       objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
       max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
+      jest_zewnetrzny: false,
+      nr_rej_raw: d.nr_rej,
     }));
-    // Ujednolicenie nazw typów zew → wewnętrzne
     const TYP_NORMALIZE: Record<string, string> = { 'HDS 12T': 'HDS 12,0t' };
     const zew = (resZew.data || []).map(d => ({
       ...d,
@@ -57,6 +60,8 @@ export function useFlotaOddzialu(oddzialId: number | null) {
       ladownosc_kg: Number(d.ladownosc_kg),
       objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
       max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
+      jest_zewnetrzny: true,
+      nr_rej_raw: d.nr_rej,
     }));
 
     setFlota([...own, ...zew]);
