@@ -742,7 +742,7 @@ export default function DyspozytorDashboard() {
               {activeId === 'zlecenia' && (
                 <ZleceniaTab
                   oddzialId={oddzialId}
-                  oddzialNazwa={oddzialNazwa}
+                  oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
                   dzien={dzien}
                   onOpenKursModal={(zlId) => { setPreSelectedZlId(zlId); setShowModal(true); }}
                 />
