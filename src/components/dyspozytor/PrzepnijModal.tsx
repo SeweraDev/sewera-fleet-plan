@@ -88,10 +88,6 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
 
   const handleSubmit = async () => {
     if (!przystanek || !currentKurs || !oddzialId) return;
-    if (isTargetOverloaded) {
-      toast.error('❌ Przekroczona pojemność docelowego kursu!');
-      return;
-    }
     setSubmitting(true);
 
     if (createNew) {
@@ -240,8 +236,12 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Anuluj</Button>
-          <Button onClick={handleSubmit} disabled={submitting || (!createNew && !targetKursId) || !!isTargetOverloaded}>
-            {submitting ? 'Przepinanie...' : '🔀 Przepnij'}
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || (!createNew && !targetKursId)}
+            variant={isTargetOverloaded ? 'destructive' : 'default'}
+          >
+            {submitting ? 'Przepinanie...' : isTargetOverloaded ? '⚠️ Przepnij mimo przekroczenia' : 'Przepnij'}
           </Button>
         </DialogFooter>
       </DialogContent>

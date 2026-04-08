@@ -486,10 +486,15 @@ function NowyKursModal({
   const overPalet = capPalet > 0 && totalPalet > capPalet;
   const isOverloaded = overKg || overM3 || overPalet;
 
+  const [confirmedOverload, setConfirmedOverload] = useState(false);
+
+  // Reset potwierdzenia gdy zmienia się selekcja lub pojazd
+  useEffect(() => { setConfirmedOverload(false); }, [flotaId, selectedZl.size]);
+
   const handleCreate = () => {
     if (!oddzialId) return;
-    if (isOverloaded) {
-      toast.error('❌ Przekroczona pojemność pojazdu! Zmniejsz liczbę zleceń lub wybierz większy pojazd.');
+    if (isOverloaded && !confirmedOverload) {
+      setConfirmedOverload(true);
       return;
     }
     create({
@@ -575,8 +580,15 @@ function NowyKursModal({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Anuluj</Button>
-          <Button onClick={handleCreate} disabled={submitting || selectedZl.size === 0 || isOverloaded}>
-            {submitting ? 'Tworzenie...' : `Utwórz kurs (${selectedZl.size} zleceń)`}
+          <Button
+            onClick={handleCreate}
+            disabled={submitting || selectedZl.size === 0}
+            variant={isOverloaded && confirmedOverload ? 'destructive' : 'default'}
+          >
+            {submitting ? 'Tworzenie...'
+              : isOverloaded && !confirmedOverload ? `Utwórz mimo przekroczenia (${selectedZl.size} zleceń)`
+              : isOverloaded && confirmedOverload ? `Potwierdz — utwórz kurs`
+              : `Utwórz kurs (${selectedZl.size} zleceń)`}
           </Button>
         </DialogFooter>
       </DialogContent>
