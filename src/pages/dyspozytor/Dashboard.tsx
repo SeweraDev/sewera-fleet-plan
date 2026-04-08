@@ -91,12 +91,15 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('zaplanowany');
   const [kursKm, setKursKm] = useState<Record<string, number | null>>({});
 
-  // Oblicz łączne km trasy per kurs (w tle)
+  // Reset km cache gdy zmienia się lista kursów
+  useEffect(() => { setKursKm({}); }, [kursy.length]);
+
+  // Oblicz łączne km trasy per kurs (w tle): oddział → przystanki → oddział
   useEffect(() => {
     if (!oddzialNazwa || !kursy.length) return;
     (async () => {
       for (const kurs of kursy) {
-        if (kursKm[kurs.id] !== undefined) continue; // już obliczone
+        if (kursKm[kurs.id] !== undefined) continue;
         const kPrz = przystanki.filter(p => p.kurs_id === kurs.id);
         const adresy = [...new Set(kPrz.map(p => p.adres).filter(Boolean))];
         if (!adresy.length) continue;

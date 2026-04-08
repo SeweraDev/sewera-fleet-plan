@@ -131,14 +131,19 @@ export async function calculateRouteTotal(
 
   if (waypoints.length < 2) return null;
 
-  // OSRM multi-waypoint
+  // Dodaj powrót do oddziału
+  waypoints.push(from);
+
+  // OSRM multi-waypoint: oddział → stop1 → stop2 → ... → oddział
   try {
     const coords = waypoints.map(w => `${w.lng},${w.lat}`).join(';');
     const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=false`;
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && data.routes?.[0]) {
-      const km = roundKm(data.routes[0].distance / 1000);
+      const rawKm = data.routes[0].distance / 1000;
+      // Zaokrąglenie bez korekty ×1.1 (trasy wielopunktowe są dokładniejsze)
+      const km = (rawKm % 1 >= 0.4) ? Math.ceil(rawKm) : Math.floor(rawKm);
       return km;
     }
   } catch (e) {
