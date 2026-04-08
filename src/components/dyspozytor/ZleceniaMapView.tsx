@@ -2,26 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 
-const GODZ_COLORS: Record<string, string> = {
-  'do 8:00': '#ef4444',
-  'do 10:00': '#f97316',
-  'do 12:00': '#eab308',
-  'do 14:00': '#22c55e',
-  'do 16:00': '#3b82f6',
-  'Dowolna': '#6b7280',
-};
-
-const TYP_COLORS: Record<string, string> = {
-  'Dostawczy 1,2t': '#a855f7',
-  'Winda 1,8t': '#14b8a6',
-  'Winda 6,3t': '#3b82f6',
-  'Winda MAX 15,8t': '#1d4ed8',
-  'HDS 9,0t': '#f59e0b',
-  'HDS 12,0t': '#ef4444',
-};
-const TYP_DEFAULT_COLOR = '#9ca3af';
-
-type ColorMode = 'godzina' | 'typ';
+const MY_COLOR = '#1e3a5f';
+const OTHER_BRANCH_COLOR = '#60a5fa';
 
 let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
@@ -42,13 +24,6 @@ function loadLeaflet(): Promise<any> {
   });
 }
 
-function getColor(z: ZlecenieOddzialuDto, mode: ColorMode): string {
-  if (mode === 'typ') {
-    return TYP_COLORS[z.typ_pojazdu || ''] || TYP_DEFAULT_COLOR;
-  }
-  return GODZ_COLORS[z.preferowana_godzina || ''] || GODZ_COLORS['Dowolna'];
-}
-
 interface Props {
   zlecenia: ZlecenieOddzialuDto[];
   oddzialCoords: { lat: number; lng: number } | null;
@@ -59,14 +34,10 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [colorMode, setColorMode] = useState<ColorMode>('typ');
 
   const pins = zlecenia.filter(z => z.lat != null && z.lng != null);
   const bezAdresu = zlecenia.filter(z => !z.adres || z.adres.trim().length < 5);
   const czekaNaGeocoding = zlecenia.filter(z => z.adres && z.adres.trim().length >= 5 && z.lat == null);
-
-  // Unikalne typy na mapie (do legendy)
-  const usedTypes = [...new Set(pins.map(z => z.typ_pojazdu || 'Bez typu'))];
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +60,6 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
       // Piny wszystkich oddziałów Sewera
       const shownCodes = new Set<string>();
       for (const [kod, coords] of Object.entries(ODDZIAL_COORDS)) {
-        // R i KAT mają te same współrzędne — pokaż raz
         const coordKey = coords.lat + ',' + coords.lng;
         if (shownCodes.has(coordKey)) continue;
         shownCodes.add(coordKey);
@@ -99,15 +69,14 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
           && Math.abs(coords.lng - oddzialCoords.lng) < 0.001;
 
         const size = isMine ? 30 : 22;
-        const bg = isMine ? '#1e40af' : '#60a5fa';
+        const bg = isMine ? MY_COLOR : OTHER_BRANCH_COLOR;
         const border = isMine ? '3px solid white' : '2px solid white';
         const shadow = isMine ? '0 2px 8px rgba(0,0,0,.5)' : '0 1px 4px rgba(0,0,0,.3)';
         const fontSize = isMine ? '14px' : '10px';
-        const label = isMine ? kod : kod;
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="background:' + bg + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:white;font-size:' + fontSize + ';font-weight:bold">' + label + '</div>',
+          html: '<div style="background:' + bg + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:white;font-size:' + fontSize + ';font-weight:bold">' + kod + '</div>',
           iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2 - 2],
         });
 
@@ -116,7 +85,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
           .bindPopup('<strong>' + kod + '</strong><br/>' + coords.adres + (isMine ? '<br/><em>Twoj oddzial</em>' : ''));
       }
 
-      // Grupuj wg lokalizacji
+      // Grupuj piny zleceń wg lokalizacji
       const groups = new Map<string, typeof pins>();
       pins.forEach(z => {
         if (z.lat == null || z.lng == null) return;
@@ -130,38 +99,15 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
         if (first.lat == null || first.lng == null) return;
         allPoints.push([first.lat, first.lng]);
 
-        const color = getColor(first, colorMode);
         const count = groupPins.length;
-
-        // Jeśli grupa ma mieszane typy/godziny — pokaż podzielony pin
-        const uniqueColors = [...new Set(groupPins.map(z => getColor(z, colorMode)))];
-        let pinHtml: string;
-
-        if (uniqueColors.length > 1) {
-          // Podzielony pin — kolory per zlecenie
-          const segments = uniqueColors.map((c, i) => {
-            const angle = (360 / uniqueColors.length);
-            const start = angle * i;
-            const end = angle * (i + 1);
-            return c;
-          });
-          const gradient = 'conic-gradient(' + segments.map((c, i) =>
-            c + ' ' + Math.round(i * 360 / segments.length) + 'deg ' + Math.round((i + 1) * 360 / segments.length) + 'deg'
-          ).join(', ') + ')';
-          pinHtml = '<div style="position:relative;background:' + gradient + ';width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">';
-        } else {
-          pinHtml = '<div style="position:relative;background:' + color + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">';
-        }
-
-        if (count > 1) {
-          pinHtml += '<span style="position:absolute;top:-6px;right:-6px;background:#1e40af;color:white;border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:1px solid white">' + count + '</span>';
-        }
-        pinHtml += '</div>';
+        const badge = count > 1
+          ? '<span style="position:absolute;top:-6px;right:-6px;background:white;color:' + MY_COLOR + ';border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid ' + MY_COLOR + '">' + count + '</span>'
+          : '';
 
         const icon = L.divIcon({
           className: '',
-          html: pinHtml,
-          iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -14],
+          html: '<div style="position:relative;background:' + MY_COLOR + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + badge + '</div>',
+          iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13],
         });
 
         const popupParts = groupPins.map(z => {
@@ -193,7 +139,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
       cancelled = true;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
-  }, [pins.length, oddzialCoords?.lat, oddzialNazwa, colorMode]);
+  }, [pins.length, oddzialCoords?.lat, oddzialNazwa]);
 
   if (error) {
     return <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">{error}</div>;
@@ -205,47 +151,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
 
   return (
     <div className="space-y-1">
-      {/* Przełącznik trybu kolorów */}
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-muted-foreground">Kolor wg:</span>
-        <button
-          type="button"
-          onClick={() => setColorMode('typ')}
-          className={'px-2 py-1 rounded-full font-medium transition-colors '
-            + (colorMode === 'typ' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80')}
-        >
-          Typ pojazdu
-        </button>
-        <button
-          type="button"
-          onClick={() => setColorMode('godzina')}
-          className={'px-2 py-1 rounded-full font-medium transition-colors '
-            + (colorMode === 'godzina' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80')}
-        >
-          Godzina
-        </button>
-      </div>
-
       <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 400 }} />
-
-      {/* Legenda */}
-      <div className="flex gap-3 text-xs text-muted-foreground flex-wrap">
-        {colorMode === 'godzina'
-          ? Object.entries(GODZ_COLORS).map(([label, color]) => (
-              <span key={label} className="flex items-center gap-1">
-                <span style={{ background: color, width: 10, height: 10, borderRadius: '50%', display: 'inline-block' }} />
-                {label}
-              </span>
-            ))
-          : usedTypes.map(typ => (
-              <span key={typ} className="flex items-center gap-1">
-                <span style={{ background: TYP_COLORS[typ] || TYP_DEFAULT_COLOR, width: 10, height: 10, borderRadius: '50%', display: 'inline-block' }} />
-                {typ}
-              </span>
-            ))
-        }
-      </div>
-
       {bezAdresu.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-3 py-2 text-xs">
           <span className="font-medium text-red-700 dark:text-red-400">
