@@ -12,14 +12,14 @@ const GODZ_COLORS: Record<string, string> = {
 };
 
 const TYP_COLORS: Record<string, string> = {
-  'Dostawczy 1,2t': '#8b5cf6',
-  'Winda 1,8t': '#06b6d4',
+  'Dostawczy 1,2t': '#a855f7',
+  'Winda 1,8t': '#14b8a6',
   'Winda 6,3t': '#3b82f6',
   'Winda MAX 15,8t': '#1d4ed8',
-  'HDS 9,0t': '#f97316',
+  'HDS 9,0t': '#f59e0b',
   'HDS 12,0t': '#ef4444',
 };
-const TYP_DEFAULT_COLOR = '#6b7280';
+const TYP_DEFAULT_COLOR = '#9ca3af';
 
 type ColorMode = 'godzina' | 'typ';
 
