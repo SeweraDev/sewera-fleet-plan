@@ -38,8 +38,8 @@ export function EdytujKursModal({ open, onClose, kurs, dzien, oddzialId, flota, 
 
   useEffect(() => {
     if (open && kurs) {
-      // Find flota_id from nr_rej match
-      const matchedFlota = flota.find(f => f.nr_rej === kurs.nr_rej);
+      // Find flota_id from nr_rej match (own or external)
+      const matchedFlota = flota.find(f => f.nr_rej_raw === kurs.nr_rej || f.nr_rej === kurs.nr_rej);
       setFlotaId(matchedFlota?.id || '');
       setKierowcaId(kurs.kierowca_id || '');
       setEditDzien(dzien);
@@ -59,14 +59,17 @@ export function EdytujKursModal({ open, onClose, kurs, dzien, oddzialId, flota, 
     if (!kurs) return;
     setSaving(true);
 
+    const selectedVehicle = flota.find(f => f.id === flotaId);
+    const isZew = selectedVehicle?.jest_zewnetrzny;
+
     const updates: Record<string, any> = {
-      flota_id: flotaId || null,
+      flota_id: isZew ? null : (flotaId || null),
+      nr_rej_zewn: isZew ? (selectedVehicle?.nr_rej_raw || null) : null,
       kierowca_id: kierowcaId || null,
       dzien: editDzien,
       status,
     };
 
-    // Set kierowca_nazwa from selected driver
     const selectedKierowca = kierowcy.find(k => k.id === kierowcaId);
     updates.kierowca_nazwa = selectedKierowca?.imie_nazwisko || null;
 
