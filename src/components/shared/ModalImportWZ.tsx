@@ -1057,6 +1057,50 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
+  // Wyciągnij adres dostawy i telefony z uwag (gdy brak sekcji "Adres dostawy")
+  if (uwagi && !hasDeliverySection) {
+    const uwagiLines = uwagi.split(/[\n,]/).map(l => l.trim()).filter(Boolean);
+    const phoneNumbers: string[] = [];
+    const addressParts: string[] = [];
+
+    for (const line of uwagiLines) {
+      // Wyciągnij numery telefonów (9+ cyfr, ewentualnie z spacjami)
+      const phoneMatch = line.match(/(?:^|\s)(\d[\d\s]{7,}\d)(?:\s|$)/g);
+      if (phoneMatch) {
+        for (const pm of phoneMatch) {
+          const digits = pm.trim().replace(/\s/g, '');
+          if (digits.length >= 9 && digits.length <= 12) {
+            phoneNumbers.push(digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'));
+          }
+        }
+      }
+      // Linia bez numeru telefonu i bez "Nr zamówienia" → potencjalny adres
+      const lineClean = line.replace(/\d[\d\s]{7,}\d/g, '').trim();
+      if (lineClean.length > 3
+        && !/^Nr\s+(zamówienia|oferty)/i.test(lineClean)
+        && !/^R\d+\//i.test(lineClean)
+        && !/^OFS?\//i.test(lineClean)) {
+        addressParts.push(lineClean);
+      }
+    }
+
+    // Jeśli znaleziono adres w uwagach i nie mamy adresu dostawy (lub mamy adres siedziby)
+    if (addressParts.length > 0) {
+      const adresFromUwagi = addressParts.join(', ');
+      // Adres siedziby (z bloku Odbiorca) nie jest adresem dostawy
+      if (!adres || (odbiorca && adres && odbiorca.includes(adres.split(',')[0]))) {
+        adres = adresFromUwagi;
+      }
+      // Wyczyść uwagi — zostaw tylko to co nie jest adresem/telefonem
+      uwagi = null;
+    }
+
+    // Telefony z uwag
+    if (phoneNumbers.length > 0 && !tel) {
+      tel = phoneNumbers.join(', ');
+    }
+  }
+
   return {
     numer_wz,
     nr_zamowienia,
