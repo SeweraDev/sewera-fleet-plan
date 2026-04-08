@@ -51,6 +51,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
   const [error, setError] = useState<string | null>(null);
 
   const pins = zlecenia.filter(z => z.lat != null && z.lng != null);
+  const bezWspolrzednych = zlecenia.filter(z => z.lat == null || z.lng == null);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,6 +162,20 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
           </span>
         ))}
       </div>
+      {bezWspolrzednych.length > 0 && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 px-3 py-2 text-xs">
+          <span className="font-medium text-orange-700 dark:text-orange-400">
+            Brak lokalizacji ({bezWspolrzednych.length}):
+          </span>
+          <ul className="mt-1 space-y-0.5 text-orange-600 dark:text-orange-300">
+            {bezWspolrzednych.map(z => (
+              <li key={z.id}>
+                {z.numer} — {z.odbiorca || '?'} — {z.adres || 'brak adresu'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
