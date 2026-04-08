@@ -23,19 +23,40 @@ export function useFlotaOddzialu(oddzialId: number | null) {
       return;
     }
     setLoading(true);
-    const { data } = await supabase
-      .from('flota')
-      .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet, oddzial_id, aktywny')
-      .eq('oddzial_id', oddzialId)
-      .eq('aktywny', true)
-      .order('typ')
-      .order('nr_rej');
-    setFlota((data || []).map(d => ({
+
+    // Pobierz flotę własną i zewnętrzną równolegle
+    const [resOwn, resZew] = await Promise.all([
+      supabase
+        .from('flota')
+        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet, oddzial_id, aktywny')
+        .eq('oddzial_id', oddzialId)
+        .eq('aktywny', true)
+        .order('typ')
+        .order('nr_rej'),
+      supabase
+        .from('flota_zewnetrzna')
+        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet, oddzial_id, aktywny')
+        .eq('oddzial_id', oddzialId)
+        .eq('aktywny', true)
+        .order('typ')
+        .order('nr_rej'),
+    ]);
+
+    const own = (resOwn.data || []).map(d => ({
       ...d,
       ladownosc_kg: Number(d.ladownosc_kg),
       objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
       max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
-    })));
+    }));
+    const zew = (resZew.data || []).map(d => ({
+      ...d,
+      nr_rej: d.nr_rej + ' (zew)',
+      ladownosc_kg: Number(d.ladownosc_kg),
+      objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
+      max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
+    }));
+
+    setFlota([...own, ...zew]);
     setLoading(false);
   }, [oddzialId]);
 
