@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, Component, type ReactNode } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 
 // Kolory pinów wg godziny dostawy
@@ -16,7 +16,7 @@ let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
   if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     // CSS
     if (!document.querySelector('link[href*="leaflet"]')) {
       const link = document.createElement('link');
@@ -36,6 +36,7 @@ function loadLeaflet(): Promise<any> {
       leafletLoaded = true;
       resolve((window as any).L);
     };
+    script.onerror = () => reject(new Error('Nie udało się załadować Leaflet'));
     document.head.appendChild(script);
   });
 }
@@ -56,7 +57,7 @@ export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props
     let cancelled = false;
 
     loadLeaflet().then((L) => {
-      if (cancelled || !containerRef.current) return;
+      if (cancelled || !containerRef.current || !L) return;
 
       // Zniszcz starą mapę
       if (mapRef.current) {
@@ -137,6 +138,8 @@ export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props
       if (allPoints.length > 1) {
         map.fitBounds(allPoints, { padding: [40, 40], maxZoom: 13 });
       }
+    }).catch((err) => {
+      console.warn('[ZleceniaMapView] Leaflet load error:', err);
     });
 
     return () => {
@@ -168,5 +171,29 @@ export function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props
         ))}
       </div>
     </div>
+  );
+}
+
+// Error boundary — chroni stronę przed crashem mapy
+class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">
+          Nie udało się załadować mapy. Odśwież stronę, aby spróbować ponownie.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function ZleceniaMapViewSafe(props: Props) {
+  return (
+    <MapErrorBoundary>
+      <ZleceniaMapView {...props} />
+    </MapErrorBoundary>
   );
 }

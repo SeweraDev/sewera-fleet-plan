@@ -19,7 +19,7 @@ import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 import { NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 
 import { lazy, Suspense } from 'react';
-const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView').then(m => ({ default: m.ZleceniaMapView })));
+const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView'));
 
 // Mapowanie typ pojazdu → typowa pojemność (gdy brak przypisanego pojazdu)
 // Wartości orientacyjne — dokładne dane per pojazd są w tabeli flota
