@@ -51,7 +51,8 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
   const [error, setError] = useState<string | null>(null);
 
   const pins = zlecenia.filter(z => z.lat != null && z.lng != null);
-  const bezWspolrzednych = zlecenia.filter(z => z.lat == null || z.lng == null);
+  const bezAdresu = zlecenia.filter(z => !z.adres || z.adres.trim().length < 5);
+  const czekaNaGeocoding = zlecenia.filter(z => z.adres && z.adres.trim().length >= 5 && z.lat == null);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,15 +163,29 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
           </span>
         ))}
       </div>
-      {bezWspolrzednych.length > 0 && (
+      {bezAdresu.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-3 py-2 text-xs">
+          <span className="font-medium text-red-700 dark:text-red-400">
+            Brak adresu w WZ ({bezAdresu.length}) — uzupelnij w zleceniu:
+          </span>
+          <ul className="mt-1 space-y-0.5 text-red-600 dark:text-red-300">
+            {bezAdresu.map(z => (
+              <li key={z.id}>
+                {z.numer} — {z.odbiorca || '?'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {czekaNaGeocoding.length > 0 && (
         <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 px-3 py-2 text-xs">
           <span className="font-medium text-orange-700 dark:text-orange-400">
-            Brak lokalizacji ({bezWspolrzednych.length}):
+            Szukam lokalizacji ({czekaNaGeocoding.length}):
           </span>
           <ul className="mt-1 space-y-0.5 text-orange-600 dark:text-orange-300">
-            {bezWspolrzednych.map(z => (
+            {czekaNaGeocoding.map(z => (
               <li key={z.id}>
-                {z.numer} — {z.odbiorca || '?'} — {z.adres || 'brak adresu'}
+                {z.numer} — {z.adres}
               </li>
             ))}
           </ul>
