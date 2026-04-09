@@ -118,29 +118,36 @@ function groupByLocation(orders: OrderInput[]): OrderInput[][] {
 export function computeSuggestions(orders: OrderInput[], availableTypes?: string[]): RouteSuggestion[] {
   const suggestions: RouteSuggestion[] = [];
 
-  // 1. Przekroczenie wagi
+  // 1. Przekroczenie wagi / objętości / palet
   for (const o of orders) {
     const typ = o.typ_pojazdu;
     const cap = typ ? TYP_CAPACITY[typ] : null;
 
-    if (cap && o.suma_kg > cap.kg) {
-      const trips = Math.ceil(o.suma_kg / cap.kg);
-      suggestions.push({
-        type: 'overweight',
-        severity: 'warning',
-        message: o.numer + ': ' + Math.round(o.suma_kg).toLocaleString('pl-PL')
-          + ' kg — potrzebne ' + trips + ' kursy ' + typ
-          + ' (pojemnosc ' + cap.kg.toLocaleString('pl-PL') + ' kg)',
-        orderIds: [o.id],
-        orderNumbers: [o.numer],
-      });
+    if (cap) {
+      const overKg = o.suma_kg > cap.kg;
+      const overM3 = cap.m3 > 0 && o.suma_m3 > cap.m3;
+      const overPal = cap.pal > 0 && o.suma_palet > cap.pal;
+
+      if (overKg || overM3 || overPal) {
+        const parts: string[] = [];
+        if (overKg) parts.push('waga ' + Math.round(o.suma_kg).toLocaleString('pl-PL') + '/' + cap.kg.toLocaleString('pl-PL') + ' kg');
+        if (overM3) parts.push('objętość ' + o.suma_m3.toFixed(1) + '/' + cap.m3 + ' m³');
+        if (overPal) parts.push('palety ' + o.suma_palet + '/' + cap.pal + ' pal');
+        suggestions.push({
+          type: 'overweight',
+          severity: 'warning',
+          message: o.numer + ': przekroczenie — ' + parts.join(', ') + ' (' + typ + ')',
+          orderIds: [o.id],
+          orderNumbers: [o.numer],
+        });
+      }
     } else if (!typ && o.suma_kg > 15800) {
       // Nie mieści się na żadnym pojeździe
       suggestions.push({
         type: 'overweight',
         severity: 'warning',
         message: o.numer + ': ' + Math.round(o.suma_kg).toLocaleString('pl-PL')
-          + ' kg — przekracza najwększy pojazd (15 800 kg)',
+          + ' kg — przekracza największy pojazd (15 800 kg)',
         orderIds: [o.id],
         orderNumbers: [o.numer],
       });

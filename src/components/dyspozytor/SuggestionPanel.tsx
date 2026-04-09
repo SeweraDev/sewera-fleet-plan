@@ -46,7 +46,7 @@ export function SuggestionPanel({ orders, availableTypes }: Props) {
         </span>
         {warnings.length > 0 && (
           <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300">
-            {warnings.length} ostrz.
+            {warnings.length} {warnings.length === 1 ? 'ostrzeżenie' : warnings.length < 5 ? 'ostrzeżenia' : 'ostrzeżeń'}
           </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground">
