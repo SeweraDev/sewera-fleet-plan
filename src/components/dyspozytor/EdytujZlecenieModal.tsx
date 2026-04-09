@@ -350,6 +350,12 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
           {loading ? (
             <p className="text-center text-muted-foreground py-6">Ładowanie...</p>
+          ) : zlecenie && ['dostarczona', 'w_trasie', 'anulowana'].includes(zlecenie.status) ? (
+            <div className="py-8 text-center space-y-3">
+              <p className="text-sm font-medium">Zlecenie ma status: <strong>{zlecenie.status === 'dostarczona' ? 'Dostarczone' : zlecenie.status === 'w_trasie' ? 'W trasie' : 'Anulowane'}</strong></p>
+              <p className="text-sm text-muted-foreground">Zrealizowanych zleceń nie można edytować.</p>
+              <Button variant="outline" onClick={onClose}>Zamknij</Button>
+            </div>
           ) : (
             <div className="space-y-4">
               {/* Info + dzień edytowalny */}

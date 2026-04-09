@@ -164,7 +164,7 @@ function ZlSzczegolyDialog({
               Przypisz do kursu
             </Button>
           )}
-          {zlecenie.status !== 'anulowana' && (
+          {['robocza', 'do_weryfikacji', 'potwierdzona'].includes(zlecenie.status) && (
             <Button variant="outline" onClick={() => { onClose(); onEdit(zlecenie.id); }}>
               Edytuj zlecenie
             </Button>
