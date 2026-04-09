@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -78,23 +78,26 @@ function PojazdModal({
   const [aktywny, setAktywny] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useState(() => {});
-  if (open && pojazd && nr_rej === '' && !saving) {
-    setNrRej(pojazd.nr_rej);
-    setTyp(pojazd.typ);
-    setOddId(String(pojazd.oddzial_id || oddzialId || ''));
-    setLadownosc(pojazd.ladownosc_kg);
-    setObjetosc(pojazd.objetosc_m3 ?? '');
-    setMaxPalet(pojazd.max_palet ?? '');
-    setAktywny(pojazd.aktywny);
-  }
-  if (open && !pojazd && nr_rej === '' && typ === '' && !saving) {
-    setOddId(String(oddzialId || ''));
-    setAktywny(true);
-  }
+  useEffect(() => {
+    if (!open) {
+      setNrRej(''); setTyp(''); setOddId(''); setLadownosc(0); setObjetosc(''); setMaxPalet(''); setAktywny(true);
+      return;
+    }
+    if (pojazd) {
+      setNrRej(pojazd.nr_rej);
+      setTyp(pojazd.typ);
+      setOddId(String(pojazd.oddzial_id || oddzialId || ''));
+      setLadownosc(pojazd.ladownosc_kg);
+      setObjetosc(pojazd.objetosc_m3 ?? '');
+      setMaxPalet(pojazd.max_palet ?? '');
+      setAktywny(pojazd.aktywny);
+    } else {
+      setOddId(String(oddzialId || ''));
+      setAktywny(true);
+    }
+  }, [open, pojazd, oddzialId]);
 
   const handleClose = () => {
-    setNrRej(''); setTyp(''); setOddId(''); setLadownosc(0); setObjetosc(''); setMaxPalet(''); setAktywny(true);
     onClose();
   };
 
@@ -186,24 +189,28 @@ function ZewnetrznyModal({
   const [tel, setTel] = useState('');
   const [saving, setSaving] = useState(false);
 
-  if (open && pojazd && nr_rej === '' && !saving) {
-    setNrRej(pojazd.nr_rej);
-    setTyp(pojazd.typ);
-    setOddId(String(pojazd.oddzial_id || oddzialId || ''));
-    setLadownosc(pojazd.ladownosc_kg ?? '');
-    setMaxPalet(pojazd.max_palet ?? '');
-    setObjetosc(pojazd.objetosc_m3 ?? '');
-    setFirma(pojazd.firma || '');
-    setKierowca(pojazd.kierowca || '');
-    setTel(pojazd.tel || '');
-  }
-  if (open && !pojazd && nr_rej === '' && typ === '' && !saving) {
-    setOddId(String(oddzialId || ''));
-  }
+  useEffect(() => {
+    if (!open) {
+      setNrRej(''); setTyp(''); setOddId(''); setLadownosc(''); setMaxPalet(''); setObjetosc('');
+      setFirma(''); setKierowca(''); setTel('');
+      return;
+    }
+    if (pojazd) {
+      setNrRej(pojazd.nr_rej);
+      setTyp(pojazd.typ);
+      setOddId(String(pojazd.oddzial_id || oddzialId || ''));
+      setLadownosc(pojazd.ladownosc_kg ?? '');
+      setMaxPalet(pojazd.max_palet ?? '');
+      setObjetosc(pojazd.objetosc_m3 ?? '');
+      setFirma(pojazd.firma || '');
+      setKierowca(pojazd.kierowca || '');
+      setTel(pojazd.tel || '');
+    } else {
+      setOddId(String(oddzialId || ''));
+    }
+  }, [open, pojazd, oddzialId]);
 
   const handleClose = () => {
-    setNrRej(''); setTyp(''); setOddId(''); setLadownosc(''); setMaxPalet(''); setObjetosc('');
-    setFirma(''); setKierowca(''); setTel('');
     onClose();
   };
 
@@ -296,20 +303,24 @@ function KierowcaModal({
   const [aktywny, setAktywny] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  if (open && kierowca && imie === '' && !saving) {
-    setImie(kierowca.imie_nazwisko);
-    setUprawnienia(kierowca.uprawnienia);
-    setOddId(String(kierowca.oddzial_id || oddzialId || ''));
-    setTel(kierowca.tel);
-    setAktywny(kierowca.aktywny);
-  }
-  if (open && !kierowca && imie === '' && uprawnienia === '' && !saving) {
-    setOddId(String(oddzialId || ''));
-    setAktywny(true);
-  }
+  useEffect(() => {
+    if (!open) {
+      setImie(''); setUprawnienia(''); setOddId(''); setTel(''); setAktywny(true);
+      return;
+    }
+    if (kierowca) {
+      setImie(kierowca.imie_nazwisko);
+      setUprawnienia(kierowca.uprawnienia);
+      setOddId(String(kierowca.oddzial_id || oddzialId || ''));
+      setTel(kierowca.tel);
+      setAktywny(kierowca.aktywny);
+    } else {
+      setOddId(String(oddzialId || ''));
+      setAktywny(true);
+    }
+  }, [open, kierowca, oddzialId]);
 
   const handleClose = () => {
-    setImie(''); setUprawnienia(''); setOddId(''); setTel(''); setAktywny(true);
     onClose();
   };
 
