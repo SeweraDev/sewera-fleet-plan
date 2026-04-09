@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,6 +76,10 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [showImport, setShowImport] = useState(false);
   const originalWzRef = useRef<WzData[]>([]);
 
+  // Pojemność pojazdu z kursu
+  const [capacity, setCapacity] = useState<{ kg: number; m3: number; pal: number }>({ kg: 0, m3: 0, pal: 0 });
+  const [otherLoad, setOtherLoad] = useState<{ kg: number; m3: number; pal: number }>({ kg: 0, m3: 0, pal: 0 });
+
   useEffect(() => {
     if (!open || !zlecenieId) return;
     setLoading(true);
@@ -114,6 +118,84 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       setLoading(false);
     });
   }, [open, zlecenieId]);
+
+  // Pobierz pojemność pojazdu i obciążenie innych zleceń w kursie
+  useEffect(() => {
+    if (!open || !zlecenieId) return;
+    setCapacity({ kg: 0, m3: 0, pal: 0 });
+    setOtherLoad({ kg: 0, m3: 0, pal: 0 });
+
+    (async () => {
+      // 1. Znajdź kurs_id z kurs_przystanki
+      const { data: przystanki } = await supabase
+        .from('kurs_przystanki')
+        .select('kurs_id')
+        .eq('zlecenie_id', zlecenieId)
+        .limit(1);
+      const kursId = przystanki?.[0]?.kurs_id;
+      if (!kursId) return; // Zlecenie nie jest w kursie
+
+      // 2. Pobierz kurs z flotem
+      const { data: kurs } = await supabase
+        .from('kursy')
+        .select('flota_id, nr_rej_zewn')
+        .eq('id', kursId)
+        .single();
+      if (!kurs) return;
+
+      // 3. Pojemność z floty wewnętrznej lub zewnętrznej
+      let cap = { kg: 0, m3: 0, pal: 0 };
+      if (kurs.flota_id) {
+        const { data: f } = await supabase
+          .from('flota')
+          .select('ladownosc_kg, objetosc_m3, max_palet')
+          .eq('id', kurs.flota_id)
+          .single();
+        if (f) cap = { kg: Number(f.ladownosc_kg) || 0, m3: Number(f.objetosc_m3) || 0, pal: Number(f.max_palet) || 0 };
+      } else if (kurs.nr_rej_zewn) {
+        const { data: fz } = await supabase
+          .from('flota_zewnetrzna')
+          .select('ladownosc_kg, objetosc_m3, max_palet')
+          .eq('nr_rej', kurs.nr_rej_zewn)
+          .single();
+        if (fz) cap = { kg: Number(fz.ladownosc_kg) || 0, m3: Number(fz.objetosc_m3) || 0, pal: Number(fz.max_palet) || 0 };
+      }
+      setCapacity(cap);
+
+      // 4. Obciążenie INNYCH zleceń w tym kursie (bez bieżącego)
+      const { data: allPrz } = await supabase
+        .from('kurs_przystanki')
+        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet')
+        .eq('kurs_id', kursId);
+      if (allPrz) {
+        const other = allPrz
+          .filter(p => p.zlecenie_id !== zlecenieId)
+          .reduce((acc, p) => ({
+            kg: acc.kg + (Number(p.masa_kg) || 0),
+            m3: acc.m3 + (Number(p.objetosc_m3) || 0),
+            pal: acc.pal + (Number(p.ilosc_palet) || 0),
+          }), { kg: 0, m3: 0, pal: 0 });
+        setOtherLoad(other);
+      }
+    })();
+  }, [open, zlecenieId]);
+
+  // Oblicz przekroczenie na bieżąco
+  const editedLoad = useMemo(() => wzList.reduce(
+    (acc, w) => ({ kg: acc.kg + (Number(w.masa_kg) || 0), m3: acc.m3 + (Number(w.objetosc_m3) || 0), pal: acc.pal + (Number(w.ilosc_palet) || 0) }),
+    { kg: 0, m3: 0, pal: 0 }
+  ), [wzList]);
+
+  const totalLoad = useMemo(() => ({
+    kg: otherLoad.kg + editedLoad.kg,
+    m3: otherLoad.m3 + editedLoad.m3,
+    pal: otherLoad.pal + editedLoad.pal,
+  }), [otherLoad, editedLoad]);
+
+  const overKg = capacity.kg > 0 && totalLoad.kg > capacity.kg;
+  const overM3 = capacity.m3 > 0 && totalLoad.m3 > capacity.m3;
+  const overPal = capacity.pal > 0 && totalLoad.pal > capacity.pal;
+  const isOverloaded = overKg || overM3 || overPal;
 
   const updateWz = (idx: number, field: keyof WzData, value: string | number) => {
     setWzList(prev => prev.map((w, i) => i === idx ? { ...w, [field]: value } : w));
@@ -350,10 +432,19 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
             </div>
           )}
 
+          {isOverloaded && (
+            <div className="p-3 rounded-md text-sm bg-red-100 dark:bg-red-950/50 border border-red-400">
+              <div className="font-semibold text-red-600 mb-1">⚠️ Przekroczona pojemność pojazdu!</div>
+              {overKg && <div className="text-red-600">Waga: {Math.round(totalLoad.kg)} / {capacity.kg} kg (+{Math.round(totalLoad.kg - capacity.kg)} kg)</div>}
+              {overM3 && <div className="text-red-600">Objętość: {totalLoad.m3.toFixed(1)} / {capacity.m3} m³ (+{(totalLoad.m3 - capacity.m3).toFixed(1)})</div>}
+              {overPal && <div className="text-red-600">Palety: {totalLoad.pal} / {capacity.pal} pal (+{totalLoad.pal - capacity.pal})</div>}
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={onClose}>Anuluj</Button>
-            <Button onClick={handleSave} disabled={saving || loading}>
-              {saving ? 'Zapisywanie...' : `Zapisz zmiany (${wzList.length} WZ)`}
+            <Button onClick={handleSave} disabled={saving || loading} variant={isOverloaded ? 'destructive' : 'default'}>
+              {saving ? 'Zapisywanie...' : isOverloaded ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)` : `Zapisz zmiany (${wzList.length} WZ)`}
             </Button>
           </DialogFooter>
         </DialogContent>
