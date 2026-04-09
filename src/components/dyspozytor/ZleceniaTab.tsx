@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -237,7 +238,7 @@ export function ZleceniaTab({
   oddzialNazwa?: string;
   dzien?: string;
   pastOnly?: boolean;
-  onOpenKursModal?: (zlecenieId: string) => void;
+  onOpenKursModal?: (zlecenieIds: string[]) => void;
 }) {
   const { zlecenia, loading, refetch } = useZleceniaOddzialu(oddzialId, pastOnly, dzien);
   const { flota } = useFlotaOddzialu(oddzialId);
@@ -275,6 +276,27 @@ export function ZleceniaTab({
     all: zlecenia.filter(z => z.status !== 'anulowana').length,
     anulowana: zlecenia.filter(z => z.status === 'anulowana').length,
   };
+
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+
+  const toggleChecked = (id: string) => {
+    const s = new Set(checkedIds);
+    s.has(id) ? s.delete(id) : s.add(id);
+    setCheckedIds(s);
+  };
+
+  const toggleAll = () => {
+    if (checkedIds.size === filtered.length) {
+      setCheckedIds(new Set());
+    } else {
+      setCheckedIds(new Set(filtered.map(z => z.id)));
+    }
+  };
+
+  const checkedZlecenia = filtered.filter(z => checkedIds.has(z.id));
+  const checkedKg = checkedZlecenia.reduce((s, z) => s + z.suma_kg, 0);
+  const checkedM3 = checkedZlecenia.reduce((s, z) => s + z.suma_m3, 0);
+  const checkedPal = checkedZlecenia.reduce((s, z) => s + z.suma_palet, 0);
 
   const [deleteZlId, setDeleteZlId] = useState<string | null>(null);
   const deleteZlNumer = zlecenia.find(z => z.id === deleteZlId)?.numer || '';
@@ -387,6 +409,33 @@ export function ZleceniaTab({
         </button>
       </div>
 
+      {/* Action bar dla zaznaczonych */}
+      {checkedIds.size > 0 && statusFilter === 'bez_kursu' && (
+        <div className="flex items-center gap-4 rounded-lg bg-primary/10 border border-primary/30 px-4 py-3">
+          <span className="text-sm font-semibold">
+            Zaznaczono {checkedIds.size} {checkedIds.size === 1 ? 'zlecenie' : checkedIds.size < 5 ? 'zlecenia' : 'zleceń'}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            ⚖️ {Math.round(checkedKg).toLocaleString('pl-PL')} kg
+            {checkedM3 > 0 && ` · ${Math.round(checkedM3 * 10) / 10} m³`}
+            {checkedPal > 0 && ` · ${checkedPal} pal`}
+          </span>
+          <Button
+            size="sm"
+            className="ml-auto"
+            onClick={() => {
+              onOpenKursModal?.(Array.from(checkedIds));
+              setCheckedIds(new Set());
+            }}
+          >
+            Przypisz do kursu →
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setCheckedIds(new Set())}>
+            Odznacz
+          </Button>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">Brak zleceń</CardContent></Card>
       ) : (
@@ -395,6 +444,14 @@ export function ZleceniaTab({
             <Table>
               <TableHeader>
                 <TableRow>
+                  {statusFilter === 'bez_kursu' && (
+                    <TableHead className="w-10" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={checkedIds.size === filtered.length && filtered.length > 0}
+                        onCheckedChange={toggleAll}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('dzien')}>
                     Dzień {sortBy === 'dzien' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </TableHead>
@@ -429,6 +486,14 @@ export function ZleceniaTab({
                     className={`cursor-pointer hover:bg-muted/50 ${z.flaga_brak_wz ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
                     onClick={() => setSelectedZl(z)}
                   >
+                    {statusFilter === 'bez_kursu' && (
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={checkedIds.has(z.id)}
+                          onCheckedChange={() => toggleChecked(z.id)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>{z.dzien}</TableCell>
                     <TableCell>{z.preferowana_godzina || '—'}</TableCell>
                     <TableCell><StatusBadge status={z.status} /></TableCell>
@@ -470,7 +535,7 @@ export function ZleceniaTab({
         open={!!selectedZl}
         onClose={() => setSelectedZl(null)}
         onEdit={(id) => setEditZlId(id)}
-        onAssignToKurs={(id) => onOpenKursModal?.(id)}
+        onAssignToKurs={(id) => onOpenKursModal?.([id])}
         onDelete={handleDelete}
       />
 

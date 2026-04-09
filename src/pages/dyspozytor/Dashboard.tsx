@@ -455,9 +455,9 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
 }
 
 function NowyKursModal({
-  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieId, isBlocked
+  open, onClose, oddzialId, dzien, onCreated, preSelectedZlecenieIds, isBlocked
 }: {
-  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieId?: string | null; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean;
+  open: boolean; onClose: () => void; oddzialId: number | null; dzien: string; onCreated: () => void; preSelectedZlecenieIds?: string[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean;
 }) {
   const { kierowcy: allKierowcy } = useKierowcyOddzialu(oddzialId);
   const { flota: allFlota } = useFlotaOddzialu(oddzialId);
@@ -470,16 +470,16 @@ function NowyKursModal({
   const [flotaId, setFlotaId] = useState<string>('');
   const [selectedZl, setSelectedZl] = useState<Set<string>>(new Set());
 
-  // Pre-select zlecenie when modal opens with a specific one
+  // Pre-select zlecenia when modal opens
   useEffect(() => {
-    if (open && preSelectedZlecenieId) {
-      setSelectedZl(new Set([preSelectedZlecenieId]));
+    if (open && preSelectedZlecenieIds && preSelectedZlecenieIds.length > 0) {
+      setSelectedZl(new Set(preSelectedZlecenieIds));
     } else if (!open) {
       setSelectedZl(new Set());
       setKierowcaId('');
       setFlotaId('');
     }
-  }, [open, preSelectedZlecenieId]);
+  }, [open, preSelectedZlecenieIds]);
 
   const toggleZl = (id: string) => {
     const s = new Set(selectedZl);
@@ -692,7 +692,7 @@ export default function DyspozytorDashboard() {
   }, [profile, oddzialy, oddzialId]);
   const [showModal, setShowModal] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
-  const [preSelectedZlId, setPreSelectedZlId] = useState<string | null>(null);
+  const [preSelectedZlIds, setPreSelectedZlIds] = useState<string[]>([]);
   const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
   const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
@@ -775,7 +775,7 @@ export default function DyspozytorDashboard() {
                   oddzialId={oddzialId}
                   oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
                   dzien={dzien}
-                  onOpenKursModal={(zlId) => { setPreSelectedZlId(zlId); setShowModal(true); }}
+                  onOpenKursModal={(zlIds) => { setPreSelectedZlIds(zlIds); setShowModal(true); }}
                 />
               )}
               {activeId === 'nowe_zlecenie' && (
@@ -792,11 +792,11 @@ export default function DyspozytorDashboard() {
 
           <NowyKursModal
             open={showModal}
-            onClose={() => { setShowModal(false); setPreSelectedZlId(null); }}
+            onClose={() => { setShowModal(false); setPreSelectedZlIds([]); }}
             oddzialId={oddzialId}
             dzien={dzien}
             onCreated={refetch}
-            preSelectedZlecenieId={preSelectedZlId}
+            preSelectedZlecenieIds={preSelectedZlIds}
             isBlocked={isBlocked}
           />
 
