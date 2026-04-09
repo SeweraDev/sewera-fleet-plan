@@ -75,6 +75,12 @@ export async function geocodeAddress(adres: string): Promise<{ lat: number; lng:
     const data = await res.json();
     if (data.features && data.features.length > 0) {
       const [lng, lat] = data.features[0].geometry.coordinates;
+      // Bounding box: Sewera operuje na Śląsku i okolicach (~200km od Katowic)
+      // Odrzuć wyniki daleko poza region (błędny geocoding)
+      if (lat < 49.0 || lat > 52.0 || lng < 17.0 || lng > 21.0) {
+        console.warn(`[geocode] poza regionem: "${queryBase}" → ${lat}, ${lng} — odrzucam`);
+        return null;
+      }
       const result = { lat, lng };
       console.log(`[geocode] OK: "${queryBase}" → ${lat}, ${lng}`);
       geocodeCache.set(cacheKey, result);
