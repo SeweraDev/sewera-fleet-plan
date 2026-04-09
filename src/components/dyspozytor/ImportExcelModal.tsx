@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -304,6 +304,14 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
   const [importDzien, setImportDzien] = useState(dzien);
   const [importOddzialId, setImportOddzialId] = useState<number | null>(oddzialId);
   const [importing, setImporting] = useState(false);
+
+  // Synchronizuj z props gdy modal się otwiera
+  useEffect(() => {
+    if (open) {
+      setImportOddzialId(oddzialId);
+      setImportDzien(dzien);
+    }
+  }, [open, oddzialId, dzien]);
   const [error, setError] = useState<string | null>(null);
 
   const doImport = async (parseResult: ParseResult, states: KursState[], targetDzien: string) => {
@@ -320,6 +328,8 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
       const kurs = parseResult.kursy[i];
 
       const selectedKierowca = kierowcy.find(k => k.id === ks.kierowca_id);
+      const selectedVehicle = flota.find(f => f.id === ks.flota_id);
+      const isZew = selectedVehicle?.jest_zewnetrzny;
 
       const { data: newKurs, error: kErr } = await supabase
         .from('kursy')
@@ -327,7 +337,8 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
           oddzial_id: effectiveOddzialId,
           dzien: targetDzien,
           kierowca_id: ks.kierowca_id || null,
-          flota_id: ks.flota_id || null,
+          flota_id: isZew ? null : (ks.flota_id || null),
+          nr_rej_zewn: isZew ? (selectedVehicle?.nr_rej_raw || null) : null,
           kierowca_nazwa: selectedKierowca?.imie_nazwisko || kurs.kierowca_nazwa,
           numer: kurs.nr_kursu_w_pliku || await generateNumerKursu(effectiveOddzialId),
           status: 'zaplanowany',
