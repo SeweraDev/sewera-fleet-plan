@@ -11,6 +11,8 @@ export interface ZlecenieBezKursuDto {
   suma_m3: number;
   suma_palet: number;
   status: string;
+  odbiorca: string;
+  adres: string;
 }
 
 export function useZleceniaBezKursu(oddzialId: number | null) {
@@ -51,23 +53,25 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
 
     // Get WZ sums (kg, m³, palety)
     const ids = unassigned.map(z => z.id);
-    let wzMap = new Map<string, { kg: number; m3: number; palet: number }>();
+    let wzMap = new Map<string, { kg: number; m3: number; palet: number; odbiorca: string; adres: string }>();
     if (ids.length > 0) {
       const { data: wzData } = await supabase
         .from('zlecenia_wz')
-        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet')
+        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet, odbiorca, adres')
         .in('zlecenie_id', ids);
       (wzData || []).forEach(w => {
-        const prev = wzMap.get(w.zlecenie_id) || { kg: 0, m3: 0, palet: 0 };
+        const prev = wzMap.get(w.zlecenie_id) || { kg: 0, m3: 0, palet: 0, odbiorca: '', adres: '' };
         prev.kg += Number(w.masa_kg) || 0;
         prev.m3 += Number(w.objetosc_m3) || 0;
         prev.palet += Number(w.ilosc_palet) || 0;
+        if (!prev.odbiorca && w.odbiorca) prev.odbiorca = w.odbiorca;
+        if (!prev.adres && w.adres) prev.adres = w.adres;
         wzMap.set(w.zlecenie_id, prev);
       });
     }
 
     setZlecenia(unassigned.map(z => {
-      const wz = wzMap.get(z.id) || { kg: 0, m3: 0, palet: 0 };
+      const wz = wzMap.get(z.id) || { kg: 0, m3: 0, palet: 0, odbiorca: '', adres: '' };
       return {
         id: z.id,
         numer: z.numer,
@@ -78,6 +82,8 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
         suma_m3: wz.m3,
         suma_palet: wz.palet,
         status: z.status,
+        odbiorca: wz.odbiorca,
+        adres: wz.adres,
       };
     }));
     setLoading(false);
