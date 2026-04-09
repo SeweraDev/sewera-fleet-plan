@@ -11,6 +11,7 @@ const SIDEBAR_ITEMS = [
   { id: 'kpi', label: '📊 KPI' },
   { id: 'koszty', label: '💰 Koszty' },
   { id: 'raporty', label: '📈 Raporty' },
+  { id: 'mapa', label: '🗺️ Mapa dostaw', url: '/mapa' },
 ];
 
 export default function ZarzadDashboard() {

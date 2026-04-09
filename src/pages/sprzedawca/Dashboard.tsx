@@ -18,6 +18,7 @@ const SIDEBAR_ITEMS = [
   { id: 'nowe', label: '➕ Nowe zlecenie' },
   { id: 'moje', label: '📋 Moje zlecenia' },
   { id: 'wycen', label: '💰 Wyceń transport' },
+  { id: 'mapa', label: '🗺️ Mapa dostaw', url: '/mapa' },
 ];
 
 function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {

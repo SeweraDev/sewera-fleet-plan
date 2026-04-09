@@ -1,7 +1,10 @@
+import { useNavigate } from 'react-router-dom';
+
 interface SidebarItem {
   id: string;
   label: string;
   badge?: number;
+  url?: string;
 }
 
 interface PageSidebarProps {
@@ -11,15 +14,17 @@ interface PageSidebarProps {
 }
 
 export function PageSidebar({ items, activeId, onSelect }: PageSidebarProps) {
+  const navigate = useNavigate();
+
   return (
-    <aside className="w-[195px] shrink-0 bg-card border-r border-border">
-      <nav className="py-2">
+    <aside className="w-[195px] shrink-0 bg-card border-r border-border flex flex-col">
+      <nav className="py-2 flex-1">
         {items.map((item) => {
-          const isActive = item.id === activeId;
+          const isActive = !item.url && item.id === activeId;
           return (
             <button
               key={item.id}
-              onClick={() => onSelect(item.id)}
+              onClick={() => item.url ? navigate(item.url) : onSelect(item.id)}
               className={`w-full flex items-center justify-between px-4 py-2.5 text-sm text-left transition-colors border-l-[3px] ${
                 isActive
                   ? 'border-primary bg-secondary font-medium text-foreground'

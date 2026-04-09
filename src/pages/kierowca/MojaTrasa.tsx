@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Topbar } from '@/components/shared/Topbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -96,7 +97,10 @@ export default function KierowcaMojaTrasa() {
       <main className="flex-1 w-full max-w-[480px] mx-auto px-5 py-5">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-bold text-foreground">🚛 Moje kursy</h1>
-          <span className="text-sm text-muted-foreground">{formatDate()}</span>
+          <div className="flex items-center gap-3">
+            <Link to="/mapa" className="text-xs text-primary hover:underline">🗺️ Mapa dostaw</Link>
+            <span className="text-sm text-muted-foreground">{formatDate()}</span>
+          </div>
         </div>
 
         {loading ? (

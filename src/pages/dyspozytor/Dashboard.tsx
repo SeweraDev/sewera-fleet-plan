@@ -50,6 +50,7 @@ const SIDEBAR_ITEMS = [
   { id: 'nowe_zlecenie', label: '➕ Nowe zlecenie' },
   { id: 'wycen', label: '💰 Wyceń transport' },
   { id: 'flota', label: '🔧 Flota' },
+  { id: 'mapa', label: '🗺️ Mapa dostaw', url: '/mapa' },
 ];
 
 function capacityColor(pct: number) {
