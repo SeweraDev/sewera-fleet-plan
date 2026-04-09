@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
@@ -95,6 +96,7 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
       const selectedKierowca = kierowcy.find(k => k.id === newKierowcaId);
       const selectedVehicle = flota.find(f => f.id === newFlotaId);
       const isZew = selectedVehicle?.jest_zewnetrzny;
+      const numer = oddzialId ? await generateNumerKursu(oddzialId) : null;
       const { data: newKurs, error: e1 } = await supabase
         .from('kursy')
         .insert({
@@ -105,6 +107,7 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
           kierowca_id: newKierowcaId || null,
           kierowca_nazwa: selectedKierowca?.imie_nazwisko || null,
           status: 'zaplanowany',
+          numer,
         })
         .select('id, numer')
         .single();

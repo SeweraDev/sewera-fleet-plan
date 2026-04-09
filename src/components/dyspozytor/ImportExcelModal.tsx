@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
 
@@ -320,7 +321,7 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
           kierowca_id: ks.kierowca_id || null,
           flota_id: ks.flota_id || null,
           kierowca_nazwa: selectedKierowca?.imie_nazwisko || kurs.kierowca_nazwa,
-          numer: kurs.nr_kursu_w_pliku,
+          numer: kurs.nr_kursu_w_pliku || (oddzialId ? await generateNumerKursu(oddzialId) : null),
           status: 'zaplanowany',
         })
         .select('id')

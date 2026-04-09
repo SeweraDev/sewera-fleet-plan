@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 
 export interface CreateKursInput {
   oddzial_id: number;
@@ -19,6 +20,8 @@ export function useCreateKurs(onSuccess?: () => void) {
     setSubmitting(true);
     setError(null);
 
+    const numer = await generateNumerKursu(input.oddzial_id);
+
     const { data: kurs, error: err1 } = await supabase
       .from('kursy')
       .insert({
@@ -28,6 +31,7 @@ export function useCreateKurs(onSuccess?: () => void) {
         nr_rej_zewn: input.nr_rej_zewn,
         flota_id: input.flota_id,
         status: 'zaplanowany',
+        numer,
       })
       .select('id')
       .single();
