@@ -81,7 +81,7 @@ function ZlSzczegolyDialog({
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
+      <DialogContent className="max-w-5xl max-h-[85vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Zlecenie {zlecenie.numer}</DialogTitle>
         </DialogHeader>
@@ -111,27 +111,27 @@ function ZlSzczegolyDialog({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nr WZ</TableHead>
+                  <TableHead>Nr dokumentu</TableHead>
                   <TableHead>Odbiorca</TableHead>
                   <TableHead>Adres</TableHead>
                   <TableHead className="text-right">Kg</TableHead>
                   <TableHead className="text-right">m³</TableHead>
                   <TableHead className="text-right">Palety</TableHead>
-                  <TableHead>Nr zamówienia</TableHead>
                   <TableHead>Uwagi</TableHead>
+                  <TableHead>Nr zamówienia</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {wz.map(w => (
                   <TableRow key={w.id}>
-                    <TableCell className="font-mono text-xs">{w.numer_wz || '—'}</TableCell>
-                    <TableCell>{w.odbiorca || '—'}</TableCell>
-                    <TableCell className="text-xs">{w.adres || '—'}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{w.numer_wz || '—'}</TableCell>
+                    <TableCell className="max-w-[200px]">{w.odbiorca || '—'}</TableCell>
+                    <TableCell className="text-xs max-w-[200px]">{w.adres || '—'}</TableCell>
                     <TableCell className="text-right">{Math.round(w.masa_kg)}</TableCell>
-                    <TableCell className="text-right">{w.objetosc_m3.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">{w.ilosc_palet}</TableCell>
-                    <TableCell className="text-xs">{w.nr_zamowienia || '—'}</TableCell>
-                    <TableCell className="text-xs max-w-[150px] truncate">{w.uwagi || '—'}</TableCell>
+                    <TableCell className="text-right">{w.objetosc_m3 > 0 ? w.objetosc_m3.toFixed(1) : '—'}</TableCell>
+                    <TableCell className="text-right">{w.ilosc_palet || '—'}</TableCell>
+                    <TableCell className="text-xs max-w-[180px] truncate">{w.uwagi || '—'}</TableCell>
+                    <TableCell className="text-xs font-mono">{w.nr_zamowienia || '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
