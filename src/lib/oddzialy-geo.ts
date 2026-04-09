@@ -34,9 +34,15 @@ function cleanAddressForGeocoding(raw: string): string {
   let a = raw;
   // Usuń prefixy typu "Budowa Żłobka w Sosnowcu," itp.
   a = a.replace(/^(?:Budowa|Hala|Magazyn|Plac|Obiekt|Inwestycja)[^,]*,\s*/i, '');
-  // Usuń "nazwa obiektu" przed "ul./al./os."
+  // Jeśli przed "ul./al./os." jest nazwa miasta — zachowaj ją
   const streetIdx = a.search(/(?:ul\.|al\.|os\.|pl\.)/i);
-  if (streetIdx > 0) a = a.substring(streetIdx);
+  if (streetIdx > 0) {
+    const prefix = a.substring(0, streetIdx).trim().replace(/[,\s]+$/, '');
+    const street = a.substring(streetIdx);
+    // Sprawdź czy prefix to nazwa miasta (nie "firma" — miasto to 1-2 słowa bez wielkich liter w środku)
+    const isCityLike = prefix.length > 2 && prefix.length < 30 && !prefix.includes('SP') && !prefix.includes('S.A');
+    a = isCityLike ? street + ', ' + prefix : street;
+  }
   return a.trim();
 }
 
