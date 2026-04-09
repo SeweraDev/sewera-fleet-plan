@@ -28,6 +28,7 @@ import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
 import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
+import { PolaczKursyModal } from '@/components/dyspozytor/PolaczKursyModal';
 import { useBlokady } from '@/hooks/useBlokady';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
@@ -136,6 +137,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
 
   // ConfirmDialog state for kurs deletion
   const [deleteKursId, setDeleteKursId] = useState<string | null>(null);
+  const [mergeKurs, setMergeKurs] = useState<KursDto | null>(null);
   const [showMap, setShowMap] = useState(false);
 
   // Odpinanie zlecenia z kursu (podwójne potwierdzenie)
@@ -224,6 +226,9 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                   </CardTitle>
                   <div className="flex gap-1">
                     {kurs.status !== 'usuniety' && <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>Edytuj</Button>}
+                    {kurs.status === 'zaplanowany' && kPrz.length > 0 && (
+                      <Button size="sm" variant="outline" onClick={() => setMergeKurs(kurs)}>Połącz</Button>
+                    )}
                     {kurs.status === 'zaplanowany' && (
                       <Button size="sm" variant="destructive" onClick={() => setDeleteKursId(kurs.id)}>Usuń</Button>
                     )}
@@ -377,6 +382,15 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         dzien={dzien}
         flota={flota}
         kierowcy={kierowcy}
+        onDone={refetch}
+      />
+
+      <PolaczKursyModal
+        open={!!mergeKurs}
+        onClose={() => setMergeKurs(null)}
+        sourceKurs={mergeKurs}
+        allKursy={kursy.filter(k => k.status !== 'usuniety')}
+        allPrzystanki={przystanki}
         onDone={refetch}
       />
 
