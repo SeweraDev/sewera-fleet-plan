@@ -6,6 +6,7 @@ import {
   BarChart3,
   Settings,
   MapPin,
+  Map,
   LogOut,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
@@ -33,22 +34,27 @@ interface NavItem {
 const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   admin: [
     { title: 'Użytkownicy', url: '/admin', icon: Users },
+    { title: 'Mapa dostaw', url: '/mapa', icon: Map },
     { title: 'Ustawienia', url: '/admin/ustawienia', icon: Settings },
   ],
   zarzad: [
     { title: 'Dashboard', url: '/zarzad', icon: BarChart3 },
+    { title: 'Mapa dostaw', url: '/mapa', icon: Map },
   ],
   dyspozytor: [
     { title: 'Dashboard', url: '/dyspozytor', icon: LayoutDashboard },
+    { title: 'Mapa dostaw', url: '/mapa', icon: Map },
     { title: 'Flota', url: '/dyspozytor/flota', icon: Truck },
     { title: 'Trasy', url: '/dyspozytor/trasy', icon: MapPin },
   ],
   sprzedawca: [
     { title: 'Dashboard', url: '/sprzedawca', icon: LayoutDashboard },
+    { title: 'Mapa dostaw', url: '/mapa', icon: Map },
     { title: 'Zlecenia', url: '/sprzedawca/zlecenia', icon: ShoppingCart },
   ],
   kierowca: [
     { title: 'Moja trasa', url: '/kierowca', icon: MapPin },
+    { title: 'Mapa dostaw', url: '/mapa', icon: Map },
   ],
 };
 
