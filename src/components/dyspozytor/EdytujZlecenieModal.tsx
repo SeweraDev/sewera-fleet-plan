@@ -75,6 +75,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [loading, setLoading] = useState(false);
   const [nadawcaNazwa, setNadawcaNazwa] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [showResztaChoice, setShowResztaChoice] = useState(false);
   const originalWzRef = useRef<WzData[]>([]);
 
   // Pojemność pojazdu z kursu
@@ -232,8 +233,39 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
     }
   }, [wzList]);
 
-  const handleSave = async () => {
+  // Oblicz reszty (różnice po zmniejszeniu)
+  const computeReszty = () => {
+    const reszty: { odbiorca: string; adres: string; tel: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number; uwagi: string; numer_wz: string; nr_zamowienia: string }[] = [];
+    for (const w of wzList) {
+      const orig = originalWzRef.current.find(o => o.id === w.id);
+      if (!orig) continue;
+      const diffKg = orig.masa_kg - w.masa_kg;
+      const diffM3 = orig.objetosc_m3 - w.objetosc_m3;
+      const diffPal = orig.ilosc_palet - w.ilosc_palet;
+      if (diffKg > 0 || diffM3 > 0 || diffPal > 0) {
+        reszty.push({
+          odbiorca: w.odbiorca, adres: w.adres, tel: w.tel,
+          masa_kg: Math.max(0, diffKg), objetosc_m3: Math.max(0, diffM3), ilosc_palet: Math.max(0, diffPal),
+          uwagi: 'Reszta z ' + (zlecenie?.numer || ''), numer_wz: w.numer_wz, nr_zamowienia: w.nr_zamowienia,
+        });
+      }
+    }
+    return reszty;
+  };
+
+  // Sprawdź czy są zmniejszenia → pokaż dialog wyboru
+  const handleSaveClick = () => {
+    const reszty = computeReszty();
+    if (reszty.length > 0) {
+      setShowResztaChoice(true);
+    } else {
+      handleSave(false);
+    }
+  };
+
+  const handleSave = async (createReszta: boolean) => {
     if (!zlecenieId) return;
+    setShowResztaChoice(false);
     setSaving(true);
 
     const { error: zlErr } = await supabase
@@ -262,64 +294,39 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         .eq('id', w.id);
     }
 
-    // Sprawdź czy zmniejszono ilości — jeśli tak, utwórz zlecenie z resztą
-    const reszty: { odbiorca: string; adres: string; tel: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number; uwagi: string; numer_wz: string; nr_zamowienia: string }[] = [];
-    for (const w of wzList) {
-      const orig = originalWzRef.current.find(o => o.id === w.id);
-      if (!orig) continue;
-      const diffKg = orig.masa_kg - w.masa_kg;
-      const diffM3 = orig.objetosc_m3 - w.objetosc_m3;
-      const diffPal = orig.ilosc_palet - w.ilosc_palet;
-      if (diffKg > 0 || diffM3 > 0 || diffPal > 0) {
-        reszty.push({
-          odbiorca: w.odbiorca,
-          adres: w.adres,
-          tel: w.tel,
-          masa_kg: Math.max(0, diffKg),
-          objetosc_m3: Math.max(0, diffM3),
-          ilosc_palet: Math.max(0, diffPal),
-          uwagi: 'Reszta z ' + (zlecenie?.numer || ''),
-          numer_wz: w.numer_wz,
-          nr_zamowienia: w.nr_zamowienia,
-        });
-      }
-    }
-
-    if (reszty.length > 0 && zlecenie?.oddzial_id) {
-      try {
-        const numer = await generateNumerZlecenia(zlecenie.oddzial_id);
-        const { data: noweZl } = await supabase
-          .from('zlecenia')
-          .insert({
-            numer,
-            oddzial_id: zlecenie.oddzial_id,
-            dzien: zlecenie.dzien,
-            preferowana_godzina: godzina === 'dowolna' ? null : godzina,
-            typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
-            status: 'robocza',
-            nadawca_id: zlecenie.nadawca_id,
-          })
-          .select('id')
-          .single();
-        if (noweZl) {
-          for (const r of reszty) {
-            await supabase.from('zlecenia_wz').insert({
-              zlecenie_id: noweZl.id,
-              odbiorca: r.odbiorca,
-              adres: r.adres,
-              tel: r.tel || null,
-              masa_kg: r.masa_kg,
-              objetosc_m3: r.objetosc_m3,
-              ilosc_palet: r.ilosc_palet,
-              uwagi: r.uwagi,
-              numer_wz: r.numer_wz,
-              nr_zamowienia: r.nr_zamowienia,
-            });
+    // Utwórz zlecenie z resztą jeśli dyspozytor wybrał tę opcję
+    if (createReszta && zlecenie?.oddzial_id) {
+      const reszty = computeReszty();
+      if (reszty.length > 0) {
+        try {
+          const numer = await generateNumerZlecenia(zlecenie.oddzial_id);
+          const { data: noweZl } = await supabase
+            .from('zlecenia')
+            .insert({
+              numer,
+              oddzial_id: zlecenie.oddzial_id,
+              dzien: dzien || zlecenie.dzien,
+              preferowana_godzina: godzina === 'dowolna' ? null : godzina,
+              typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
+              status: 'robocza',
+              nadawca_id: zlecenie.nadawca_id,
+            })
+            .select('id')
+            .single();
+          if (noweZl) {
+            for (const r of reszty) {
+              await supabase.from('zlecenia_wz').insert({
+                zlecenie_id: noweZl.id,
+                odbiorca: r.odbiorca, adres: r.adres, tel: r.tel || null,
+                masa_kg: r.masa_kg, objetosc_m3: r.objetosc_m3, ilosc_palet: r.ilosc_palet,
+                uwagi: r.uwagi, numer_wz: r.numer_wz, nr_zamowienia: r.nr_zamowienia,
+              });
+            }
+            toast({ title: 'Utworzono zlecenie z resztą: ' + numer });
           }
-          toast({ title: 'Utworzono zlecenie z reszta: ' + numer });
+        } catch (e) {
+          console.warn('Nie udalo sie utworzyc zlecenia z reszta', e);
         }
-      } catch (e) {
-        console.warn('Nie udalo sie utworzyc zlecenia z reszta', e);
       }
     }
 
@@ -455,9 +462,33 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
             </div>
           )}
 
+          {/* Dialog wyboru: korekta vs reszta */}
+          {showResztaChoice && (() => {
+            const reszty = computeReszty();
+            const rKg = reszty.reduce((s, r) => s + r.masa_kg, 0);
+            const rM3 = reszty.reduce((s, r) => s + r.objetosc_m3, 0);
+            const rPal = reszty.reduce((s, r) => s + r.ilosc_palet, 0);
+            return (
+              <div className="p-4 rounded-lg border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/30 space-y-3">
+                <p className="text-sm font-semibold">Zmniejszono ilości — co zrobić z różnicą?</p>
+                <p className="text-xs text-muted-foreground">
+                  Różnica: {rKg > 0 ? Math.round(rKg) + ' kg' : ''}{rM3 > 0 ? ' · ' + rM3.toFixed(1) + ' m³' : ''}{rPal > 0 ? ' · ' + rPal + ' pal' : ''}
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => handleSave(false)}>
+                    ✏️ Tylko skoryguj
+                  </Button>
+                  <Button size="sm" onClick={() => handleSave(true)}>
+                    📦 Utwórz zlecenie z resztą
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+
           <DialogFooter>
             <Button variant="outline" onClick={onClose}>Anuluj</Button>
-            <Button onClick={handleSave} disabled={saving || loading} variant={isOverloaded ? 'destructive' : 'default'}>
+            <Button onClick={handleSaveClick} disabled={saving || loading || showResztaChoice} variant={isOverloaded ? 'destructive' : 'default'}>
               {saving ? 'Zapisywanie...' : isOverloaded ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)` : `Zapisz zmiany (${wzList.length} WZ)`}
             </Button>
           </DialogFooter>
