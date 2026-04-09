@@ -172,7 +172,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
 
   return (
     <div className="space-y-1">
-      <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 400 }} />
+      <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 600 }} />
       {bezAdresu.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-3 py-2 text-xs">
           <span className="font-medium text-red-700 dark:text-red-400">
