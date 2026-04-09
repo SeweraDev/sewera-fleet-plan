@@ -699,23 +699,33 @@ export function parseWZText(rawText: string): WZImportData {
 
   // 3. odbiorca — try labeled section first ("Odbiorca" / "Nabywca"), then fallback
   let odbiorca: string | null = null;
+  let odbiornikAdres: string | null = null; // adres z sekcji odbiorcy (fallback gdy brak "Adres dostawy")
 
   // Priority: find "Odbiorca" or "Nabywca" label and collect ALL lines after it
-  // Zawsze zbieramy pełne dane — obcinanie adresu robimy później gdy adres dostawy jest inny
   const odbLabelIdx = lines.findIndex((l) => /^(?:Odbiorca|Nabywca)\s*$/i.test(l) || /(?:^|\s)(?:Odbiorca|Nabywca)\s*$/i.test(l));
   if (odbLabelIdx >= 0) {
     const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
     const nameParts: string[] = [];
-    for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 8, lines.length); i++) {
+    const addrParts: string[] = [];
+    for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 12, lines.length); i++) {
       const l = lines[i];
       if (/^(Adres\s+dostawy|Informacje|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(l)) break;
       if (/^Nr\s+ewid/i.test(l)) break;
       if (/^NIP:/i.test(l)) break;
-      if (SEWERA_CHECK.test(l)) { nameParts.length = 0; continue; }
+      if (/^Magazyn\s+wydający/i.test(l)) break;
+      if (/^Termin\s+zapłaty/i.test(l)) break;
+      if (/^Wydano\s+na/i.test(l)) break;
+      if (SEWERA_CHECK.test(l)) { nameParts.length = 0; addrParts.length = 0; continue; }
       if (l.length < 2) continue;
-      nameParts.push(l);
+      // Rozdziel adres od nazwy firmy
+      if (/^(?:ul|al|os|pl)\.\s/i.test(l) || /^\d{2}-\d{3}\s/.test(l)) {
+        addrParts.push(l);
+      } else {
+        nameParts.push(l);
+      }
     }
-    if (nameParts.length) odbiorca = nameParts.join(", ");
+    if (nameParts.length) odbiorca = nameParts.join(" ");
+    if (addrParts.length) odbiornikAdres = addrParts.join(", ");
   }
 
   // Fallback: skip SEWERA block, find company by legal form / caps
@@ -855,6 +865,11 @@ export function parseWZText(rawText: string): WZImportData {
     if (adres && odbiorca && odbiorca.includes(adres)) {
       adres = null;
     }
+  }
+
+  // Fallback: brak sekcji "Adres dostawy" — użyj adresu z sekcji odbiorcy
+  if (!adres && odbiornikAdres) {
+    adres = odbiornikAdres;
   }
 
   // 5. tel — search near delivery section ONLY when document has explicit delivery address
