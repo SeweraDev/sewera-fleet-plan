@@ -163,19 +163,30 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       setCapacity(cap);
 
       // 4. Obciążenie INNYCH zleceń w tym kursie (bez bieżącego)
+      // kurs_przystanki nie ma kg/m3/pal — trzeba pobrać z zlecenia_wz
       const { data: allPrz } = await supabase
         .from('kurs_przystanki')
-        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet')
+        .select('zlecenie_id')
         .eq('kurs_id', kursId);
       if (allPrz) {
-        const other = allPrz
-          .filter(p => p.zlecenie_id !== zlecenieId)
-          .reduce((acc, p) => ({
-            kg: acc.kg + (Number(p.masa_kg) || 0),
-            m3: acc.m3 + (Number(p.objetosc_m3) || 0),
-            pal: acc.pal + (Number(p.ilosc_palet) || 0),
-          }), { kg: 0, m3: 0, pal: 0 });
-        setOtherLoad(other);
+        const otherZlIds = allPrz
+          .map(p => p.zlecenie_id)
+          .filter((id): id is string => !!id && id !== zlecenieId);
+        const uniqueOtherIds = [...new Set(otherZlIds)];
+        if (uniqueOtherIds.length > 0) {
+          const { data: otherWz } = await supabase
+            .from('zlecenia_wz')
+            .select('masa_kg, objetosc_m3, ilosc_palet')
+            .in('zlecenie_id', uniqueOtherIds);
+          if (otherWz) {
+            const other = otherWz.reduce((acc, w) => ({
+              kg: acc.kg + (Number(w.masa_kg) || 0),
+              m3: acc.m3 + (Number(w.objetosc_m3) || 0),
+              pal: acc.pal + (Number(w.ilosc_palet) || 0),
+            }), { kg: 0, m3: 0, pal: 0 });
+            setOtherLoad(other);
+          }
+        }
       }
     })();
   }, [open, zlecenieId]);
