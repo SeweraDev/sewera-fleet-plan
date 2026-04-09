@@ -300,6 +300,8 @@ export function ZleceniaTab({
 
   const [deleteZlId, setDeleteZlId] = useState<string | null>(null);
   const deleteZlNumer = zlecenia.find(z => z.id === deleteZlId)?.numer || '';
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const handleDelete = (id: string) => {
     setDeleteZlId(id);
@@ -310,6 +312,18 @@ export function ZleceniaTab({
     await supabase.from('zlecenia').update({ status: 'anulowana' } as any).eq('id', deleteZlId);
     toast.success('Zlecenie usunięte');
     setDeleteZlId(null);
+    refetch();
+  };
+
+  const confirmBulkDelete = async () => {
+    if (checkedIds.size === 0) return;
+    setBulkDeleting(true);
+    const ids = Array.from(checkedIds);
+    await supabase.from('zlecenia').update({ status: 'anulowana' } as any).in('id', ids);
+    toast.success(`Anulowano ${ids.length} zleceń`);
+    setCheckedIds(new Set());
+    setShowBulkDelete(false);
+    setBulkDeleting(false);
     refetch();
   };
 
@@ -429,6 +443,9 @@ export function ZleceniaTab({
             }}
           >
             Przypisz do kursu →
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => setShowBulkDelete(true)}>
+            Usuń zaznaczone
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setCheckedIds(new Set())}>
             Odznacz
@@ -554,6 +571,16 @@ export function ZleceniaTab({
         confirmLabel="Usuń zlecenie"
         destructive
         onConfirm={confirmDelete}
+      />
+
+      <ConfirmDialog
+        open={showBulkDelete}
+        onOpenChange={setShowBulkDelete}
+        title={`Usunąć ${checkedIds.size} zleceń?`}
+        description={`Czy na pewno chcesz anulować ${checkedIds.size} zaznaczonych zleceń (${Math.round(checkedKg).toLocaleString('pl-PL')} kg)? Zlecenia zostaną przeniesione do zakładki Anulowane.`}
+        confirmLabel={bulkDeleting ? 'Usuwanie...' : `Usuń ${checkedIds.size} zleceń`}
+        destructive
+        onConfirm={confirmBulkDelete}
       />
     </div>
   );
