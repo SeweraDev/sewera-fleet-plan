@@ -284,7 +284,12 @@ function fuzzyMatchKierowca(name: string, kierowcy: Kierowca[]): Kierowca | null
 
 function matchFlota(nrRej: string | null, flota: Pojazd[]): Pojazd | null {
   if (!nrRej) return null;
-  return flota.find(f => f.nr_rej.replace(/\s/g, '').toUpperCase() === nrRej.replace(/\s/g, '').toUpperCase()) || null;
+  const clean = nrRej.replace(/\s/g, '').toUpperCase();
+  return flota.find(f => {
+    const fNr = f.nr_rej.replace(/\s/g, '').toUpperCase();
+    const fRaw = (f.nr_rej_raw || '').replace(/\s/g, '').toUpperCase();
+    return fNr === clean || fRaw === clean;
+  }) || null;
 }
 
 /* ── Komponent ── */
@@ -414,23 +419,8 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
       const matchedKursy = states.filter(s => s.kierowcaMatch || s.flotaMatch).length;
       const matchRate = totalKursy > 0 ? matchedKursy / totalKursy : 0;
 
-      if (matchRate >= 0.8 && json.bledy.length === 0) {
-        // Auto-import!
-        setParsing(false);
-        const res = await doImport(json, states, dzien);
-        if (res) {
-          const unmatchedDrivers = states.filter(s => !s.kierowcaMatch).length;
-          const unmatchedVehicles = states.filter(s => !s.flotaMatch).length;
-          let msg = `Zaimportowano ${res.importedKursy} kursów, ${res.importedZl} zleceń`;
-          if (unmatchedDrivers > 0) msg += ` (${unmatchedDrivers} bez kierowcy)`;
-          if (unmatchedVehicles > 0) msg += ` (${unmatchedVehicles} bez pojazdu)`;
-          toast.success(msg);
-        }
-        onImported();
-        handleReset();
-        onClose();
-      } else {
-        // Fallback: show step 2 for manual review
+      // Zawsze pokaż step 2 — dyspozytor musi mieć szansę wybrać oddział i dzień
+      {
         setResult(json);
         setKursStates(states);
         setStep(2);
