@@ -29,6 +29,7 @@ import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
 import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
 import { PolaczKursyModal } from '@/components/dyspozytor/PolaczKursyModal';
+import { DodajDoKursuModal } from '@/components/dyspozytor/DodajDoKursuModal';
 import { useBlokady } from '@/hooks/useBlokady';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
@@ -138,6 +139,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
   // ConfirmDialog state for kurs deletion
   const [deleteKursId, setDeleteKursId] = useState<string | null>(null);
   const [mergeKurs, setMergeKurs] = useState<KursDto | null>(null);
+  const [addToKurs, setAddToKurs] = useState<KursDto | null>(null);
   const [showMap, setShowMap] = useState(false);
 
   // Odpinanie zlecenia z kursu (podwójne potwierdzenie)
@@ -227,6 +229,9 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                   </CardTitle>
                   <div className="flex gap-1">
                     {kurs.status !== 'usuniety' && <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>Edytuj</Button>}
+                    {kurs.status === 'zaplanowany' && (
+                      <Button size="sm" variant="outline" onClick={() => setAddToKurs(kurs)}>+ Dodaj</Button>
+                    )}
                     {kurs.status === 'zaplanowany' && kPrz.length > 0 && (
                       <Button size="sm" variant="outline" onClick={() => setMergeKurs(kurs)}>Połącz</Button>
                     )}
@@ -392,6 +397,16 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         sourceKurs={mergeKurs}
         allKursy={kursy.filter(k => k.status !== 'usuniety')}
         allPrzystanki={przystanki}
+        onDone={refetch}
+      />
+
+      <DodajDoKursuModal
+        open={!!addToKurs}
+        onClose={() => setAddToKurs(null)}
+        kurs={addToKurs}
+        przystanki={przystanki}
+        oddzialId={oddzialId}
+        dzien={dzien}
         onDone={refetch}
       />
 
