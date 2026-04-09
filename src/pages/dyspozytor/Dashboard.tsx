@@ -704,7 +704,7 @@ export default function DyspozytorDashboard() {
       <Topbar />
       <div className="flex flex-1">
         <PageSidebar
-          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.filter(k => k.status !== 'usuniety').length } : s)}
+          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.filter(k => k.status === 'zaplanowany' || k.status === 'aktywny').length || undefined } : s)}
           activeId={activeId}
           onSelect={setActiveId}
         />

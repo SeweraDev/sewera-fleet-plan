@@ -68,6 +68,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [zlecenie, setZlecenie] = useState<ZlData | null>(null);
   const [wzList, setWzList] = useState<WzData[]>([]);
   const [status, setStatus] = useState('');
+  const [dzien, setDzien] = useState('');
   const [godzina, setGodzina] = useState('');
   const [typPojazdu, setTypPojazdu] = useState('');
   const [saving, setSaving] = useState(false);
@@ -92,6 +93,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       if (zl) {
         setZlecenie(zl as ZlData);
         setStatus(zl.status);
+        setDzien(zl.dzien || '');
         setGodzina(zl.preferowana_godzina || 'dowolna');
         setTypPojazdu(zl.typ_pojazdu || 'brak');
         if (zl.nadawca_id) {
@@ -238,6 +240,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       .from('zlecenia')
       .update({
         status,
+        dzien: dzien || zlecenie?.dzien,
         preferowana_godzina: godzina === 'dowolna' ? null : godzina,
         typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
       })
@@ -342,8 +345,8 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
             <p className="text-center text-muted-foreground py-6">Ładowanie...</p>
           ) : (
             <div className="space-y-4">
-              {/* Read-only */}
-              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/50">
+              {/* Info + dzień edytowalny */}
+              <div className="grid grid-cols-4 gap-3 p-3 rounded-lg bg-muted/50">
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase">Numer</p>
                   <p className="text-sm font-mono font-medium">{zlecenie?.numer}</p>
@@ -353,8 +356,8 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                   <p className="text-sm">{nadawcaNazwa}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">Dzień</p>
-                  <p className="text-sm">{zlecenie?.dzien}</p>
+                  <Label className="text-[10px] text-muted-foreground uppercase">Dzień</Label>
+                  <Input type="date" className="h-8 text-sm" value={dzien} onChange={e => setDzien(e.target.value)} />
                 </div>
               </div>
 
