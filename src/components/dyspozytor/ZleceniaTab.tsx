@@ -95,8 +95,8 @@ function ZlSzczegolyDialog({
             {zlecenie.typ_pojazdu && <span>Typ: {zlecenie.typ_pojazdu}</span>}
           </div>
           <p className="text-muted-foreground">
-            Kurs: {zlecenie.kurs_numer
-              ? <Badge variant="outline" className="font-mono">{zlecenie.kurs_numer}{zlecenie.kurs_nrrej ? ` · ${zlecenie.kurs_nrrej}` : ''}</Badge>
+            Kurs: {zlecenie.kurs_numer || zlecenie.kurs_nrrej
+              ? <Badge variant="outline" className="font-mono">{zlecenie.kurs_numer || ''}{zlecenie.kurs_nrrej ? (zlecenie.kurs_numer ? ' · ' : '') + zlecenie.kurs_nrrej : ''}</Badge>
               : <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">bez kursu ⚠️</Badge>
             }
           </p>
@@ -159,7 +159,7 @@ function ZlSzczegolyDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          {zlecenie.status === 'robocza' && !zlecenie.kurs_numer && (
+          {zlecenie.status === 'robocza' && !zlecenie.kurs_numer && !zlecenie.kurs_nrrej && (
             <Button variant="outline" onClick={() => { onClose(); onAssignToKurs(zlecenie.id); }}>
               Przypisz do kursu
             </Button>
@@ -257,7 +257,7 @@ export function ZleceniaTab({
 
   const STATUS_ORDER: Record<string, number> = { robocza: 0, do_weryfikacji: 1, potwierdzona: 2, w_trasie: 3, dostarczona: 4, anulowana: 5 };
 
-  const filteredBase = statusFilter === 'bez_kursu' ? zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana')
+  const filteredBase = statusFilter === 'bez_kursu' ? zlecenia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana')
     : statusFilter === 'all' ? zlecenia.filter(z => z.status !== 'anulowana')
     : zlecenia.filter(z => z.status === statusFilter);
   const filtered = [...filteredBase].sort((a, b) => {
@@ -272,7 +272,7 @@ export function ZleceniaTab({
   });
 
   const counts: Record<ZlStatusFilter, number> = {
-    bez_kursu: zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana').length,
+    bez_kursu: zlecenia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana').length,
     all: zlecenia.filter(z => z.status !== 'anulowana').length,
     anulowana: zlecenia.filter(z => z.status === 'anulowana').length,
   };
@@ -336,7 +336,7 @@ export function ZleceniaTab({
   };
 
   // Podsumowanie ładunku (tylko zlecenia bez kursu, aktywne)
-  const bezKursu = zlecenia.filter(z => !z.kurs_numer && z.status !== 'anulowana');
+  const bezKursu = zlecenia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana');
   const sumaKg = bezKursu.reduce((s, z) => s + z.suma_kg, 0);
   const sumaM3 = bezKursu.reduce((s, z) => s + z.suma_m3, 0);
   const sumaPal = bezKursu.reduce((s, z) => s + z.suma_palet, 0);
@@ -506,8 +506,8 @@ export function ZleceniaTab({
                     <TableCell className="text-right text-xs">{z.dystans_km != null ? z.dystans_km : '...'}</TableCell>
                     <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell>
-                      {z.kurs_numer
-                        ? <Badge variant="outline" className="font-mono text-xs">{z.kurs_numer}{z.kurs_nrrej ? ` · ${z.kurs_nrrej}` : ''}</Badge>
+                      {z.kurs_numer || z.kurs_nrrej
+                        ? <Badge variant="outline" className="font-mono text-xs">{z.kurs_numer || ''}{z.kurs_nrrej ? (z.kurs_numer ? ' · ' : '') + z.kurs_nrrej : ''}</Badge>
                         : <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs">bez kursu ⚠️</Badge>
                       }
                     </TableCell>
