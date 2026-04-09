@@ -263,21 +263,39 @@ function renderByOddzial(L: any, map: any, pins: MapaZlecenieDto[], allPoints: [
       iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13],
     });
 
-    const popupParts = groupPins.map(z => {
+    // Podsumowanie grupy
+    const totalKg = groupPins.reduce((s, z) => s + z.suma_kg, 0);
+    const totalM3 = groupPins.reduce((s, z) => s + z.suma_m3, 0);
+    const totalPal = groupPins.reduce((s, z) => s + z.suma_palet, 0);
+    const oddzialy = [...new Set(groupPins.map(z => z.oddzial_kod))].join(', ');
+
+    const header = '<div style="font-weight:bold;margin-bottom:4px">' + (first.adres || 'Brak adresu') + '</div>'
+      + '<div style="font-size:12px;margin-bottom:6px">'
+      + count + ' zlec. · ' + Math.round(totalKg) + ' kg'
+      + (totalM3 > 0 ? ' · ' + (Math.round(totalM3 * 10) / 10) + ' m\u00b3' : '')
+      + (totalPal > 0 ? ' · ' + totalPal + ' pal' : '')
+      + ' · ' + oddzialy
+      + '</div>';
+
+    const MAX_POPUP = 5;
+    const shown = groupPins.slice(0, MAX_POPUP);
+    const popupParts = shown.map(z => {
       const kg = Math.round(z.suma_kg);
-      const m3 = z.suma_m3 > 0 ? ' · ' + (Math.round(z.suma_m3 * 10) / 10) + ' m\u00b3' : '';
-      const pal = z.suma_palet > 0 ? ' · ' + z.suma_palet + ' pal' : '';
-      const kurs = z.kurs_numer ? ' <span style="color:#059669">[' + z.kurs_nr_rej + ']</span>' : '';
-      return '<div style="min-width:200px;padding:3px 0;border-bottom:1px solid #eee">'
+      const kurs = z.kurs_nr_rej ? ' <span style="color:#059669">[' + z.kurs_nr_rej + ']</span>' : '<span style="color:#999"> (bez kursu)</span>';
+      return '<div style="padding:2px 0;border-bottom:1px solid #eee;font-size:12px">'
         + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (ODDZIAL_COLORS[z.oddzial_kod] || DEFAULT_COLOR) + ';margin-right:4px"></span>'
-        + '<strong>' + (z.odbiorca || 'Brak odbiorcy') + '</strong>' + kurs + '<br/>'
-        + '<span style="font-size:12px;color:#666">' + (z.adres || '') + '</span><br/>'
-        + '<span style="font-size:12px">' + kg + ' kg' + m3 + pal + '</span>'
-        + ' <span style="font-size:11px;color:#999">' + z.numer + ' · ' + (z.oddzial_kod || '?') + '</span>'
+        + '<strong>' + (z.odbiorca || '?') + '</strong>' + kurs
+        + ' · ' + kg + ' kg'
+        + ' <span style="color:#999">' + z.numer + '</span>'
         + '</div>';
     });
 
-    L.marker([first.lat, first.lng], { icon }).addTo(map).bindPopup(popupParts.join(''), { maxWidth: 350 });
+    const more = count > MAX_POPUP ? '<div style="font-size:11px;color:#999;padding-top:4px">+ ' + (count - MAX_POPUP) + ' więcej...</div>' : '';
+
+    L.marker([first.lat, first.lng], { icon }).addTo(map).bindPopup(
+      '<div style="max-height:250px;overflow-y:auto">' + header + popupParts.join('') + more + '</div>',
+      { maxWidth: 350 }
+    );
   });
 }
 
@@ -326,22 +344,27 @@ function renderByKurs(L: any, map: any, pins: MapaZlecenieDto[], allZlecenia: Ma
         iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -14],
       });
 
-      const header = '<div style="font-size:11px;color:' + color + ';font-weight:bold;margin-bottom:4px">'
-        + '\ud83d\ude9b ' + (first.kurs_nr_rej || '?') + ' · ' + (first.kurs_pojazd_typ || '') + '</div>';
+      const totalKg = groupPins.reduce((s, z) => s + z.suma_kg, 0);
+      const kursHeader = '<div style="font-size:11px;color:' + color + ';font-weight:bold;margin-bottom:2px">'
+        + '\ud83d\ude9b ' + (first.kurs_nr_rej || '?') + ' · ' + (first.kurs_pojazd_typ || '') + '</div>'
+        + '<div style="font-size:12px;margin-bottom:4px">' + (first.adres || '') + ' · ' + Math.round(totalKg) + ' kg · ' + groupPins.length + ' zlec.</div>';
 
-      const popupParts = groupPins.map(z => {
+      const MAX_K = 5;
+      const shownK = groupPins.slice(0, MAX_K);
+      const popupParts = shownK.map(z => {
         const kg = Math.round(z.suma_kg);
-        const m3 = z.suma_m3 > 0 ? ' · ' + (Math.round(z.suma_m3 * 10) / 10) + ' m\u00b3' : '';
-        const pal = z.suma_palet > 0 ? ' · ' + z.suma_palet + ' pal' : '';
-        return '<div style="min-width:180px;padding:2px 0;border-bottom:1px solid #eee">'
-          + '<strong>' + (z.odbiorca || '?') + '</strong><br/>'
-          + '<span style="font-size:12px;color:#666">' + (z.adres || '') + '</span><br/>'
-          + '<span style="font-size:12px">' + kg + ' kg' + m3 + pal + '</span>'
-          + ' <span style="font-size:11px;color:#999">' + z.numer + '</span>'
+        return '<div style="padding:2px 0;border-bottom:1px solid #eee;font-size:12px">'
+          + '<strong>' + (z.odbiorca || '?') + '</strong>'
+          + ' · ' + kg + ' kg'
+          + ' <span style="color:#999">' + z.numer + '</span>'
           + '</div>';
       });
+      const moreK = groupPins.length > MAX_K ? '<div style="font-size:11px;color:#999;padding-top:2px">+ ' + (groupPins.length - MAX_K) + ' więcej...</div>' : '';
 
-      L.marker([first.lat!, first.lng!], { icon }).addTo(map).bindPopup(header + popupParts.join(''), { maxWidth: 350 });
+      L.marker([first.lat!, first.lng!], { icon }).addTo(map).bindPopup(
+        '<div style="max-height:200px;overflow-y:auto">' + kursHeader + popupParts.join('') + moreK + '</div>',
+        { maxWidth: 320 }
+      );
     });
 
     // Polyline trasy
@@ -374,16 +397,26 @@ function renderByKurs(L: any, map: any, pins: MapaZlecenieDto[], allZlecenia: Ma
         iconSize: [20, 20], iconAnchor: [10, 10], popupAnchor: [0, -12],
       });
 
-      const popupParts = groupPins.map(z => {
+      const totalKgNk = groupPins.reduce((s, z) => s + z.suma_kg, 0);
+      const nkHeader = '<div style="font-weight:bold;margin-bottom:4px">' + (first.adres || '?') + '</div>'
+        + '<div style="font-size:12px;color:#666;margin-bottom:4px">' + count + ' zlec. bez kursu · ' + Math.round(totalKgNk) + ' kg</div>';
+
+      const MAX_NK = 5;
+      const shownNk = groupPins.slice(0, MAX_NK);
+      const popupParts = shownNk.map(z => {
         const kg = Math.round(z.suma_kg);
-        return '<div style="min-width:180px;padding:2px 0;border-bottom:1px solid #eee">'
-          + '<strong>' + (z.odbiorca || '?') + '</strong> <span style="color:#999;font-size:11px">(bez kursu)</span><br/>'
-          + '<span style="font-size:12px;color:#666">' + (z.adres || '') + '</span><br/>'
-          + '<span style="font-size:12px">' + kg + ' kg · ' + z.numer + ' · ' + z.oddzial_kod + '</span>'
+        return '<div style="padding:2px 0;border-bottom:1px solid #eee;font-size:12px">'
+          + '<strong>' + (z.odbiorca || '?') + '</strong>'
+          + ' · ' + kg + ' kg · ' + z.oddzial_kod
+          + ' <span style="color:#999">' + z.numer + '</span>'
           + '</div>';
       });
+      const moreNk = count > MAX_NK ? '<div style="font-size:11px;color:#999;padding-top:2px">+ ' + (count - MAX_NK) + ' więcej...</div>' : '';
 
-      L.marker([first.lat!, first.lng!], { icon }).addTo(map).bindPopup(popupParts.join(''), { maxWidth: 350 });
+      L.marker([first.lat!, first.lng!], { icon }).addTo(map).bindPopup(
+        '<div style="max-height:200px;overflow-y:auto">' + nkHeader + popupParts.join('') + moreNk + '</div>',
+        { maxWidth: 320 }
+      );
     });
   }
 }
