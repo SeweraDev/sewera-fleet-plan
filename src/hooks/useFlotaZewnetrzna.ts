@@ -15,6 +15,18 @@ export interface PojazdZewnetrzny {
   aktywny: boolean;
 }
 
+// KAT i R współdzielą flotę zewnętrzną
+async function getSharedIds(oddzialId: number): Promise<number[]> {
+  const { data } = await supabase
+    .from('oddzialy')
+    .select('id, nazwa')
+    .in('nazwa', ['Katowice', 'Redystrybucja']);
+  if (!data || data.length < 2) return [oddzialId];
+  const katR = data.map(d => d.id);
+  if (katR.includes(oddzialId)) return katR;
+  return [oddzialId];
+}
+
 export function useFlotaZewnetrzna(oddzialId: number | null) {
   const [flota, setFlota] = useState<PojazdZewnetrzny[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,10 +34,11 @@ export function useFlotaZewnetrzna(oddzialId: number | null) {
   const fetch = useCallback(async () => {
     if (!oddzialId) { setFlota([]); setLoading(false); return; }
     setLoading(true);
+    const ids = await getSharedIds(oddzialId);
     const { data } = await supabase
       .from('flota_zewnetrzna')
       .select('id, nr_rej, typ, ladownosc_kg, max_palet, objetosc_m3, firma, kierowca, tel, oddzial_id, aktywny')
-      .eq('oddzial_id', oddzialId)
+      .in('oddzial_id', ids)
       .eq('aktywny', true)
       .order('nr_rej');
     setFlota((data as PojazdZewnetrzny[]) || []);

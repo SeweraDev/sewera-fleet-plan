@@ -112,10 +112,10 @@ function extractNrRej(name: string): string | null {
 }
 
 function extractKierowcaName(raw: string): string {
-  let name = raw.replace(/[A-Z]{2}\d{4,5}[A-Z]/g, '').trim();
+  let name = raw.replace(/[A-Z]{2}\d{4,5}[A-Z]?/g, '').trim();
   name = name.replace(/\d+[,.]\d+\s*T\s*(WNDA|HDS|DOST)?/gi, '').trim();
   name = name.replace(/\s+/g, ' ').trim();
-  return name || raw;
+  return name || 'Nieznany';
 }
 
 function mapGodzinaToSlot(timeStr: string): string | null {
