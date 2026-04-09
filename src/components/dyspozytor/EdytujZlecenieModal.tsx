@@ -253,16 +253,6 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
     return reszty;
   };
 
-  // Sprawdź czy są zmniejszenia → pokaż dialog wyboru
-  const handleSaveClick = () => {
-    const reszty = computeReszty();
-    if (reszty.length > 0) {
-      setShowResztaChoice(true);
-    } else {
-      handleSave(false);
-    }
-  };
-
   const handleSave = async (createReszta: boolean) => {
     if (!zlecenieId) return;
     setShowResztaChoice(false);
@@ -337,6 +327,16 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       toast({ title: 'Zlecenie zaktualizowane' });
       onSaved();
       onClose();
+    }
+  };
+
+  // Sprawdź czy są zmniejszenia → pokaż dialog wyboru
+  const handleSaveClick = () => {
+    const reszty = computeReszty();
+    if (reszty.length > 0) {
+      setShowResztaChoice(true);
+    } else {
+      handleSave(false);
     }
   };
 
