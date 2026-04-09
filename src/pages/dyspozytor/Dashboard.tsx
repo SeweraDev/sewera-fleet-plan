@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -39,6 +39,8 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
+
+const KursyMapView = lazy(() => import('@/components/dyspozytor/KursyMapView'));
 
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
@@ -134,6 +136,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
 
   // ConfirmDialog state for kurs deletion
   const [deleteKursId, setDeleteKursId] = useState<string | null>(null);
+  const [showMap, setShowMap] = useState(false);
 
   // Odpinanie zlecenia z kursu (podwójne potwierdzenie)
   const [odpinZl, setOdpinZl] = useState<{ zlId: string; przId: string; numer: string } | null>(null);
@@ -163,8 +166,8 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         </div>
       )}
 
-      {/* Status filter pills */}
-      <div className="flex gap-2 flex-wrap">
+      {/* Status filter pills + mapa toggle */}
+      <div className="flex gap-2 flex-wrap items-center">
         {STATUS_FILTERS.map(f => (
           <button
             key={f.key}
@@ -178,7 +181,26 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
             {f.label} ({counts[f.key]})
           </button>
         ))}
+        <button
+          onClick={() => setShowMap(!showMap)}
+          className={`ml-auto px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            showMap ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          }`}
+        >
+          🗺️ Mapa
+        </button>
       </div>
+
+      {/* Mapa kursów */}
+      {showMap && przystanki.length > 0 && oddzialNazwa && (
+        <Suspense fallback={<div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">Ładowanie mapy...</div>}>
+          <KursyMapView
+            kursy={filtered}
+            przystanki={przystanki.filter(p => filtered.some(k => k.id === p.kurs_id))}
+            oddzialNazwa={oddzialNazwa}
+          />
+        </Suspense>
+      )}
 
       {filtered.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">
