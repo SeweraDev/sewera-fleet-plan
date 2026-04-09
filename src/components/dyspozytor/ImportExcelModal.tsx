@@ -64,6 +64,7 @@ interface Props {
   dzien: string;
   flota: Pojazd[];
   kierowcy: Kierowca[];
+  oddzialy?: { id: number; nazwa: string }[];
   onImported: () => void;
 }
 
@@ -288,7 +289,7 @@ function matchFlota(nrRej: string | null, flota: Pojazd[]): Pojazd | null {
 
 /* ── Komponent ── */
 
-export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kierowcy, onImported }: Props) {
+export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kierowcy, oddzialy, onImported }: Props) {
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2>(1);
@@ -296,11 +297,13 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
   const [result, setResult] = useState<ParseResult | null>(null);
   const [kursStates, setKursStates] = useState<KursState[]>([]);
   const [importDzien, setImportDzien] = useState(dzien);
+  const [importOddzialId, setImportOddzialId] = useState<number | null>(oddzialId);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const doImport = async (parseResult: ParseResult, states: KursState[], targetDzien: string) => {
-    if (!parseResult || !oddzialId || !user) return;
+    const effectiveOddzialId = importOddzialId || oddzialId;
+    if (!parseResult || !effectiveOddzialId || !user) return;
     setImporting(true);
 
     let importedKursy = 0;
@@ -316,12 +319,12 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
       const { data: newKurs, error: kErr } = await supabase
         .from('kursy')
         .insert({
-          oddzial_id: oddzialId,
+          oddzial_id: effectiveOddzialId,
           dzien: targetDzien,
           kierowca_id: ks.kierowca_id || null,
           flota_id: ks.flota_id || null,
           kierowca_nazwa: selectedKierowca?.imie_nazwisko || kurs.kierowca_nazwa,
-          numer: kurs.nr_kursu_w_pliku || (oddzialId ? await generateNumerKursu(oddzialId) : null),
+          numer: kurs.nr_kursu_w_pliku || await generateNumerKursu(effectiveOddzialId),
           status: 'zaplanowany',
         })
         .select('id')
@@ -337,13 +340,13 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
       for (let j = 0; j < kurs.zlecenia.length; j++) {
         const zl = kurs.zlecenia[j];
         const { generateNumerZlecenia } = await import('@/lib/generateNumerZlecenia');
-        const numer = await generateNumerZlecenia(oddzialId);
+        const numer = await generateNumerZlecenia(effectiveOddzialId);
 
         const { data: newZl, error: zlErr } = await supabase
           .from('zlecenia')
           .insert({
             numer,
-            oddzial_id: oddzialId,
+            oddzial_id: effectiveOddzialId,
             typ_pojazdu: kurs.typ_pojazdu,
             dzien: targetDzien,
             preferowana_godzina: zl.godzina_dostawy,
@@ -465,6 +468,8 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
     setKursStates([]);
     setError(null);
     setImporting(false);
+    setImportOddzialId(oddzialId);
+    setImportDzien(dzien);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -512,10 +517,21 @@ export function ImportExcelModal({ open, onClose, oddzialId, dzien, flota, kiero
               )}
             </div>
 
-            {/* Day picker */}
-            <div className="flex items-center gap-3">
+            {/* Day + oddział picker */}
+            <div className="flex items-center gap-3 flex-wrap">
               <Label className="text-sm whitespace-nowrap">Dzień importu:</Label>
               <Input type="date" value={importDzien} onChange={e => setImportDzien(e.target.value)} className="w-44" />
+              {oddzialy && oddzialy.length > 0 && (
+                <>
+                  <Label className="text-sm whitespace-nowrap ml-2">Oddział:</Label>
+                  <Select value={String(importOddzialId || '')} onValueChange={v => setImportOddzialId(Number(v))}>
+                    <SelectTrigger className="w-44"><SelectValue placeholder="Wybierz oddział" /></SelectTrigger>
+                    <SelectContent>
+                      {oddzialy.map(o => <SelectItem key={o.id} value={String(o.id)}>{o.nazwa}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
             </div>
 
             {/* Warnings */}

@@ -835,6 +835,7 @@ export default function DyspozytorDashboard() {
             dzien={dzien}
             flota={flota}
             kierowcy={kierowcy}
+            oddzialy={oddzialy}
             onImported={refetch}
           />
         </main>
