@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,9 @@ import {
   NAZWA_TO_KOD,
   geocodeAddress,
   getRouteDistance,
+  searchAddress,
 } from '@/lib/oddzialy-geo';
+import type { SearchResult } from '@/lib/oddzialy-geo';
 import {
   TYPY_KALKULATOR,
   obliczKosztWew,
@@ -33,16 +35,18 @@ interface WynikOddzialu {
   kosztWew: { netto: number; brutto: number } | null;
   kosztZew: { netto: number; brutto: number } | null;
   jestMojOddzial: boolean;
-  /** Typ cennikowy użyty do kalkulacji (może być fallback) */
   uzytTyp: string | null;
-  /** Czy typ jest fallback (np. HDS 9t zamiast 12t) */
   isFallback: boolean;
-  /** Typy aut zewnętrznych dostępne w oddziale */
   zewTypy: string[];
 }
 
 const MAX_KM_INNE_ODDZIALY = 25;
 const MAX_WYNIKOW = 3;
+
+const ODDZIAL_COLORS: Record<string, string> = {
+  KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
+  DG: '#ea580c', TG: '#0891b2', CH: '#be185d', OS: '#ca8a04',
+};
 
 // Odwrotne mapowanie kod → nazwa
 const KOD_TO_NAZWA: Record<string, string> = {};
@@ -50,15 +54,152 @@ for (const [nazwa, kod] of Object.entries(NAZWA_TO_KOD)) {
   KOD_TO_NAZWA[kod] = nazwa;
 }
 
+// Leaflet lazy load
+let leafletLoaded = false;
+function loadLeaflet(): Promise<any> {
+  if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
+  return new Promise((resolve, reject) => {
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    if ((window as any).L) { leafletLoaded = true; resolve((window as any).L); return; }
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => { leafletLoaded = true; resolve((window as any).L); };
+    script.onerror = () => reject(new Error('Leaflet CDN error'));
+    document.head.appendChild(script);
+  });
+}
+
 export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [typPojazdu, setTypPojazdu] = useState('');
   const [adres, setAdres] = useState('');
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [wyniki, setWyniki] = useState<WynikOddzialu[] | null>(null);
   const [error, setError] = useState('');
   const [pokazZew, setPokazZew] = useState(false);
 
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Mini-mapa state
+  const [dostawaCoords, setDostawaCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+
   const mojKod = NAZWA_TO_KOD[oddzialNazwa] || '';
+
+  // Debounced address search
+  const handleAdresChange = (val: string) => {
+    setAdres(val);
+    setSelectedCoords(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (val.length < 3) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      const results = await searchAddress(val);
+      setSuggestions(results);
+      setShowSuggestions(results.length > 0);
+      setSearching(false);
+    }, 300);
+  };
+
+  const handleSelectSuggestion = (s: SearchResult) => {
+    setAdres(s.name);
+    setSelectedCoords({ lat: s.lat, lng: s.lng });
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) &&
+        inputRef.current && !inputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // Render mini-map when wyniki change
+  useEffect(() => {
+    if (!wyniki || wyniki.length === 0 || !dostawaCoords || !mapContainerRef.current) return;
+
+    loadLeaflet().then(L => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+
+      const map = L.map(mapContainerRef.current, { zoomControl: true, attributionControl: false });
+      mapInstanceRef.current = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+      }).addTo(map);
+
+      const bounds: [number, number][] = [];
+
+      // Pin dostawy (czerwony)
+      const deliveryIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:28px;height:28px;background:#dc2626;border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:bold;">📍</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      L.marker([dostawaCoords.lat, dostawaCoords.lng], { icon: deliveryIcon })
+        .addTo(map)
+        .bindPopup(`<b>Dostawa</b><br/>${adres}`);
+      bounds.push([dostawaCoords.lat, dostawaCoords.lng]);
+
+      // Piny oddziałów z wyników
+      for (const w of wyniki) {
+        const coord = ODDZIAL_COORDS[w.kod];
+        if (!coord) continue;
+        const color = ODDZIAL_COLORS[w.kod] || '#6b7280';
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:24px;height:24px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:bold;">${w.kod}</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
+        L.marker([coord.lat, coord.lng], { icon })
+          .addTo(map)
+          .bindPopup(`<b>${w.nazwa}</b><br/>${w.km} km`);
+        bounds.push([coord.lat, coord.lng]);
+      }
+
+      if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [30, 30] });
+      } else if (bounds.length === 1) {
+        map.setView(bounds[0], 13);
+      }
+    }).catch(console.error);
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [wyniki, dostawaCoords]);
 
   const handleWylicz = useCallback(async () => {
     if (!typPojazdu) {
@@ -73,15 +214,17 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     setLoading(true);
     setError('');
     setWyniki(null);
+    setDostawaCoords(null);
 
     try {
-      // 1. Geocoduj adres
-      const coords = await geocodeAddress(adres);
+      // 1. Geocoduj adres (użyj wybranych coords jeśli mamy)
+      const coords = selectedCoords || await geocodeAddress(adres);
       if (!coords) {
         setError('Nie udało się znaleźć adresu. Spróbuj podać bardziej szczegółowy adres (ulica, kod pocztowy, miasto).');
         setLoading(false);
         return;
       }
+      setDostawaCoords(coords);
 
       // 2. Pobierz flotę WSZYSTKICH oddziałów (aktywne pojazdy własne + zewnętrzne)
       const { data: flotaData } = await supabase
@@ -94,7 +237,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         .select('typ, oddzial_id')
         .eq('aktywny', true);
 
-      // Pobierz nazwy oddziałów → mapuj oddzial_id → kod
       const { data: oddzialyData } = await supabase
         .from('oddzialy')
         .select('id, nazwa');
@@ -105,7 +247,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         if (kod) oddzialIdToKod.set(o.id, kod);
       });
 
-      // Buduj OSOBNE mapy: własne (Sewera) vs zewnętrzne
       const buildTypMap = (data: any[]) => {
         const map = new Map<string, Set<string>>();
         data.forEach(f => {
@@ -117,8 +258,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         });
         return map;
       };
-      const flotaWlasna = buildTypMap(flotaData || []);     // cena Sewera
-      const flotaZew = buildTypMap(flotaZewData || []);      // cena Zewnętrzna
+      const flotaWlasna = buildTypMap(flotaData || []);
+      const flotaZew = buildTypMap(flotaZewData || []);
 
       // 3. Oblicz odległość od KAŻDEGO oddziału
       const oddzialy = Object.entries(ODDZIAL_COORDS);
@@ -134,7 +275,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const km = await getRouteDistance(dane, coords);
         if (km === null) continue;
 
-        // Sewera (wew) — tylko jeśli oddział ma auto WŁASNE (flota)
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
         const bestType = findBestAvailableType(typPojazdu, wlasneTypy);
 
@@ -148,11 +288,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           isFallback = bestType.fallback;
         }
 
-        // Transport zew — stawka z tabeli + oddział musi mieć auto zew
         const zewTypy = flotaZew.get(kod) || new Set<string>();
         const bestZewType = findBestAvailableType(typPojazdu, zewTypy);
         const kosztZew = bestZewType ? obliczKosztZew(km, typPojazdu, kod) : null;
-        // Pokaż tylko zew typy pasujące do zapytania
         const matchingZewTypy = bestZewType ? [...zewTypy].filter(t => {
           const mapped = mapTypNaCennikowy(t);
           return mapped === typPojazdu || mapped === bestZewType.typ;
@@ -171,7 +309,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         });
       }
 
-      // 4. Filtruj: mój oddział zawsze + inne ≤15 km (które mają auto lub zew)
+      // 4. Filtruj
       const mojOddzial = results.find(r => r.jestMojOddzial);
       const inne = results
         .filter(r => !r.jestMojOddzial && r.km <= MAX_KM_INNE_ODDZIALY && (r.kosztWew || r.kosztZew))
@@ -184,7 +322,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         finalResults.push(r);
       }
 
-      // Sortuj po najtańszej dostępnej cenie
       finalResults.sort((a, b) => {
         const priceA = Math.min(a.kosztWew?.netto ?? 9999, a.kosztZew?.netto ?? 9999);
         const priceB = Math.min(b.kosztWew?.netto ?? 9999, b.kosztZew?.netto ?? 9999);
@@ -193,7 +330,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
       const jestZew = finalResults.some(r => r.kosztZew !== null);
       setPokazZew(jestZew);
-
       setWyniki(finalResults);
     } catch (e) {
       console.error('[WycenTransport] error:', e);
@@ -201,10 +337,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [typPojazdu, adres, mojKod]);
+  }, [typPojazdu, adres, mojKod, selectedCoords]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !loading) handleWylicz();
+    if (e.key === 'Enter' && !loading) {
+      setShowSuggestions(false);
+      handleWylicz();
+    }
   };
 
   return (
@@ -229,14 +368,37 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="relative">
             <Label className="text-xs text-muted-foreground">Adres dostawy</Label>
             <Input
-              placeholder="np. al. Roździeńskiego 1a, 40-202 Katowice"
+              ref={inputRef}
+              placeholder="np. sewera chrzanów, ul. Śląska 64a"
               value={adres}
-              onChange={e => setAdres(e.target.value)}
+              onChange={e => handleAdresChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
             />
+            {searching && (
+              <div className="absolute right-3 top-[50%] translate-y-1">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {showSuggestions && suggestions.length > 0 && (
+              <div
+                ref={suggestionsRef}
+                className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-auto"
+              >
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors border-b last:border-0"
+                    onClick={() => handleSelectSuggestion(s)}
+                  >
+                    📍 {s.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <Button onClick={handleWylicz} disabled={loading} className="w-full">
@@ -331,6 +493,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                 </tbody>
               </table>
             </div>
+
+            {/* Mini-mapa */}
+            <div
+              ref={mapContainerRef}
+              className="w-full h-[250px] rounded-lg border overflow-hidden"
+            />
+
             <p className="text-xs text-muted-foreground">
               Ceny netto w PLN (VAT 23%). Odległość w jedną stronę (OSRM).
               Oddziały z odległością {'>'} {MAX_KM_INNE_ODDZIALY} km od budowy nie są wyświetlane (oprócz Twojego).

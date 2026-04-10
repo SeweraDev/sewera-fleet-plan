@@ -94,6 +94,51 @@ export async function geocodeAddress(adres: string): Promise<{ lat: number; lng:
   return null;
 }
 
+// Wyszukiwanie adresów → Photon (autocomplete)
+export interface SearchResult {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+export async function searchAddress(query: string): Promise<SearchResult[]> {
+  if (!query || query.length < 3) return [];
+
+  const cleaned = query.replace(/^ul\.\s*/i, '').trim();
+  const q = encodeURIComponent(cleaned + ' Poland');
+
+  try {
+    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=5`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data.features) return [];
+
+    const results: SearchResult[] = [];
+    for (const f of data.features) {
+      const [lng, lat] = f.geometry.coordinates;
+      // Bounding box Śląsk
+      if (lat < 49.0 || lat > 52.0 || lng < 17.0 || lng > 21.0) continue;
+
+      const props = f.properties || {};
+      const parts: string[] = [];
+      if (props.name) parts.push(props.name);
+      if (props.street) {
+        let street = props.street;
+        if (props.housenumber) street += ' ' + props.housenumber;
+        if (!parts.includes(street)) parts.push(street);
+      }
+      if (props.city) parts.push(props.city);
+      else if (props.county) parts.push(props.county);
+
+      const name = parts.join(', ') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      results.push({ name, lat, lng });
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 // Odległość po drogach → OSRM (darmowy publiczny serwer)
 // Korekta ×1.1 tylko do 20 km — OSRM zaniża krótkie trasy
 const OSRM_CORRECTION_SHORT = 1.1;
