@@ -973,6 +973,14 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
+  // Strategy A2: szukaj na pełnym tekście "Waga netto razem:" + liczba (multiline)
+  if (masa_kg === 0) {
+    const fullM = text.match(/Waga\s+netto\s+razem[:\s]*([\d\s]+[,.][\d]+)/i);
+    if (fullM) {
+      masa_kg = Math.ceil(parseFloat(fullM[1].replace(/\s/g, "").replace(",", ".")) || 0);
+    }
+  }
+
   // Strategy B (fallback): standalone number before "RAZEM:" line
   if (masa_kg === 0 && razemIdx > 0) {
     for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
