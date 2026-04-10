@@ -490,12 +490,13 @@ function KalendarzTab({
 // ── Main FlotaSection ──
 
 export function FlotaSection({
-  oddzialId, flota, oddzialy, onFlotaRefresh,
+  oddzialId, flota, oddzialy, onFlotaRefresh, readOnly,
 }: {
   oddzialId: number | null;
   flota: Pojazd[];
   oddzialy: { id: number; nazwa: string }[];
   onFlotaRefresh: () => void;
+  readOnly?: boolean;
 }) {
   const { kierowcy: kierowcyStatus, loading: loadingKierowcy } = useKierowcyStatusDnia(oddzialId);
   const { kierowcy: kierowcyCrud, refetch: refetchKierowcy } = useKierowcyOddzialu(oddzialId);
@@ -559,7 +560,7 @@ export function FlotaSection({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">🚛 Flota własna — {oddzialNazwa}</h2>
-              <Button size="sm" onClick={() => { setEditPojazd(null); setPojazdModal(true); }}>+ Dodaj pojazd</Button>
+              {!readOnly && <Button size="sm" onClick={() => { setEditPojazd(null); setPojazdModal(true); }}>+ Dodaj pojazd</Button>}
             </div>
             {flota.length === 0 ? (
               <Card><CardContent className="p-6 text-center text-muted-foreground">Brak pojazdów</CardContent></Card>
@@ -583,12 +584,14 @@ export function FlotaSection({
                       <TableCell className="text-right">{f.ladownosc_kg}</TableCell>
                       <TableCell className="text-right">{f.objetosc_m3 ?? '—'}</TableCell>
                       <TableCell className="text-right">{f.max_palet ?? '—'}</TableCell>
+                      {!readOnly && (
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setEditPojazd(f); setPojazdModal(true); }}>✏️</Button>
                           <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => setDeletePojazd(f)}>🗑</Button>
                         </div>
                       </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -602,7 +605,7 @@ export function FlotaSection({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">🚚 Zewnętrzni — {oddzialNazwa}</h2>
-              <Button size="sm" onClick={() => { setEditZewn(null); setZewnModal(true); }}>+ Dodaj zewnętrznego</Button>
+              {!readOnly && <Button size="sm" onClick={() => { setEditZewn(null); setZewnModal(true); }}>+ Dodaj zewnętrznego</Button>}
             </div>
             {loadingZewn ? (
               <p className="text-muted-foreground text-center py-4">Ładowanie...</p>
@@ -635,12 +638,14 @@ export function FlotaSection({
                         <TableCell>{f.firma || '—'}</TableCell>
                         <TableCell>{f.kierowca || '—'}</TableCell>
                         <TableCell>{f.tel || '—'}</TableCell>
+                        {!readOnly && (
                         <TableCell>
                           <div className="flex gap-1">
                             <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setEditZewn(f); setZewnModal(true); }}>✏️</Button>
                             <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => setDeleteZewn(f)}>🗑</Button>
                           </div>
                         </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -655,7 +660,7 @@ export function FlotaSection({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">👤 Kierowcy — {oddzialNazwa}</h2>
-              <Button size="sm" onClick={() => { setEditKierowca(null); setKierowcaModal(true); }}>+ Dodaj kierowcę</Button>
+              {!readOnly && <Button size="sm" onClick={() => { setEditKierowca(null); setKierowcaModal(true); }}>+ Dodaj kierowcę</Button>}
             </div>
             {loadingKierowcy ? (
               <p className="text-muted-foreground text-center py-4">Ładowanie kierowców...</p>
@@ -687,6 +692,7 @@ export function FlotaSection({
                             <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Dostępny</Badge>
                           )}
                         </TableCell>
+                        {!readOnly && (
                         <TableCell>
                           <div className="flex gap-1">
                             <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => {
@@ -695,6 +701,7 @@ export function FlotaSection({
                             <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => { if (crudK) setDeleteKierowca(crudK); }}>🗑</Button>
                           </div>
                         </TableCell>
+                        )}
                       </TableRow>
                     );
                   })}
@@ -708,7 +715,7 @@ export function FlotaSection({
           <KalendarzTab
             flota={flota} kierowcy={kierowcyStatus} flotaZewn={flotaZewn} kursy={kursy}
             businessDays={businessDays} loading={loadingKalendarz || loadingKierowcy || loadingZewn}
-            isBlocked={isBlocked} onToggle={toggleBlokada}
+            isBlocked={isBlocked} onToggle={readOnly ? () => {} : toggleBlokada}
           />
         </TabsContent>
       </Tabs>

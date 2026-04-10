@@ -89,7 +89,7 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'usuniety', label: 'Usunięte' },
 ];
 
-function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked }: { oddzialId: number | null; oddzialNazwa?: string; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean }) {
+function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked, readOnly }: { oddzialId: number | null; oddzialNazwa?: string; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean; readOnly?: boolean }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('zaplanowany');
@@ -162,12 +162,14 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
               </span>
             )}
           </span>
-          <button
-            onClick={onOpenModal}
-            className="text-sm font-semibold text-accent hover:underline"
-          >
-            Przypisz →
-          </button>
+          {!readOnly && (
+            <button
+              onClick={onOpenModal}
+              className="text-sm font-semibold text-accent hover:underline"
+            >
+              Przypisz →
+            </button>
+          )}
         </div>
       )}
 
@@ -228,6 +230,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                     {kurs.pojazd_typ && <span className="text-muted-foreground text-xs">· {kurs.pojazd_typ}</span>}
                     <StatusBadge status={kurs.status} />
                   </CardTitle>
+                  {!readOnly && (
                   <div className="flex gap-1">
                     {kurs.status !== 'usuniety' && <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>Edytuj</Button>}
                     {kurs.status === 'zaplanowany' && (
@@ -246,6 +249,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                       <Button size="sm" variant="secondary" onClick={() => handleStop(kurs.id)} disabled={acting}>Powrót</Button>
                     )}
                   </div>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Kierowca: {kurs.kierowca_nazwa || '— (nieprzypisany)'}
@@ -287,8 +291,8 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                         <TableHead>Tel / Kontakt</TableHead>
                         <TableHead>Uwagi</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead></TableHead>
-                        <TableHead></TableHead>
+                        {!readOnly && <TableHead></TableHead>}
+                        {!readOnly && <TableHead></TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -313,6 +317,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                           {isFirst ? (
                             <TableCell rowSpan={groupSize} className="align-top"><StatusBadge status={p.prz_status} /></TableCell>
                           ) : null}
+                          {!readOnly && (
                           <TableCell>
                             <div className="flex gap-1">
                             {p.zlecenie_id && (
@@ -322,7 +327,9 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                             )}
                             </div>
                           </TableCell>
+                          )}
                           {isFirst ? (
+                            !readOnly ? (
                             <TableCell rowSpan={groupSize} className="align-top">
                               <div className="flex gap-1">
                             {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
@@ -345,6 +352,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                             )}
                               </div>
                             </TableCell>
+                            ) : null
                           ) : null}
                         </TableRow>
                         );
@@ -719,6 +727,10 @@ export default function DyspozytorDashboard() {
     const match = oddzialy.find(o => o.nazwa === profile.branch);
     if (match) setOddzialId(match.id);
   }, [profile, oddzialy, oddzialId]);
+
+  // Read-only mode — dyspozytor może modyfikować tylko swój oddział
+  const myOddzialId = oddzialy.find(o => o.nazwa === profile?.branch)?.id ?? null;
+  const isReadOnly = oddzialId !== null && myOddzialId !== null && oddzialId !== myOddzialId;
   const [showModal, setShowModal] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
   const [preSelectedZlIds, setPreSelectedZlIds] = useState<string[]>([]);
@@ -733,7 +745,7 @@ export default function DyspozytorDashboard() {
       <Topbar />
       <div className="flex flex-1">
         <PageSidebar
-          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.filter(k => k.status === 'zaplanowany' || k.status === 'aktywny').length || undefined } : s)}
+          items={(isReadOnly ? SIDEBAR_ITEMS.filter(s => s.id !== 'nowe_zlecenie') : SIDEBAR_ITEMS).map(s => s.id === 'kursy' ? { ...s, badge: kursy.filter(k => k.status === 'zaplanowany' || k.status === 'aktywny').length || undefined } : s)}
           activeId={activeId}
           onSelect={setActiveId}
         />
@@ -769,7 +781,7 @@ export default function DyspozytorDashboard() {
                 📅 Zakres
               </Button>
             </div>
-            {activeId === 'kursy' && (
+            {activeId === 'kursy' && !isReadOnly && (
               <div className="ml-auto mt-4 flex gap-2">
                 <Button variant="outline" onClick={() => setShowExcelImport(true)} disabled={!oddzialId}>
                   📊 Importuj plan
@@ -780,6 +792,14 @@ export default function DyspozytorDashboard() {
               </div>
             )}
           </div>
+
+          {isReadOnly && (
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-4 py-3 mb-4">
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                👁️ Podgląd oddziału {oddzialy.find(o => o.id === oddzialId)?.nazwa} — tylko do odczytu
+              </span>
+            </div>
+          )}
 
           {!oddzialId ? (
             <Card><CardContent className="p-8 text-center text-muted-foreground">Wybierz oddział aby wyświetlić dane</CardContent></Card>
@@ -797,6 +817,7 @@ export default function DyspozytorDashboard() {
                   flota={flota}
                   kierowcy={kierowcy}
                   isBlocked={isBlocked}
+                  readOnly={isReadOnly}
                 />
               )}
               {activeId === 'zlecenia' && (
@@ -805,16 +826,17 @@ export default function DyspozytorDashboard() {
                   oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
                   dzien={dzien}
                   onOpenKursModal={(zlIds) => { setPreSelectedZlIds(zlIds); setShowModal(true); }}
+                  readOnly={isReadOnly}
                 />
               )}
-              {activeId === 'nowe_zlecenie' && (
+              {activeId === 'nowe_zlecenie' && !isReadOnly && (
                 <NoweZlecenieFormDyspozytor onSuccess={() => setActiveId('zlecenia')} />
               )}
               {activeId === 'wycen' && (
                 <WycenTransportTab oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || profile?.branch || 'Katowice'} />
               )}
               {activeId === 'flota' && (
-                <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} />
+                <FlotaSection oddzialId={oddzialId} flota={flota} oddzialy={oddzialy} onFlotaRefresh={refetchFlota} readOnly={isReadOnly} />
               )}
             </>
           )}
