@@ -710,7 +710,8 @@ export function parseWZText(rawText: string): WZImportData {
     let passedSewera = false;
     for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 20, lines.length); i++) {
       const l = lines[i];
-      if (/^(Adres\s+dostawy|Informacje)\s*$/i.test(l)) break;
+      if (/Adres\s+dostawy/i.test(l)) break;
+      if (/^Informacje\s*$/i.test(l)) break;
       if (/^Magazyn\s+wydający/i.test(l)) break;
       if (/^Termin\s+zapłaty/i.test(l)) break;
       if (/^Wydano\s+na/i.test(l)) break;
