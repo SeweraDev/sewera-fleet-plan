@@ -718,12 +718,15 @@ export function parseWZText(rawText: string): WZImportData {
       if (/^Lp\.\s/i.test(l)) break;
       if (/^\d+\.\s/.test(l)) break;
       if (SEWERA_CHECK.test(l)) { passedSewera = true; nameParts.length = 0; addrParts.length = 0; continue; }
-      // Po przejściu bloku Sewera — skip ODDZIAŁ, ul., NIP, NR BDO
-      if (passedSewera && /^ODDZIAŁ/i.test(l)) continue;
+      // Blok Sewery — pomijaj NIP, NR BDO, ODDZIAŁ, adres Sewery
       if (!passedSewera && (/^NIP:/i.test(l) || /^NR BDO:/i.test(l))) continue;
-      if (passedSewera && (/^ul\.\s/i.test(l) && /KATOWICE|KOŚCIUSZKI/i.test(l))) continue;
-      if (/^NIP:/i.test(l)) break;
-      if (/^Nr\s+ewid/i.test(l)) break;
+      if (passedSewera && /^ODDZIAŁ/i.test(l)) continue;
+      if (passedSewera && /^NIP:/i.test(l)) continue;
+      if (passedSewera && /^NR BDO:/i.test(l)) continue;
+      if (passedSewera && /^ul\.\s/i.test(l) && /KATOWICE|KOŚCIUSZKI/i.test(l)) continue;
+      // Nr ewid odbiorcy — stop (już mamy odbiorcę)
+      if (/^Nr\s+ewid/i.test(l) && nameParts.length > 0) break;
+      if (/^NIP:/i.test(l) && nameParts.length > 0) break;
       if (l.length < 2) continue;
       // Rozdziel adres od nazwy firmy
       if (/^(?:ul|al|os|pl)\.\s/i.test(l) || /^\d{2}-\d{3}\s/.test(l)) {
@@ -775,6 +778,9 @@ export function parseWZText(rawText: string): WZImportData {
     /Informacje/i,
     /^Cena\s/i,
     /^Netto$/i,
+    /Wydruk\s+z\s+programu/i,
+    /Osoba\s+drukuj/i,
+    /Czas\s+wydruku/i,
   ];
 
   // Find SEWERA line index to skip the seller block
