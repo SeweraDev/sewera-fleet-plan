@@ -118,8 +118,9 @@ const STAWKI_ZEW: StawkaZew[] = [
   // HDS 12T — Oświęcim
   { typCennikowy: 'HDS 12,0t', oddzial: 'OS', punkty: [{ km: 5, cena: 300 }, { km: 15, cena: 350 }, { km: 20, cena: 450 }, { km: 30, cena: 550 }, { km: 40, cena: 650 }], stawkaZaKmPonad20: 7 },
 
-  // do 1,2T — tylko GL
+  // do 1,2T — GL + KAT
   { typCennikowy: 'do 1,2t bez windy', oddzial: 'GL', punkty: [{ km: 5, cena: 100 }, { km: 10, cena: 120 }, { km: 15, cena: 140 }, { km: 20, cena: 160 }], stawkaZaKmPonad20: null },
+  { typCennikowy: 'do 1,2t bez windy', oddzial: 'KAT', punkty: [{ km: 5, cena: 84.55 }, { km: 10, cena: 101.63 }, { km: 15, cena: 113.82 }, { km: 20, cena: 143.90 }], stawkaZaKmPonad20: 6.34 },
 ];
 
 // ============================================================
