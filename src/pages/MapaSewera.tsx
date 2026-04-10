@@ -32,10 +32,8 @@ function loadLeaflet(): Promise<any> {
   });
 }
 
-function tomorrow(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+function today(): string {
+  return new Date().toISOString().split('T')[0];
 }
 
 function formatDatePL(iso: string): string {
@@ -46,7 +44,7 @@ function formatDatePL(iso: string): string {
 }
 
 export default function MapaSewera() {
-  const [dzien, setDzien] = useState(tomorrow);
+  const [dzien, setDzien] = useState(today);
   const { zlecenia, loading } = useMapaZlecen(dzien);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
