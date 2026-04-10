@@ -151,26 +151,6 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
 
   return (
     <div className="space-y-4">
-      {/* Orange banner for unassigned orders */}
-      {zlBezKursuCount > 0 && (
-        <div className="flex items-center justify-between rounded-lg bg-accent/15 border border-accent/30 px-4 py-3">
-          <span className="text-sm font-medium text-accent-foreground">
-            ⚠️ {zlBezKursuCount} zleceń bez przypisanego kursu
-            {doWeryfikacjiCount > 0 && (
-              <span className="ml-2 text-orange-600 dark:text-orange-400">
-                (w tym 🚛 {doWeryfikacjiCount} domówień z trasy)
-              </span>
-            )}
-          </span>
-          <button
-            onClick={onOpenModal}
-            className="text-sm font-semibold text-accent hover:underline"
-          >
-            Przypisz →
-          </button>
-        </div>
-      )}
-
       {/* Status filter pills + mapa toggle */}
       <div className="flex gap-2 flex-wrap items-center">
         {STATUS_FILTERS.map(f => (
