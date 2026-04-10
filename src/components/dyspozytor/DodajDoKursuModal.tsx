@@ -45,12 +45,12 @@ export function DodajDoKursuModal({ open, onClose, kurs, przystanki, oddzialId, 
     setLoading(true);
 
     (async () => {
-      // Zlecenia robocze/do_weryfikacji bez kursu — na ten sam dzień co kurs
+      // Zlecenia robocze/do_weryfikacji bez kursu — dzień kursu + zaległe (data < dziś)
       const { data: zlData } = await supabase
         .from('zlecenia')
         .select('id, numer, dzien, preferowana_godzina, typ_pojazdu, status, kurs_id')
         .eq('oddzial_id', oddzialId)
-        .eq('dzien', dzien)
+        .lte('dzien', dzien)
         .in('status', ['robocza', 'do_weryfikacji'])
         .is('kurs_id', null);
 
@@ -265,7 +265,10 @@ export function DodajDoKursuModal({ open, onClose, kurs, przystanki, oddzialId, 
                     <TableCell onClick={e => e.stopPropagation()}>
                       <Checkbox checked={checked.has(z.id)} onCheckedChange={() => toggle(z.id)} />
                     </TableCell>
-                    <TableCell className="text-xs">{z.dzien}</TableCell>
+                    <TableCell className="text-xs">
+                      {z.dzien}
+                      {z.dzien < dzien && <Badge variant="destructive" className="ml-1 text-[10px]">Zaległe</Badge>}
+                    </TableCell>
                     <TableCell className="text-xs">{z.preferowana_godzina || '—'}</TableCell>
                     <TableCell className="text-xs max-w-[140px] truncate">{z.odbiorca || '—'}</TableCell>
                     <TableCell className="text-xs max-w-[140px] truncate">{z.adres || '—'}</TableCell>

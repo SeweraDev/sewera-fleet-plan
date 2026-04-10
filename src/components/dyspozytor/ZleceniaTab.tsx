@@ -511,7 +511,12 @@ export function ZleceniaTab({
                         />
                       </TableCell>
                     )}
-                    <TableCell>{z.dzien}</TableCell>
+                    <TableCell>
+                      {z.dzien}
+                      {z.dzien < new Date().toISOString().split('T')[0] && !z.kurs_numer && !z.kurs_nrrej && (
+                        <Badge variant="destructive" className="ml-1 text-[10px]">Zaległe</Badge>
+                      )}
+                    </TableCell>
                     <TableCell>{z.preferowana_godzina || '—'}</TableCell>
                     <TableCell><StatusBadge status={z.status} /></TableCell>
                     <TableCell className="font-mono text-xs">{z.numer}</TableCell>

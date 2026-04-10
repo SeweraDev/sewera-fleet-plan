@@ -585,6 +585,7 @@ function NowyKursModal({
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs">{z.numer}</span>
                         <span className="text-xs text-muted-foreground">{z.dzien}</span>
+                        {z.dzien < dzien && <Badge variant="destructive" className="text-[10px]">Zaległe</Badge>}
                         <span className="text-xs ml-auto">{Math.round(z.suma_kg)} kg{z.suma_m3 > 0 ? ` · ${z.suma_m3} m³` : ''}{z.suma_palet > 0 ? ` · ${z.suma_palet} pal` : ''}</span>
                       </div>
                       <div className="text-xs text-muted-foreground truncate">

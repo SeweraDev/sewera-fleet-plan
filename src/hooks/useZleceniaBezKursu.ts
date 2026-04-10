@@ -23,15 +23,13 @@ export function useZleceniaBezKursu(oddzialId: number | null) {
     if (oddzialId == null) { setZlecenia([]); return; }
     setLoading(true);
 
-    // Get zlecenia robocze for this oddzial
-    const today = new Date().toISOString().split('T')[0];
+    // Get zlecenia robocze for this oddzial (w tym zaległe — bez dolnego limitu daty)
     const { data: zlData } = await supabase
       .from('zlecenia')
       .select('id, numer, dzien, preferowana_godzina, typ_pojazdu, status, kurs_id')
       .eq('oddzial_id', oddzialId)
       .in('status', ['robocza', 'do_weryfikacji'])
-      .is('kurs_id', null)
-      .gte('dzien', today);
+      .is('kurs_id', null);
 
     // Get those that already have kurs_przystanki in active kursy (not usuniety)
     const { data: activeKursy } = await supabase
