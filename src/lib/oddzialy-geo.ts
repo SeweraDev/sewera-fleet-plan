@@ -101,19 +101,47 @@ export interface SearchResult {
   lng: number;
 }
 
+// Helper: kod → nazwa (wewnętrzny)
+const KOD_TO_NAZWA_INTERNAL: Record<string, string> = {
+  KAT: 'Katowice', CH: 'Chrzanów', DG: 'Dąbrowa Górnicza',
+  GL: 'Gliwice', OS: 'Oświęcim', SOS: 'Sosnowiec', TG: 'Tarnowskie Góry',
+};
+
+// Oddziały Sewera jako podpowiedzi autocomplete
+const SEWERA_SUGGESTIONS: SearchResult[] = Object.entries(ODDZIAL_COORDS)
+  .filter(([kod]) => kod !== 'R') // R = duplikat KAT
+  .map(([kod, dane]) => ({
+    name: `Sewera ${KOD_TO_NAZWA_INTERNAL[kod] || kod}, ${dane.adres}`,
+    lat: dane.lat,
+    lng: dane.lng,
+  }));
+
 export async function searchAddress(query: string): Promise<SearchResult[]> {
   if (!query || query.length < 3) return [];
+
+  const lower = query.toLowerCase();
+
+  // Jeśli query zawiera "sewera", pokaż pasujące oddziały
+  const seweraResults: SearchResult[] = [];
+  if (lower.includes('sewera')) {
+    const rest = lower.replace('sewera', '').trim();
+    for (const s of SEWERA_SUGGESTIONS) {
+      if (!rest || s.name.toLowerCase().includes(rest)) {
+        seweraResults.push(s);
+      }
+    }
+  }
 
   const cleaned = query.replace(/^ul\.\s*/i, '').trim();
   const q = encodeURIComponent(cleaned + ' Poland');
 
   try {
     const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=5`);
-    if (!res.ok) return [];
+    if (!res.ok) return seweraResults;
     const data = await res.json();
-    if (!data.features) return [];
+    if (!data.features) return seweraResults;
 
-    const results: SearchResult[] = [];
+    const results: SearchResult[] = [...seweraResults];
     for (const f of data.features) {
       const [lng, lat] = f.geometry.coordinates;
       // Bounding box Śląsk
@@ -131,11 +159,14 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
       else if (props.county) parts.push(props.county);
 
       const name = parts.join(', ') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      results.push({ name, lat, lng });
+      // Nie duplikuj oddziałów Sewera
+      if (!seweraResults.some(s => Math.abs(s.lat - lat) < 0.01 && Math.abs(s.lng - lng) < 0.01)) {
+        results.push({ name, lat, lng });
+      }
     }
-    return results;
+    return results.slice(0, 8);
   } catch {
-    return [];
+    return seweraResults;
   }
 }
 
