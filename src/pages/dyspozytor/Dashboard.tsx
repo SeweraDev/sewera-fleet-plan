@@ -91,7 +91,8 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
 
 function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked, onZlChange }: { oddzialId: number | null; oddzialNazwa?: string; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean; onZlChange?: () => void }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
-  const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
+  const combinedRefetch = () => { refetch(); onZlChange?.(); };
+  const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(combinedRefetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('zaplanowany');
   const [kursKm, setKursKm] = useState<Record<string, number | null>>({});
 
@@ -787,7 +788,7 @@ export default function DyspozytorDashboard() {
                   flota={flota}
                   kierowcy={kierowcy}
                   isBlocked={isBlocked}
-                  onZlChange={refetchZlBezKursu}
+                  onZlChange={() => { refetchZlBezKursu(); refetch(); }}
                 />
               )}
               {activeId === 'zlecenia' && (
