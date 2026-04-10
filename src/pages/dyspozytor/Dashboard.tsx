@@ -486,11 +486,14 @@ function NowyKursModal({
   const [flotaId, setFlotaId] = useState<string>('');
   const [selectedZl, setSelectedZl] = useState<Set<string>>(new Set());
 
-  // Pre-select zlecenia when modal opens
+  // Pre-select zlecenia when modal opens + refetch
   useEffect(() => {
-    if (open && preSelectedZlecenieIds && preSelectedZlecenieIds.length > 0) {
-      setSelectedZl(new Set(preSelectedZlecenieIds));
-    } else if (!open) {
+    if (open) {
+      refetchZl();
+      if (preSelectedZlecenieIds && preSelectedZlecenieIds.length > 0) {
+        setSelectedZl(new Set(preSelectedZlecenieIds));
+      }
+    } else {
       setSelectedZl(new Set());
       setKierowcaId('');
       setFlotaId('');
