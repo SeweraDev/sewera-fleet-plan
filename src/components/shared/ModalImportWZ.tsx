@@ -673,8 +673,9 @@ function cleanText(text: string): string {
     .replace(/(Osoba\s+drukująca)/gi, "\n$1")
     .replace(/(Os\.\s*upoważnione)/gi, "\n$1")
     .replace(/(Uwagi:)/gi, "\n$1")
-    .replace(/(Waga\s+netto)/gi, "\n$1")
-    .replace(/(RAZEM:)/gi, "\n$1")
+    .replace(/(RAZEM[:\s])/gi, "\n$1")
+    .replace(/(\d)(Waga\s+netto)/gi, "$1\n$2")
+    .replace(/(Waga\s+netto\s+razem[:\s])/gi, "\n$1")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/(\n\s*){3,}/g, "\n\n");
 }
