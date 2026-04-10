@@ -939,13 +939,12 @@ export function parseWZText(rawText: string): WZImportData {
   // 6. masa_kg — multiple strategies
   let masa_kg = 0;
 
-  // Strategy A: number with decimal (X XXX,XX) before "RAZEM:" — this is the weight
+  // Strategy A: last standalone number before "RAZEM:" line
   const razemIdx = lines.findIndex((l) => /^RAZEM/i.test(l));
   if (razemIdx > 0) {
     for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
       const s = lines[i].replace(/\s/g, "");
-      // Szukaj liczby z przecinkiem (format wagowy: 1762,00) — pomijaj same integers (to ilości sztuk)
-      const m = s.match(/^([\d]+,[\d]+)$/);
+      const m = s.match(/^([\d,.]+)$/);
       if (m) {
         masa_kg = Math.ceil(parseFloat(m[1].replace(",", ".")));
         break;
@@ -953,29 +952,10 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // Strategy B: "Waga netto razem:" — szukaj OSTATNIEJ liczby z przecinkiem (wagowej)
-  // Format: "Waga netto razem:\n72\n1 762,00" lub "Waga netto razem: 72 1 762,00"
+  // Strategy B: "Waga netto razem:" inline
   if (masa_kg === 0) {
-    const wagaSection = text.match(/Waga\s+netto\s+razem[:\s]*([\s\S]{0,60}?)(?=RAZEM|$)/i);
-    if (wagaSection) {
-      const nums = [...wagaSection[1].matchAll(/([\d\s]+,[\d]{2})/g)];
-      if (nums.length > 0) {
-        const last = nums[nums.length - 1][1];
-        masa_kg = Math.ceil(parseFloat(last.replace(/\s/g, "").replace(",", ".")) || 0);
-      }
-    }
-  }
-
-  // Strategy A2: standalone integer before RAZEM (fallback — gdy waga bez przecinka, np. "500")
-  if (masa_kg === 0 && razemIdx > 0) {
-    for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
-      const s = lines[i].replace(/\s/g, "");
-      const m = s.match(/^(\d+)$/);
-      if (m && parseInt(m[1]) >= 50) {
-        masa_kg = parseInt(m[1]);
-        break;
-      }
-    }
+    const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
+    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(",", ".")) || 0);
   }
 
   // Strategy C: "RAZEM:" on same line with number (e.g. "RAZEM: 1 700,00")
