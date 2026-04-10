@@ -946,8 +946,8 @@ export function parseWZText(rawText: string): WZImportData {
       const s = lines[i].replace(/\s/g, "");
       const m = s.match(/^([\d,.]+)$/);
       if (m) {
-        masa_kg = Math.ceil(parseFloat(m[1].replace(",", ".")));
-        break;
+        const val = Math.ceil(parseFloat(m[1].replace(",", ".")));
+        if (val > 0 && val < 100000) { masa_kg = val; break; }
       }
     }
   }
