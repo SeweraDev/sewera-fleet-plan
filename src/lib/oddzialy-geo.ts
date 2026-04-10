@@ -5,7 +5,7 @@ export const ODDZIAL_COORDS: Record<string, { lat: number; lng: number; adres: s
   CH:  { lat: 50.1350, lng: 19.4050, adres: 'ul. Śląska 64a, 32-500 Chrzanów' },
   DG:  { lat: 50.3340, lng: 19.1890, adres: 'ul. Kasprzaka 33, 41-303 Dąbrowa Górnicza' },
   GL:  { lat: 50.2930, lng: 18.6720, adres: 'ul. Dojazdowa 11, 44-100 Gliwice' },
-  OS:  { lat: 50.0380, lng: 19.2440, adres: 'ul. Wyzwolenia 19, 32-600 Oświęcim' },
+  OS:  { lat: 50.0377, lng: 19.1963, adres: 'ul. Wyzwolenia 19, 32-600 Oświęcim' },
   SOS: { lat: 50.2870, lng: 19.1280, adres: 'ul. Rudna 14, 41-214 Sosnowiec' },
   TG:  { lat: 50.4430, lng: 18.8570, adres: 'ul. Nakielska 24, 42-600 Tarnowskie Góry' },
 };
