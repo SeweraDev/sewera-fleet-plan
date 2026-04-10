@@ -659,6 +659,22 @@ function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u215F\n\r\t]/g, "")
+    // Rozdziel złączone linie — wstaw newline przed kluczowymi wzorcami
+    .replace(/(NIP:\s*\d)/g, "\n$1")
+    .replace(/(NR BDO:)/gi, "\n$1")
+    .replace(/(Nr\s+ewid)/gi, "\n$1")
+    .replace(/(ODDZIAŁ\s)/gi, "\n$1")
+    .replace(/(Magazyn\s+wydaj)/gi, "\n$1")
+    .replace(/(Adres\s+dostawy)/gi, "\n$1")
+    .replace(/(Termin\s+zapłaty)/gi, "\n$1")
+    .replace(/(Wystawił:)/gi, "\n$1")
+    .replace(/(Na\s+podstawie\s+art)/gi, "\n$1")
+    .replace(/(Wydruk\s+z\s+programu)/gi, "\n$1")
+    .replace(/(Osoba\s+drukująca)/gi, "\n$1")
+    .replace(/(Os\.\s*upoważnione)/gi, "\n$1")
+    .replace(/(Uwagi:)/gi, "\n$1")
+    .replace(/(Waga\s+netto)/gi, "\n$1")
+    .replace(/(RAZEM:)/gi, "\n$1")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/(\n\s*){3,}/g, "\n\n");
 }
