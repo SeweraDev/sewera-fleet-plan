@@ -45,34 +45,46 @@ export type Database = {
         Row: {
           aktywny: boolean
           created_at: string
+          firma_zew: string | null
           id: string
+          jest_zewnetrzny: boolean | null
+          kierowca_zew: string | null
           ladownosc_kg: number
           max_palet: number | null
           nr_rej: string
           objetosc_m3: number | null
           oddzial_id: number | null
+          telefon_zew: string | null
           typ: string
         }
         Insert: {
           aktywny?: boolean
           created_at?: string
+          firma_zew?: string | null
           id?: string
+          jest_zewnetrzny?: boolean | null
+          kierowca_zew?: string | null
           ladownosc_kg?: number
           max_palet?: number | null
           nr_rej: string
           objetosc_m3?: number | null
           oddzial_id?: number | null
+          telefon_zew?: string | null
           typ?: string
         }
         Update: {
           aktywny?: boolean
           created_at?: string
+          firma_zew?: string | null
           id?: string
+          jest_zewnetrzny?: boolean | null
+          kierowca_zew?: string | null
           ladownosc_kg?: number
           max_palet?: number | null
           nr_rej?: string
           objetosc_m3?: number | null
           oddzial_id?: number | null
+          telefon_zew?: string | null
           typ?: string
         }
         Relationships: [
