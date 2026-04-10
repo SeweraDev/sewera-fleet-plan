@@ -171,14 +171,10 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
 }
 
 // Odległość po drogach → OSRM (darmowy publiczny serwer)
-// Korekta ×1.1 tylko do 20 km — OSRM zaniża krótkie trasy
-const OSRM_CORRECTION_SHORT = 1.1;
-const OSRM_CORRECTION_THRESHOLD = 20; // km
 
-// Zaokrąglenie km: <0.4 w dół, ≥0.4 w górę (np. 7.3→7, 7.4→8)
+// Zaokrąglenie km: <0.5 w dół, ≥0.5 w górę
 function roundKm(rawKm: number): number {
-  const corrected = rawKm <= OSRM_CORRECTION_THRESHOLD ? rawKm * OSRM_CORRECTION_SHORT : rawKm;
-  return (corrected % 1 >= 0.4) ? Math.ceil(corrected) : Math.floor(corrected);
+  return Math.round(rawKm);
 }
 
 export async function getRouteDistance(
