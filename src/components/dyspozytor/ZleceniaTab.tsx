@@ -361,23 +361,25 @@ export function ZleceniaTab({
     <div className="space-y-4">
       {/* Baner podsumowania */}
       {bezKursu.length > 0 && (
-        <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-4 py-3">
+        <div className="flex items-center justify-between rounded-lg bg-accent/15 border border-accent/30 px-4 py-3">
           <div className="flex items-center gap-4 flex-wrap text-sm">
-            <span className="font-semibold text-blue-700 dark:text-blue-300">
-              📦 Do zaplanowania: {bezKursu.length} zleceń
+            <span className="font-semibold text-accent-foreground">
+              ⚠️ {bezKursu.length} zleceń bez przypisanego kursu
             </span>
-            <span className="text-blue-600 dark:text-blue-400">
+            <span className="text-muted-foreground">
               ⚖️ {Math.round(sumaKg).toLocaleString('pl-PL')} kg
-            </span>
-            {sumaM3 > 0 && (
-              <span className="text-blue-600 dark:text-blue-400">
-                📐 {Math.round(sumaM3 * 10) / 10} m³
-              </span>
-            )}
-            <span className="text-blue-600 dark:text-blue-400">
-              🧱 {Math.round(sumaPal)} pal
+              {sumaM3 > 0 && ` · 📐 ${Math.round(sumaM3 * 10) / 10} m³`}
+              {sumaPal > 0 && ` · 🧱 ${Math.round(sumaPal)} pal`}
             </span>
           </div>
+          {onOpenKursModal && (
+            <button
+              onClick={() => onOpenKursModal(bezKursu.map(z => z.id))}
+              className="text-sm font-semibold text-accent hover:underline"
+            >
+              Przypisz →
+            </button>
+          )}
         </div>
       )}
 
