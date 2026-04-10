@@ -89,7 +89,7 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'usuniety', label: 'Usunięte' },
 ];
 
-function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked }: { oddzialId: number | null; oddzialNazwa?: string; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean }) {
+function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, doWeryfikacjiCount, onOpenModal, flota, kierowcy, isBlocked, onZlChange }: { oddzialId: number | null; oddzialNazwa?: string; dzien: string; dzienDo?: string; zlBezKursuCount: number; doWeryfikacjiCount: number; onOpenModal: () => void; flota: Pojazd[]; kierowcy: Kierowca[]; isBlocked?: (typ: string, zasobId: string, dzien: string) => boolean; onZlChange?: () => void }) {
   const { kursy, przystanki, loading, refetch } = useKursyDnia(oddzialId, dzien, dzienDo);
   const { handleStart, handleStop, handlePrzystanek, acting } = useKursActions(refetch);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('zaplanowany');
@@ -369,7 +369,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         dzien={dzien}
         flota={flota}
         kierowcy={kierowcy}
-        onDone={refetch}
+        onDone={() => { refetch(); onZlChange?.(); }}
       />
 
       <PolaczKursyModal
@@ -378,7 +378,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         sourceKurs={mergeKurs}
         allKursy={kursy.filter(k => k.status !== 'usuniety')}
         allPrzystanki={przystanki}
-        onDone={refetch}
+        onDone={() => { refetch(); onZlChange?.(); }}
       />
 
       <DodajDoKursuModal
@@ -388,7 +388,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         przystanki={przystanki}
         oddzialId={oddzialId}
         dzien={dzien}
-        onDone={refetch}
+        onDone={() => { refetch(); onZlChange?.(); }}
       />
 
       {/* Dialog odpinania zlecenia z kursu — krok 1 */}
@@ -417,6 +417,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
           setOdpinStep(0);
           setOdpinZl(null);
           refetch();
+          onZlChange?.();
           toast.success(`Zlecenie ${odpinZl.numer} odpięte z kursu`);
         }}
       />
@@ -443,6 +444,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
           await supabase.from('kursy').update({ status: 'usuniety' } as any).eq('id', deleteKursId);
           setDeleteKursId(null);
           refetch();
+          onZlChange?.();
           toast.success('Kurs usunięty — zlecenia wróciły do puli');
         }}
       />
@@ -708,7 +710,7 @@ export default function DyspozytorDashboard() {
   const [preSelectedZlIds, setPreSelectedZlIds] = useState<string[]>([]);
   const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
-  const { zlecenia: zlBezKursu } = useZleceniaBezKursu(oddzialId);
+  const { zlecenia: zlBezKursu, refetch: refetchZlBezKursu } = useZleceniaBezKursu(oddzialId);
   const { isBlocked } = useBlokady(oddzialId, [dzien]);
   const { kierowcy } = useKierowcyOddzialu(oddzialId);
 
@@ -718,7 +720,7 @@ export default function DyspozytorDashboard() {
       <div className="flex flex-1">
         <PageSidebar
           items={SIDEBAR_ITEMS.map(s => {
-            if (s.id === 'kursy') return { ...s, badge: kursy.filter(k => k.status === 'zaplanowany' || k.status === 'aktywny').length || undefined };
+            if (s.id === 'kursy') return { ...s, badge: kursy.filter(k => k.status === 'zaplanowany').length || undefined };
             if (s.id === 'zlecenia') return { ...s, badge: zlBezKursu.length || undefined };
             return s;
           })}
@@ -785,6 +787,7 @@ export default function DyspozytorDashboard() {
                   flota={flota}
                   kierowcy={kierowcy}
                   isBlocked={isBlocked}
+                  onZlChange={refetchZlBezKursu}
                 />
               )}
               {activeId === 'zlecenia' && (
@@ -812,7 +815,7 @@ export default function DyspozytorDashboard() {
             onClose={() => { setShowModal(false); setPreSelectedZlIds([]); }}
             oddzialId={oddzialId}
             dzien={dzien}
-            onCreated={refetch}
+            onCreated={() => { refetch(); refetchZlBezKursu(); }}
             preSelectedZlecenieIds={preSelectedZlIds}
             isBlocked={isBlocked}
           />
@@ -825,7 +828,7 @@ export default function DyspozytorDashboard() {
             flota={flota}
             kierowcy={kierowcy}
             oddzialy={oddzialy}
-            onImported={refetch}
+            onImported={() => { refetch(); refetchZlBezKursu(); }}
           />
         </main>
       </div>
