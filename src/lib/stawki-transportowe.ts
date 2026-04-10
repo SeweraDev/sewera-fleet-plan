@@ -171,8 +171,8 @@ const FALLBACK_CHAIN: Record<string, string[]> = {
   'z windą do 15t': ['z windą do 6t', 'z windą do 1,8t'],
   'z windą do 6t': ['z windą do 1,8t'],
   'z windą do 1,8t': [],
-  'do 1,2t bez windy': ['do 700kg'],
-  'do 700kg': [],
+  'do 1,2t bez windy': ['z windą do 1,8t'],
+  'do 700kg': ['do 1,2t bez windy', 'z windą do 1,8t'],
 };
 
 /**
