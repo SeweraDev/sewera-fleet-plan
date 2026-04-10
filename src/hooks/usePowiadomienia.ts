@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
+import { ikonaPowiadomienia } from '@/lib/powiadomienia';
 
 export interface Powiadomienie {
   id: string;
@@ -46,6 +48,8 @@ export function usePowiadomienia() {
         (payload) => {
           const newItem = payload.new as Powiadomienie;
           setPowiadomienia(prev => [newItem, ...prev].slice(0, 20));
+          // Toast przy nowym powiadomieniu
+          toast(newItem.tresc, { icon: ikonaPowiadomienia(newItem.typ) });
         }
       )
       .subscribe();

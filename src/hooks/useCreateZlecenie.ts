@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
+import { wyslijDoDyspozytorów } from '@/lib/powiadomienia';
 
 export interface WzInput {
   numer_wz: string | null;
@@ -84,6 +85,21 @@ export function useCreateZlecenie(onSuccess?: () => void) {
     }
 
     toast.success(forceVerify ? '⚠️ Zlecenie złożone do weryfikacji' : '✅ Zlecenie złożone');
+
+    // Powiadom dyspozytorów oddziału
+    const sumaKg = input.wz_list.reduce((s, w) => s + (w.masa_kg || 0), 0);
+    const sumaPalet = input.wz_list.reduce((s, w) => s + (w.ilosc_palet || 0), 0);
+    const { data: oddz } = await supabase.from('oddzialy').select('nazwa').eq('id', input.oddzial_id).single();
+    if (oddz?.nazwa) {
+      const opis = `${sumaKg} kg` + (sumaPalet > 0 ? `, ${sumaPalet} palet` : '');
+      wyslijDoDyspozytorów(
+        oddz.nazwa,
+        'nowe_zlecenie',
+        `Nowe zlecenie ${numer} — ${opis}`,
+        zlecenie.id,
+      );
+    }
+
     setSubmitting(false);
     onSuccess?.();
   };

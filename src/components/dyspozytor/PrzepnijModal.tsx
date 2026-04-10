@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
+import { wyslijPowiadomienie } from '@/lib/powiadomienia';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
@@ -129,6 +130,16 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
       } else {
         // Update kurs_id na zleceniu
         await supabase.from('zlecenia').update({ kurs_id: newKurs.id } as any).eq('id', przystanek.zlecenie_id!);
+        // Powiadom nadawcę
+        const { data: zlInfo } = await supabase.from('zlecenia').select('nadawca_id, numer').eq('id', przystanek.zlecenie_id!).single();
+        if (zlInfo?.nadawca_id) {
+          wyslijPowiadomienie({
+            user_id: zlInfo.nadawca_id,
+            typ: 'zlecenie_w_kursie',
+            tresc: `Zlecenie ${zlInfo.numer} przypisane do kursu ${newKurs.numer || ''}`,
+            zlecenie_id: przystanek.zlecenie_id!,
+          });
+        }
         toast.success(`Nowy kurs ${newKurs.numer || ''} utworzony`);
         // Auto-usuń stary kurs jeśli pusty
         await autoDeleteEmptyKurs(currentKurs.id);
@@ -151,6 +162,16 @@ export function PrzepnijModal({ open, onClose, przystanek, currentKurs, allKursy
         // Update kurs_id na zleceniu
         await supabase.from('zlecenia').update({ kurs_id: targetKursId } as any).eq('id', przystanek.zlecenie_id!);
         const target = allKursy.find(k => k.id === targetKursId);
+        // Powiadom nadawcę
+        const { data: zlInfo2 } = await supabase.from('zlecenia').select('nadawca_id, numer').eq('id', przystanek.zlecenie_id!).single();
+        if (zlInfo2?.nadawca_id) {
+          wyslijPowiadomienie({
+            user_id: zlInfo2.nadawca_id,
+            typ: 'zlecenie_w_kursie',
+            tresc: `Zlecenie ${zlInfo2.numer} przypisane do kursu ${target?.numer || ''}`,
+            zlecenie_id: przystanek.zlecenie_id!,
+          });
+        }
         toast.success(`Zlecenie przepięte do ${target?.numer || target?.nr_rej || 'kursu'}`);
         // Auto-usuń stary kurs jeśli pusty
         await autoDeleteEmptyKurs(currentKurs.id);

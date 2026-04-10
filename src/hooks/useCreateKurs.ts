@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
+import { wyslijPowiadomienie } from '@/lib/powiadomienia';
 
 export interface CreateKursInput {
   oddzial_id: number;
@@ -56,6 +57,24 @@ export function useCreateKurs(onSuccess?: () => void) {
 
       // Update zlecenia status + kurs_id
       await supabase.from('zlecenia').update({ status: 'potwierdzona', kurs_id: kurs.id } as any).in('id', input.zlecenie_ids);
+
+      // Powiadom nadawców o przypisaniu do kursu
+      const { data: zlecenia } = await supabase
+        .from('zlecenia')
+        .select('id, numer, nadawca_id')
+        .in('id', input.zlecenie_ids);
+      if (zlecenia) {
+        for (const zl of zlecenia) {
+          if (zl.nadawca_id) {
+            wyslijPowiadomienie({
+              user_id: zl.nadawca_id,
+              typ: 'zlecenie_w_kursie',
+              tresc: `Zlecenie ${zl.numer} przypisane do kursu ${numer}`,
+              zlecenie_id: zl.id,
+            });
+          }
+        }
+      }
     }
 
     toast.success('✅ Kurs utworzony');

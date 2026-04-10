@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
+import { wyslijPowiadomienie } from '@/lib/powiadomienia';
 
 interface ZlBezKursu {
   id: string;
@@ -174,6 +175,24 @@ export function DodajDoKursuModal({ open, onClose, kurs, przystanki, oddzialId, 
       .from('zlecenia')
       .update({ status: 'potwierdzona', kurs_id: kurs.id } as any)
       .in('id', ids);
+
+    // Powiadom nadawców o przypisaniu do kursu
+    const { data: zlDane } = await supabase
+      .from('zlecenia')
+      .select('id, numer, nadawca_id')
+      .in('id', ids);
+    if (zlDane) {
+      for (const zl of zlDane) {
+        if (zl.nadawca_id) {
+          wyslijPowiadomienie({
+            user_id: zl.nadawca_id,
+            typ: 'zlecenie_w_kursie',
+            tresc: `Zlecenie ${zl.numer} przypisane do kursu ${kurs.numer || ''}`,
+            zlecenie_id: zl.id,
+          });
+        }
+      }
+    }
 
     toast.success('Dodano ' + ids.length + ' zleceń do kursu');
     setSubmitting(false);

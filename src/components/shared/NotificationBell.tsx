@@ -7,6 +7,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { usePowiadomienia } from '@/hooks/usePowiadomienia';
+import { ikonaPowiadomienia } from '@/lib/powiadomienia';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -60,7 +61,7 @@ export function NotificationBell() {
               }`}
             >
               <div className="flex gap-2 items-start">
-                <span className="text-sm mt-0.5">⚠️</span>
+                <span className="text-sm mt-0.5">{ikonaPowiadomienia(p.typ)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm leading-snug">{p.tresc}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(p.created_at)}</p>
