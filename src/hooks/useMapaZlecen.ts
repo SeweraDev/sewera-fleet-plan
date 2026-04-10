@@ -37,12 +37,12 @@ export function useMapaZlecen(dzien: string) {
   const refetch = useCallback(async () => {
     setLoading(true);
 
-    // 1. Zlecenia na dany dzień — WSZYSTKIE oddziały (bez anulowanych)
+    // 1. Zlecenia na dany dzień — zaplanowane + w trasie (bez dostarczonych i anulowanych)
     const { data: zlData } = await supabase
       .from('zlecenia')
       .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id')
       .eq('dzien', dzien)
-      .neq('status', 'anulowana')
+      .in('status', ['robocza', 'do_weryfikacji', 'potwierdzona', 'w_trasie'])
       .order('created_at', { ascending: true });
 
     if (!zlData || zlData.length === 0) {
