@@ -735,10 +735,8 @@ export function parseWZText(rawText: string): WZImportData {
         nameParts.push(l);
       }
     }
-    // Odbiorca = nazwa + adres siedziby (bez NIP/Nr ewid)
-    const allParts = [...nameParts];
-    if (addrParts.length) allParts.push(addrParts.join(", "));
-    if (allParts.length) odbiorca = allParts.join("\n");
+    // Odbiorca = nazwa firmy; adres siedziby zapisz osobno
+    if (nameParts.length) odbiorca = nameParts.join(" ");
     if (addrParts.length) odbiornikAdres = addrParts.join(", ");
   }
 
@@ -1075,7 +1073,10 @@ export function parseWZText(rawText: string): WZImportData {
       odbiorca = odbiorca.substring(0, ulMatch.index).trim();
     }
   }
-  // Jeśli BRAK adresu dostawy (lub adres = siedziby) — zostaw odbiorca z pełnymi danymi teleadresowymi
+  // Jeśli BRAK adresu dostawy — dołącz adres siedziby do odbiorcy
+  if (!adres && odbiornikAdres && odbiorca && !odbiorca.includes(odbiornikAdres)) {
+    odbiorca = odbiorca + "\n" + odbiornikAdres;
+  }
 
   // Wyciągnij adres z uwag jako fallback (szukaj "ul./al./os./pl." w uwagach)
   if (!adres && uwagi) {
