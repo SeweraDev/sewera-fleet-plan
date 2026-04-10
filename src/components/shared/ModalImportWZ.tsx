@@ -953,10 +953,17 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // Strategy B: "Waga netto razem:" — szukaj liczby z przecinkiem (wagowej)
+  // Strategy B: "Waga netto razem:" — szukaj OSTATNIEJ liczby z przecinkiem (wagowej)
+  // Format: "Waga netto razem:\n72\n1 762,00" lub "Waga netto razem: 72 1 762,00"
   if (masa_kg === 0) {
-    const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*\n?\s*([\d\s]+,[\d]+)/i);
-    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(/\s/g, "").replace(",", ".")) || 0);
+    const wagaSection = text.match(/Waga\s+netto\s+razem[:\s]*([\s\S]{0,60}?)(?=RAZEM|$)/i);
+    if (wagaSection) {
+      const nums = [...wagaSection[1].matchAll(/([\d\s]+,[\d]{2})/g)];
+      if (nums.length > 0) {
+        const last = nums[nums.length - 1][1];
+        masa_kg = Math.ceil(parseFloat(last.replace(/\s/g, "").replace(",", ".")) || 0);
+      }
+    }
   }
 
   // Strategy A2: standalone integer before RAZEM (fallback — gdy waga bez przecinka, np. "500")
