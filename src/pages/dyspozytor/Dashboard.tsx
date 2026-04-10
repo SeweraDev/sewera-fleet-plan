@@ -717,7 +717,11 @@ export default function DyspozytorDashboard() {
       <Topbar />
       <div className="flex flex-1">
         <PageSidebar
-          items={SIDEBAR_ITEMS.map(s => s.id === 'kursy' ? { ...s, badge: kursy.filter(k => k.status === 'zaplanowany' || k.status === 'aktywny').length || undefined } : s)}
+          items={SIDEBAR_ITEMS.map(s => {
+            if (s.id === 'kursy') return { ...s, badge: kursy.filter(k => k.status === 'zaplanowany' || k.status === 'aktywny').length || undefined };
+            if (s.id === 'zlecenia') return { ...s, badge: zlBezKursu.length || undefined };
+            return s;
+          })}
           activeId={activeId}
           onSelect={setActiveId}
         />
