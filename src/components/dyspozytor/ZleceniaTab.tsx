@@ -68,7 +68,6 @@ function ZlSzczegolyDialog({
   onEdit,
   onAssignToKurs,
   onDelete,
-  readOnly,
 }: {
   zlecenie: ZlecenieOddzialuDto | null;
   open: boolean;
@@ -76,7 +75,6 @@ function ZlSzczegolyDialog({
   onEdit: (id: string) => void;
   onAssignToKurs: (id: string) => void;
   onDelete: (id: string) => void;
-  readOnly?: boolean;
 }) {
   const { wz, loading } = useZlecenieWz(open && zlecenie ? zlecenie.id : null);
 
@@ -161,17 +159,17 @@ function ZlSzczegolyDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          {!readOnly && zlecenie.status === 'robocza' && !zlecenie.kurs_numer && !zlecenie.kurs_nrrej && (
+          {zlecenie.status === 'robocza' && !zlecenie.kurs_numer && !zlecenie.kurs_nrrej && (
             <Button variant="outline" onClick={() => { onClose(); onAssignToKurs(zlecenie.id); }}>
               Przypisz do kursu
             </Button>
           )}
-          {!readOnly && ['robocza', 'do_weryfikacji', 'potwierdzona'].includes(zlecenie.status) && (
+          {['robocza', 'do_weryfikacji', 'potwierdzona'].includes(zlecenie.status) && (
             <Button variant="outline" onClick={() => { onClose(); onEdit(zlecenie.id); }}>
               Edytuj zlecenie
             </Button>
           )}
-          {!readOnly && (zlecenie.status === 'robocza' || zlecenie.status === 'do_weryfikacji' || zlecenie.status === 'potwierdzona') && (
+          {(zlecenie.status === 'robocza' || zlecenie.status === 'do_weryfikacji' || zlecenie.status === 'potwierdzona') && (
             <Button variant="destructive" onClick={() => onDelete(zlecenie.id)}>
               Usuń zlecenie
             </Button>
@@ -235,14 +233,12 @@ export function ZleceniaTab({
   dzien,
   pastOnly = false,
   onOpenKursModal,
-  readOnly,
 }: {
   oddzialId: number;
   oddzialNazwa?: string;
   dzien?: string;
   pastOnly?: boolean;
   onOpenKursModal?: (zlecenieIds: string[]) => void;
-  readOnly?: boolean;
 }) {
   const { zlecenia, loading, refetch } = useZleceniaOddzialu(oddzialId, pastOnly, dzien);
   const { flota } = useFlotaOddzialu(oddzialId);
@@ -428,7 +424,7 @@ export function ZleceniaTab({
       </div>
 
       {/* Action bar dla zaznaczonych */}
-      {checkedIds.size > 0 && statusFilter === 'bez_kursu' && !readOnly && (
+      {checkedIds.size > 0 && statusFilter === 'bez_kursu' && (
         <div className="flex items-center gap-4 rounded-lg bg-primary/10 border border-primary/30 px-4 py-3">
           <span className="text-sm font-semibold">
             Zaznaczono {checkedIds.size} {checkedIds.size === 1 ? 'zlecenie' : checkedIds.size < 5 ? 'zlecenia' : 'zleceń'}
@@ -465,7 +461,7 @@ export function ZleceniaTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  {statusFilter === 'bez_kursu' && !readOnly && (
+                  {statusFilter === 'bez_kursu' && (
                     <TableHead className="w-10" onClick={e => e.stopPropagation()}>
                       <Checkbox
                         checked={checkedIds.size === filtered.length && filtered.length > 0}
@@ -507,7 +503,7 @@ export function ZleceniaTab({
                     className={`cursor-pointer hover:bg-muted/50 ${z.flaga_brak_wz ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
                     onClick={() => setSelectedZl(z)}
                   >
-                    {statusFilter === 'bez_kursu' && !readOnly && (
+                    {statusFilter === 'bez_kursu' && (
                       <TableCell onClick={e => e.stopPropagation()}>
                         <Checkbox
                           checked={checkedIds.has(z.id)}
@@ -536,8 +532,8 @@ export function ZleceniaTab({
                       {z.flaga_brak_wz ? (
                         <div className="flex items-center gap-1">
                           <Badge variant="destructive" className="text-[10px] whitespace-nowrap">⏰ Deadline WZ</Badge>
-                          {!readOnly && <Button size="sm" variant="ghost" className="text-xs h-6 px-1" onClick={() => handleAnuluj(z)}>❌</Button>}
-                          {!readOnly && <DeadlineExtendPicker zlecenie={z} onDone={refetch} />}
+                          <Button size="sm" variant="ghost" className="text-xs h-6 px-1" onClick={() => handleAnuluj(z)}>❌</Button>
+                          <DeadlineExtendPicker zlecenie={z} onDone={refetch} />
                         </div>
                       ) : z.ma_wz ? (
                         <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400">✓ WZ</Badge>
@@ -555,10 +551,9 @@ export function ZleceniaTab({
         zlecenie={selectedZl}
         open={!!selectedZl}
         onClose={() => setSelectedZl(null)}
-        onEdit={readOnly ? () => {} : (id) => setEditZlId(id)}
-        onAssignToKurs={readOnly ? () => {} : (id) => onOpenKursModal?.([id])}
-        onDelete={readOnly ? () => {} : handleDelete}
-        readOnly={readOnly}
+        onEdit={(id) => setEditZlId(id)}
+        onAssignToKurs={(id) => onOpenKursModal?.([id])}
+        onDelete={handleDelete}
       />
 
       <EdytujZlecenieModal
