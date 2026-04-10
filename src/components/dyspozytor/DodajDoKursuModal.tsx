@@ -45,11 +45,12 @@ export function DodajDoKursuModal({ open, onClose, kurs, przystanki, oddzialId, 
     setLoading(true);
 
     (async () => {
-      // Zlecenia robocze/do_weryfikacji bez kursu
+      // Zlecenia robocze/do_weryfikacji bez kursu — na ten sam dzień co kurs
       const { data: zlData } = await supabase
         .from('zlecenia')
         .select('id, numer, dzien, preferowana_godzina, typ_pojazdu, status, kurs_id')
         .eq('oddzial_id', oddzialId)
+        .eq('dzien', dzien)
         .in('status', ['robocza', 'do_weryfikacji'])
         .is('kurs_id', null);
 
