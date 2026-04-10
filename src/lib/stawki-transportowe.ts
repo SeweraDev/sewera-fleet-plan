@@ -140,8 +140,8 @@ const TYP_MAPPING: Record<string, string> = {
   'HDS 12T': 'HDS 12,0t',
 };
 
-// Typy dostępne w kalkulatorze (label cennikowy)
-export const TYPY_KALKULATOR = STAWKI_WEW.map(s => s.label);
+// Typy dostępne w kalkulatorze (label cennikowy) — bez 700kg (nie mamy takich aut)
+export const TYPY_KALKULATOR = STAWKI_WEW.map(s => s.label).filter(l => l !== 'do 700kg');
 
 /** Mapuj typ systemowy na cennikowy. Jeśli już cennikowy — zwróć as-is. */
 export function mapTypNaCennikowy(typ: string): string | null {
