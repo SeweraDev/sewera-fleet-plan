@@ -936,29 +936,33 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 6. masa_kg — multiple strategies
+  // 6. masa_kg — priorytet: "Waga netto razem:" (zawsze obecne w WZ Ekonom)
   let masa_kg = 0;
-
-  // Strategy A: last standalone number before "RAZEM:" line
   const razemIdx = lines.findIndex((l) => /^RAZEM/i.test(l));
-  if (razemIdx > 0) {
-    for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
-      const s = lines[i].replace(/\s/g, "");
-      const m = s.match(/^([\d,.]+)$/);
-      if (m) {
-        masa_kg = Math.ceil(parseFloat(m[1].replace(",", ".")));
-        break;
+
+  // Strategy 1 (główna): "Waga netto razem:" — szukaj liczby na tej samej lub następnych liniach
+  const wagaIdx = lines.findIndex((l) => /Waga\s+netto\s+razem/i.test(l));
+  if (wagaIdx >= 0) {
+    // Sprawdź czy liczba jest na tej samej linii
+    const inlineM = lines[wagaIdx].match(/Waga\s+netto\s+razem[:\s]*([\d\s]+[,.][\d]+)/i);
+    if (inlineM) {
+      masa_kg = Math.ceil(parseFloat(inlineM[1].replace(/\s/g, "").replace(",", ".")) || 0);
+    }
+    // Jeśli nie — szukaj na następnych liniach (do RAZEM)
+    if (masa_kg === 0) {
+      for (let i = wagaIdx + 1; i < Math.min(wagaIdx + 5, lines.length); i++) {
+        if (/^RAZEM/i.test(lines[i])) break;
+        const s = lines[i].replace(/\s/g, "");
+        const m = s.match(/^([\d,.]+)$/);
+        if (m) {
+          const val = parseFloat(m[1].replace(",", "."));
+          if (val > masa_kg) masa_kg = Math.ceil(val);
+        }
       }
     }
   }
 
-  // Strategy B: "Waga netto razem:" inline
-  if (masa_kg === 0) {
-    const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
-    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(",", ".")) || 0);
-  }
-
-  // Strategy C: "RAZEM:" on same line with number (e.g. "RAZEM: 1 700,00")
+  // Strategy 2 (fallback): "RAZEM:" on same line with number
   if (masa_kg === 0) {
     const razemInline = text.match(/RAZEM[:\s]+([\d\s]+[,.][\d]+)/i);
     if (razemInline) {
