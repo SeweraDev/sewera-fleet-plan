@@ -543,7 +543,7 @@ function NowyKursModal({
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-auto">
+      <DialogContent className="max-w-5xl max-h-[85vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Nowy kurs — {dzien}</DialogTitle>
         </DialogHeader>
