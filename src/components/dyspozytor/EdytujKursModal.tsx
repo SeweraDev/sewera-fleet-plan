@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 import type { KursDto } from '@/hooks/useKursyDnia';
 import type { Pojazd } from '@/hooks/useFlotaOddzialu';
 import type { Kierowca } from '@/hooks/useKierowcyOddzialu';
@@ -69,6 +70,11 @@ export function EdytujKursModal({ open, onClose, kurs, dzien, oddzialId, flota, 
       dzien: editDzien,
       status,
     };
+
+    // Nadaj numer jeśli kurs go nie ma
+    if (!kurs.numer && oddzialId) {
+      updates.numer = await generateNumerKursu(oddzialId);
+    }
 
     const selectedKierowca = kierowcy.find(k => k.id === kierowcaId);
     updates.kierowca_nazwa = selectedKierowca?.imie_nazwisko || null;
