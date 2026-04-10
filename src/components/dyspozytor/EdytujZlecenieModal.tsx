@@ -261,7 +261,6 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
     const { error: zlErr } = await supabase
       .from('zlecenia')
       .update({
-        status,
         dzien: dzien || zlecenie?.dzien,
         preferowana_godzina: godzina === 'dowolna' ? null : godzina,
         typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
@@ -374,17 +373,8 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                 </div>
               </div>
 
-              {/* Status + godzina + typ pojazdu */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label>Status</Label>
-                  <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {STATUSY.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Godzina + typ pojazdu */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Godzina dostawy</Label>
                   <Select value={godzina} onValueChange={setGodzina}>
