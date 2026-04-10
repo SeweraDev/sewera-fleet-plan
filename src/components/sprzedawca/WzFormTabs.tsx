@@ -487,6 +487,8 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       masa_kg: mapped.masa_kg || 0,
       objetosc_m3: mapped.objetosc_m3 || 0,
       ilosc_palet: mapped.ilosc_palet || 0,
+      bez_palet: false,
+      luzne_karton: false,
       uwagi: mapped.uwagi || '',
     });
     setStep('preview');
@@ -694,6 +696,8 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
       masa_kg: mapped.masa_kg || 0,
       objetosc_m3: mapped.objetosc_m3 || 0,
       ilosc_palet: mapped.ilosc_palet || 0,
+      bez_palet: false,
+      luzne_karton: false,
       uwagi: mapped.uwagi || '',
     });
     setParsing(false);
