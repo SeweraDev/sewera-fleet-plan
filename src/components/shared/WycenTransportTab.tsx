@@ -497,7 +497,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             {/* Mini-mapa */}
             <div
               ref={mapContainerRef}
-              className="w-full h-[250px] rounded-lg border overflow-hidden"
+              className="w-full h-[450px] rounded-lg border overflow-hidden"
             />
 
             <p className="text-xs text-muted-foreground">
