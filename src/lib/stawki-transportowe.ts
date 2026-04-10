@@ -217,6 +217,7 @@ export interface KosztTransportu {
  * @param typCennikowy — label z TYPY_KALKULATOR (np. "do 1,2t bez windy")
  */
 export function obliczKosztWew(km: number, typCennikowy: string): KosztTransportu | null {
+  if (km <= 0) return { netto: 0, brutto: 0 };
   const stawka = STAWKI_WEW.find(s => s.label === typCennikowy);
   if (!stawka) return null;
 
@@ -256,6 +257,7 @@ export function obliczKosztWew(km: number, typCennikowy: string): KosztTransport
  * @returns null jeśli brak stawki zew dla tego oddziału/typu
  */
 export function obliczKosztZew(km: number, typCennikowy: string, oddzialKod: string): KosztTransportu | null {
+  if (km <= 0) return { netto: 0, brutto: 0 };
   const stawka = STAWKI_ZEW.find(
     s => s.typCennikowy === typCennikowy && s.oddzial === oddzialKod
   );
