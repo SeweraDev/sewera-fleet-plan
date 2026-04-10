@@ -54,7 +54,8 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
       .order('created_at', { ascending: true });
 
     if (dzien) {
-      query = query.eq('dzien', dzien);
+      // Zlecenia z wybranego dnia + zaległe bez kursu (data < dziś)
+      query = query.or(`dzien.eq.${dzien},and(dzien.lt.${today},kurs_id.is.null,status.in.(robocza,do_weryfikacji))`);
     } else if (pastOnly) {
       query = query.lt('dzien', today);
     }
