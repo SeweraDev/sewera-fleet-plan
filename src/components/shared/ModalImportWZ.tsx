@@ -707,15 +707,23 @@ export function parseWZText(rawText: string): WZImportData {
     const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
     const nameParts: string[] = [];
     const addrParts: string[] = [];
-    for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 12, lines.length); i++) {
+    let passedSewera = false;
+    for (let i = odbLabelIdx + 1; i < Math.min(odbLabelIdx + 20, lines.length); i++) {
       const l = lines[i];
-      if (/^(Adres\s+dostawy|Informacje|Sprzedawca|Nabywca|Odbiorca)\s*$/i.test(l)) break;
-      if (/^Nr\s+ewid/i.test(l)) break;
-      if (/^NIP:/i.test(l)) break;
+      if (/^(Adres\s+dostawy|Informacje)\s*$/i.test(l)) break;
       if (/^Magazyn\s+wydający/i.test(l)) break;
       if (/^Termin\s+zapłaty/i.test(l)) break;
       if (/^Wydano\s+na/i.test(l)) break;
-      if (SEWERA_CHECK.test(l)) { nameParts.length = 0; addrParts.length = 0; continue; }
+      if (/^Nazwa\s+towaru/i.test(l)) break;
+      if (/^Lp\.\s/i.test(l)) break;
+      if (/^\d+\.\s/.test(l)) break;
+      if (SEWERA_CHECK.test(l)) { passedSewera = true; nameParts.length = 0; addrParts.length = 0; continue; }
+      // Po przejściu bloku Sewera — skip ODDZIAŁ, ul., NIP, NR BDO
+      if (passedSewera && /^ODDZIAŁ/i.test(l)) continue;
+      if (!passedSewera && (/^NIP:/i.test(l) || /^NR BDO:/i.test(l))) continue;
+      if (passedSewera && (/^ul\.\s/i.test(l) && /KATOWICE|KOŚCIUSZKI/i.test(l))) continue;
+      if (/^NIP:/i.test(l)) break;
+      if (/^Nr\s+ewid/i.test(l)) break;
       if (l.length < 2) continue;
       // Rozdziel adres od nazwy firmy
       if (/^(?:ul|al|os|pl)\.\s/i.test(l) || /^\d{2}-\d{3}\s/.test(l)) {
@@ -1059,6 +1067,17 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
   // Jeśli BRAK adresu dostawy (lub adres = siedziby) — zostaw odbiorca z pełnymi danymi teleadresowymi
+
+  // Wyciągnij adres z uwag jako fallback (szukaj "ul./al./os./pl." w uwagach)
+  if (!adres && uwagi) {
+    const uwagiLines = uwagi.split(/[\n]/).map(l => l.trim()).filter(Boolean);
+    for (const line of uwagiLines) {
+      if (/(?:ul|al|os|pl)\.\s*\S/i.test(line)) {
+        adres = line.replace(/^tel[:\s].*/i, '').replace(/^transport[:\s].*/i, '').trim();
+        if (adres) break;
+      }
+    }
+  }
 
   // Wyciągnij telefony z uwag (zawsze, niezależnie od sekcji adresu)
   if (uwagi && !tel) {
