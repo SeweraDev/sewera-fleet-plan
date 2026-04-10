@@ -735,7 +735,10 @@ export function parseWZText(rawText: string): WZImportData {
         nameParts.push(l);
       }
     }
-    if (nameParts.length) odbiorca = nameParts.join(" ");
+    // Odbiorca = nazwa + adres siedziby (bez NIP/Nr ewid)
+    const allParts = [...nameParts];
+    if (addrParts.length) allParts.push(addrParts.join(", "));
+    if (allParts.length) odbiorca = allParts.join("\n");
     if (addrParts.length) odbiornikAdres = addrParts.join(", ");
   }
 
