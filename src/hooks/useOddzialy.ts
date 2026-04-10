@@ -6,6 +6,12 @@ export interface Oddzial {
   nazwa: string;
 }
 
+const KOLEJNOSC: string[] = [
+  'Katowice', 'Sosnowiec', 'Gliwice', 'T.Góry',
+  'Chrzanów', 'D.Górnicza', 'Oświęcim',
+  'Redystrybucja', 'Dobromir',
+];
+
 export function useOddzialy() {
   const [oddzialy, setOddzialy] = useState<Oddzial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,9 +20,13 @@ export function useOddzialy() {
     const fetch = async () => {
       const { data } = await supabase
         .from('oddzialy')
-        .select('id, nazwa')
-        .order('nazwa');
-      setOddzialy(data || []);
+        .select('id, nazwa');
+      const sorted = (data || []).sort((a, b) => {
+        const ia = KOLEJNOSC.indexOf(a.nazwa);
+        const ib = KOLEJNOSC.indexOf(b.nazwa);
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      });
+      setOddzialy(sorted);
       setLoading(false);
     };
     fetch();
