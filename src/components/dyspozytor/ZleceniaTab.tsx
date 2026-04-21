@@ -21,6 +21,8 @@ import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 import { NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import { TYP_CAPACITY } from '@/lib/suggestRoutes';
 import { SuggestionPanel } from '@/components/dyspozytor/SuggestionPanel';
+import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
+import { isPrzekazane, parseKodZNumer } from '@/lib/przekazanieZlecenia';
 
 import { lazy, Suspense } from 'react';
 const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView'));
@@ -68,6 +70,7 @@ function ZlSzczegolyDialog({
   onEdit,
   onAssignToKurs,
   onDelete,
+  onPrzekaz,
 }: {
   zlecenie: ZlecenieOddzialuDto | null;
   open: boolean;
@@ -75,6 +78,7 @@ function ZlSzczegolyDialog({
   onEdit: (id: string) => void;
   onAssignToKurs: (id: string) => void;
   onDelete: (id: string) => void;
+  onPrzekaz: (id: string) => void;
 }) {
   const { wz, loading } = useZlecenieWz(open && zlecenie ? zlecenie.id : null);
 
@@ -167,6 +171,11 @@ function ZlSzczegolyDialog({
           {['robocza', 'do_weryfikacji', 'potwierdzona'].includes(zlecenie.status) && (
             <Button variant="outline" onClick={() => { onClose(); onEdit(zlecenie.id); }}>
               Edytuj zlecenie
+            </Button>
+          )}
+          {['robocza', 'do_weryfikacji', 'potwierdzona'].includes(zlecenie.status) && (
+            <Button variant="secondary" onClick={() => { onClose(); onPrzekaz(zlecenie.id); }}>
+              ↗ Przekaż do oddziału
             </Button>
           )}
           {(zlecenie.status === 'robocza' || zlecenie.status === 'do_weryfikacji' || zlecenie.status === 'potwierdzona') && (
@@ -300,6 +309,8 @@ export function ZleceniaTab({
 
   const [deleteZlId, setDeleteZlId] = useState<string | null>(null);
   const deleteZlNumer = zlecenia.find(z => z.id === deleteZlId)?.numer || '';
+  const [przekazZlId, setPrzekazZlId] = useState<string | null>(null);
+  const przekazZl = zlecenia.find(z => z.id === przekazZlId);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -521,7 +532,14 @@ export function ZleceniaTab({
                     </TableCell>
                     <TableCell>{z.preferowana_godzina || '—'}</TableCell>
                     <TableCell><StatusBadge status={z.status} /></TableCell>
-                    <TableCell className="font-mono text-xs">{z.numer}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {z.numer}
+                      {oddzialNazwa && isPrzekazane(z.numer, oddzialNazwa) && (
+                        <Badge variant="outline" className="ml-1 text-[9px] bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-300">
+                          ↗ z {parseKodZNumer(z.numer)}
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs max-w-[140px] truncate">{z.odbiorca || '—'}</TableCell>
                     <TableCell className="text-xs max-w-[140px] truncate">{z.adres || '—'}</TableCell>
                     <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
@@ -561,6 +579,16 @@ export function ZleceniaTab({
         onEdit={(id) => setEditZlId(id)}
         onAssignToKurs={(id) => onOpenKursModal?.([id])}
         onDelete={handleDelete}
+        onPrzekaz={(id) => setPrzekazZlId(id)}
+      />
+
+      <PrzekazDoOddzialuModal
+        zlecenieId={przekazZlId}
+        zlecenieNumer={przekazZl?.numer}
+        obecnyOddzialId={oddzialId}
+        open={!!przekazZlId}
+        onClose={() => setPrzekazZlId(null)}
+        onDone={refetch}
       />
 
       <EdytujZlecenieModal
