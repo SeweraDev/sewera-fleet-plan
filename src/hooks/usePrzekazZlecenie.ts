@@ -16,7 +16,7 @@ export function usePrzekazZlecenie(onDone?: () => void) {
     // 1. Pobierz zlecenie + nazwy oddziałów
     const { data: zl, error: errZl } = await supabase
       .from('zlecenia')
-      .select('id, numer, status, oddzial_id, kurs_id')
+      .select('id, numer, status, oddzial_id, kurs_id, dzien')
       .eq('id', zlecenieId)
       .single();
     if (errZl || !zl) {
@@ -94,8 +94,12 @@ export function usePrzekazZlecenie(onDone?: () => void) {
     }
 
     // 5. Powiadomienie do dyspozytorów docelowego oddziału
+    const dzienFmt = zl.dzien ? (() => {
+      const [y, m, d] = zl.dzien.split('-');
+      return `${d}.${m}.${y}`;
+    })() : '';
     if (nazwaDo) {
-      const tresc = `Otrzymano zlecenie ${zl.numer} z ${kodZ || nazwaZ}` + (odpietoZKursu ? ' (odpięte z kursu)' : '');
+      const tresc = `Otrzymano zlecenie ${zl.numer} z ${kodZ || nazwaZ}` + (dzienFmt ? ` (na ${dzienFmt})` : '') + (odpietoZKursu ? ' — odpięte z kursu' : '');
       try {
         await wyslijDoDyspozytorów(nazwaDo, 'nowe_zlecenie', tresc, zlecenieId);
       } catch (e) {
@@ -103,7 +107,11 @@ export function usePrzekazZlecenie(onDone?: () => void) {
       }
     }
 
-    toast.success(`Przekazano zlecenie do ${nazwaDo}` + (odpietoZKursu ? ' (odpięto z kursu)' : ''));
+    toast.success(
+      `Przekazano do ${nazwaDo}` +
+      (dzienFmt ? ` na ${dzienFmt}` : '') +
+      (odpietoZKursu ? ' (odpięto z kursu)' : '')
+    );
     setSubmitting(false);
     onDone?.();
   };
