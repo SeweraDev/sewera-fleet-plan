@@ -60,12 +60,19 @@ export function usePrzekazZlecenie(onDone?: () => void) {
     }
 
     // 3. Update oddzial_id (+ wyzeruj kurs_id jeśli było)
-    const { error: errUpd } = await supabase
+    const { data: updated, error: errUpd } = await supabase
       .from('zlecenia')
       .update({ oddzial_id: docelowyOddzialId, kurs_id: null })
-      .eq('id', zlecenieId);
+      .eq('id', zlecenieId)
+      .select('id, oddzial_id');
     if (errUpd) {
       toast.error('Błąd przekazania: ' + errUpd.message);
+      setSubmitting(false);
+      return;
+    }
+    // Postgres RLS może cicho zwrócić 0 wierszy — sprawdź że update fizycznie się wykonał
+    if (!updated || updated.length === 0 || updated[0].oddzial_id !== docelowyOddzialId) {
+      toast.error('Brak uprawnień do przekazania zlecenia — skontaktuj się z administratorem (dodaj policy UPDATE na zlecenia).');
       setSubmitting(false);
       return;
     }
