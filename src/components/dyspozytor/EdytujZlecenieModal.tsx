@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
+import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -76,6 +77,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [nadawcaNazwa, setNadawcaNazwa] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [showResztaChoice, setShowResztaChoice] = useState(false);
+  const [showPrzekaz, setShowPrzekaz] = useState(false);
   const originalWzRef = useRef<WzData[]>([]);
 
   // Pojemność pojazdu z kursu
@@ -484,6 +486,11 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
           <DialogFooter>
             <Button variant="outline" onClick={onClose}>Anuluj</Button>
+            {zlecenie && !['dostarczona', 'w_trasie', 'anulowana'].includes(zlecenie.status) && (
+              <Button variant="secondary" onClick={() => setShowPrzekaz(true)} disabled={saving || loading}>
+                ↗ Przekaż do oddziału
+              </Button>
+            )}
             <Button onClick={handleSaveClick} disabled={saving || loading || showResztaChoice} variant={isOverloaded ? 'destructive' : 'default'}>
               {saving ? 'Zapisywanie...' : isOverloaded ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)` : `Zapisz zmiany (${wzList.length} WZ)`}
             </Button>
@@ -495,6 +502,18 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         isOpen={showImport}
         onClose={() => setShowImport(false)}
         onImport={handleImportWz}
+      />
+
+      <PrzekazDoOddzialuModal
+        zlecenieId={zlecenieId}
+        zlecenieNumer={zlecenie?.numer}
+        obecnyOddzialId={zlecenie?.oddzial_id ?? null}
+        open={showPrzekaz}
+        onClose={() => setShowPrzekaz(false)}
+        onDone={() => {
+          onSaved();
+          onClose();
+        }}
       />
     </>
   );
