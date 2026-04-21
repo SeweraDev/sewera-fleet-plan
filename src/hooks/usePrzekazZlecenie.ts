@@ -52,7 +52,27 @@ export function usePrzekazZlecenie(onDone?: () => void) {
       .select('id, kurs_id')
       .eq('zlecenie_id', zlecenieId);
     if (przystanki && przystanki.length > 0) {
-      await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', zlecenieId);
+      const { error: errDel } = await supabase
+        .from('kurs_przystanki')
+        .delete()
+        .eq('zlecenie_id', zlecenieId)
+        .select('id');
+      if (errDel) {
+        toast.error('Błąd odpinania z kursu: ' + errDel.message);
+        setSubmitting(false);
+        return;
+      }
+      // Weryfikacja że DELETE faktycznie zadziałał (RLS może cicho zjeść)
+      const { data: wciazIstnieje } = await supabase
+        .from('kurs_przystanki')
+        .select('id')
+        .eq('zlecenie_id', zlecenieId)
+        .limit(1);
+      if (wciazIstnieje && wciazIstnieje.length > 0) {
+        toast.error('Nie udało się odpiąć zlecenia z kursu — brak policy DELETE na kurs_przystanki. Skontaktuj się z administratorem.');
+        setSubmitting(false);
+        return;
+      }
       odpietoZKursu = true;
     }
     if (zl.kurs_id) {
