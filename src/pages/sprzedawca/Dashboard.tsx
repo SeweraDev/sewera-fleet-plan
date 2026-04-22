@@ -28,7 +28,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [dzien, setDzien] = useState('');
   const [godzina, setGodzina] = useState('');
   const [wzList, setWzList] = useState<WzInput[]>([{
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '',
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '',
   }]);
   const { oddzialy, loading: loadingOddzialy } = useOddzialy();
   const { flota, loading: loadingFlota } = useFlotaOddzialu(oddzialId);
@@ -41,6 +41,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       if (!w.tel || w.tel.trim().length < 5) return true;
       if (!w.luzne_karton && (!w.objetosc_m3 || w.objetosc_m3 <= 0)) return true;
       if (!w.bez_palet && (!w.ilosc_palet || w.ilosc_palet <= 0)) return true;
+      if (!w.klasyfikacja) return true;
       return false;
     });
     if (invalid) {
@@ -51,6 +52,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       if (!invalid.masa_kg) missing.push('masa kg');
       if (!invalid.luzne_karton && (!invalid.objetosc_m3 || invalid.objetosc_m3 <= 0)) missing.push('objętość m³');
       if (!invalid.bez_palet && (!invalid.ilosc_palet || invalid.ilosc_palet <= 0)) missing.push('ilość palet');
+      if (!invalid.klasyfikacja) missing.push('klasyfikacja transportu');
       toast.error(`Uzupełnij: ${missing.join(', ')}`);
       return;
     }

@@ -164,6 +164,11 @@ export default function KierowcaMojaTrasa() {
                                 ↔ linia prosta od bazy: {p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km
                               </p>
                             )}
+                            {p.klasyfikacja && (
+                              <p className="text-[11px] font-semibold text-foreground">
+                                📦 Klasyf.: {p.klasyfikacja}
+                              </p>
+                            )}
                             {p.tel && <p className="text-xs text-muted-foreground">📞 {p.tel}</p>}
                             <p className="text-xs">
                               {p.masa_kg} kg

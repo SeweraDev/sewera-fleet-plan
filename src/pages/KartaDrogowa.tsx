@@ -37,6 +37,7 @@ interface PrzystanekFull {
   uwagi: string;
   preferowana_godzina: string;
   km_prosta: number | null;
+  klasyfikacja: string | null;
 }
 
 export default function KartaDrogowa() {
@@ -153,7 +154,7 @@ export default function KartaDrogowa() {
 
         const { data: wzData } = await supabase
           .from('zlecenia_wz')
-          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, numer_wz, nr_zamowienia, tel, uwagi')
+          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, numer_wz, nr_zamowienia, tel, uwagi, klasyfikacja')
           .in('zlecenie_id', zlecenieIds);
         (wzData || []).forEach(w => {
           const list = wzListMap.get(w.zlecenie_id) || [];
@@ -173,6 +174,7 @@ export default function KartaDrogowa() {
             numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '',
             preferowana_godzina: zl?.preferowana_godzina || '',
             km_prosta: null,
+            klasyfikacja: null,
           });
         } else {
           wzList.forEach((w: any, i) => {
@@ -191,6 +193,7 @@ export default function KartaDrogowa() {
               uwagi: w.uwagi || '',
               preferowana_godzina: zl?.preferowana_godzina || '',
               km_prosta: null,
+              klasyfikacja: w.klasyfikacja || null,
             });
           });
         }
@@ -299,6 +302,7 @@ export default function KartaDrogowa() {
               <th className="w-32">Nr WZ / Nr zam.</th>
               <th>Adres</th>
               <th className="w-20">Linia prosta (km)</th>
+              <th className="w-14">Klasyf.</th>
               <th className="w-20">Km dojazd</th>
               <th className="w-20">Km wyjazd</th>
               <th className="w-12">Kg</th>
@@ -321,6 +325,7 @@ export default function KartaDrogowa() {
                 <td className="text-right">
                   {p.km_prosta != null ? p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
                 </td>
+                <td className="text-center font-mono font-semibold">{p.klasyfikacja || ''}</td>
                 <td className="fill-cell"></td>
                 <td className="fill-cell"></td>
                 <td className="text-right">{Math.round(p.masa_kg)}</td>

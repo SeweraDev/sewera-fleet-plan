@@ -38,6 +38,7 @@ export interface PrzystanekDto {
   uwagi: string;
   preferowana_godzina: string;
   km_prosta: number | null; // linia prosta od oddziału do adresu (Haversine)
+  klasyfikacja: string | null; // klasyfikacja rozliczeniowa WZ (A/B/C/D/E/F/H)
 }
 
 export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: string) {
@@ -146,7 +147,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
 
         const { data: wzData } = await supabase
           .from('zlecenia_wz')
-          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, numer_wz, nr_zamowienia, tel, uwagi')
+          .select('zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, numer_wz, nr_zamowienia, tel, uwagi, klasyfikacja')
           .in('zlecenie_id', zlecenieIds);
         (wzData || []).forEach(w => {
           const list = wzListMap.get(w.zlecenie_id) || [];
@@ -168,6 +169,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
             odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0,
             numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '', preferowana_godzina: zl?.preferowana_godzina || '',
             km_prosta: null,
+            klasyfikacja: null,
           });
         } else {
           wzList.forEach((w, i) => {
@@ -181,6 +183,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
               nr_zamowienia: wAny.nr_zamowienia || '', tel: wAny.tel || '', uwagi: wAny.uwagi || '',
               preferowana_godzina: zl?.preferowana_godzina || '',
               km_prosta: null,
+              klasyfikacja: wAny.klasyfikacja || null,
             });
           });
         }

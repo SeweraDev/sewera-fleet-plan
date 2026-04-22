@@ -504,6 +504,7 @@ export function ZleceniaTab({
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('km')}>
                     km {sortBy === 'km' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </TableHead>
+                  <TableHead>Klasyf.</TableHead>
                   <TableHead>Typ</TableHead>
                   <TableHead>Kurs</TableHead>
                   <TableHead>WZ</TableHead>
@@ -552,6 +553,15 @@ export function ZleceniaTab({
                           prosta: {z.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {z.klasyfikacje.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {z.klasyfikacje.map(k => (
+                            <Badge key={k} variant="outline" className="text-[10px] px-1.5 py-0 font-mono">{k}</Badge>
+                          ))}
+                        </div>
+                      ) : '—'}
                     </TableCell>
                     <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell>

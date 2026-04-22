@@ -17,6 +17,8 @@ export interface WzInput {
   bez_palet: boolean;
   luzne_karton: boolean;
   uwagi: string | null;
+  /** Klasyfikacja rozliczeniowa (A/B/C/D/E/F/H) — obowiązkowa przed submit */
+  klasyfikacja: string;
 }
 
 export interface ZlecenieInput {
@@ -73,6 +75,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
         ilosc_palet: wz.ilosc_palet || 0,
         uwagi: wz.uwagi,
         nr_zamowienia: wz.nr_zamowienia,
+        klasyfikacja: wz.klasyfikacja || null,
       }));
 
       const { error: err2 } = await supabase.from('zlecenia_wz').insert(wzRows);

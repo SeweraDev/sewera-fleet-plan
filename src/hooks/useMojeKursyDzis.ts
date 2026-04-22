@@ -29,6 +29,7 @@ export interface PrzystanekKierowcy {
   uwagi: string;
   ilosc_palet: number;
   km_prosta: number | null; // linia prosta od oddziału do adresu (Haversine)
+  klasyfikacja: string | null; // klasyfikacja rozliczeniowa WZ
 }
 
 export function useMojeKursyDzis() {
@@ -84,11 +85,11 @@ export function useMojeKursyDzis() {
 
     // Get WZ data
     const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
-    let wzMap = new Map<string, { odbiorca: string; adres: string; tel: string; masa_kg: number; nr_wz: string; uwagi: string; ilosc_palet: number }>();
+    let wzMap = new Map<string, { odbiorca: string; adres: string; tel: string; masa_kg: number; nr_wz: string; uwagi: string; ilosc_palet: number; klasyfikacja: string | null }>();
     if (zlecenieIds.length > 0) {
       const { data: wzData } = await supabase
         .from('zlecenia_wz')
-        .select('zlecenie_id, odbiorca, adres, tel, masa_kg, numer_wz, uwagi, ilosc_palet')
+        .select('zlecenie_id, odbiorca, adres, tel, masa_kg, numer_wz, uwagi, ilosc_palet, klasyfikacja')
         .in('zlecenie_id', zlecenieIds);
       (wzData || []).forEach(w => {
         wzMap.set(w.zlecenie_id, {
@@ -99,6 +100,7 @@ export function useMojeKursyDzis() {
           nr_wz: w.numer_wz || '',
           uwagi: (w as any).uwagi || '',
           ilosc_palet: Number((w as any).ilosc_palet || 0),
+          klasyfikacja: (w as any).klasyfikacja || null,
         });
       });
     }
@@ -131,6 +133,7 @@ export function useMojeKursyDzis() {
             uwagi: wz?.uwagi || '',
             ilosc_palet: wz?.ilosc_palet || 0,
             km_prosta: null,
+            klasyfikacja: wz?.klasyfikacja || null,
           };
         }),
       };

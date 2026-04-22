@@ -6,8 +6,10 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
+import { KLASYFIKACJE } from '@/lib/klasyfikacje';
 
 interface WzFormTabsProps {
   wzList: WzInput[];
@@ -20,7 +22,7 @@ interface WzFormTabsProps {
 
 
 const EMPTY_WZ: WzInput = {
-  numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '',
+  numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '',
 };
 
 function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
@@ -69,6 +71,19 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
                 <Checkbox checked={wz.bez_palet || false} onCheckedChange={(checked) => { updateWz(idx, 'bez_palet', !!checked); if (checked) updateWz(idx, 'ilosc_palet', 0); }} />
                 <span className="text-[11px] text-muted-foreground">Bez palet</span>
               </label>
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs">Klasyfikacja transportu *</Label>
+              <Select value={wz.klasyfikacja || ''} onValueChange={(v) => updateWz(idx, 'klasyfikacja', v)}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Wybierz klasyfikację…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {KLASYFIKACJE.map(k => (
+                    <SelectItem key={k.kod} value={k.kod}>{k.kod} — {k.opis}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={wz.uwagi || ''} onChange={e => updateWz(idx, 'uwagi', e.target.value)} /></div>
           </div>
@@ -164,7 +179,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview };
+    const newWz: WzInput = { ...preview, klasyfikacja: '' };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -345,6 +360,7 @@ function WzXlsTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       numer_wz: r.numer_wz || '', nr_zamowienia: '', odbiorca: r.odbiorca || '',
       adres: r.adres || '', tel: '', masa_kg: r.masa_kg || 0,
       objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: r.uwagi || '',
+      klasyfikacja: '',
     }));
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList(newWzList);
@@ -498,7 +514,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview };
+    const newWz: WzInput = { ...preview, klasyfikacja: '' };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -734,7 +750,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview };
+    const newWz: WzInput = { ...preview, klasyfikacja: '' };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {

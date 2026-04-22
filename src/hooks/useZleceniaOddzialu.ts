@@ -24,6 +24,8 @@ export interface ZlecenieOddzialuDto {
   deadline_wz: string | null;
   ma_wz: boolean;
   flaga_brak_wz: boolean;
+  /** Klasyfikacje wszystkich WZ w zleceniu (unikalne, posortowane) np. ["B", "D"] */
+  klasyfikacje: string[];
 }
 
 export interface WzDto {
@@ -99,23 +101,26 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
       (oData || []).forEach(o => oddzialMap.set(o.id, o.nazwa));
     }
 
-    // Get WZ sums + first odbiorca
+    // Get WZ sums + first odbiorca + zebrane klasyfikacje
     const ids = (zlData || []).map(z => z.id);
-    let wzMap = new Map<string, { suma_kg: number; suma_m3: number; suma_palet: number; odbiorca: string | null; adres: string | null }>();
+    let wzMap = new Map<string, { suma_kg: number; suma_m3: number; suma_palet: number; odbiorca: string | null; adres: string | null; klasyfikacje: Set<string> }>();
     if (ids.length > 0) {
       const { data: wzData } = await supabase
         .from('zlecenia_wz')
-        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet, odbiorca, adres')
+        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet, odbiorca, adres, klasyfikacja')
         .in('zlecenie_id', ids);
       (wzData || []).forEach(w => {
         const cur = wzMap.get(w.zlecenie_id);
         const wAny = w as any;
+        const klas = new Set<string>(cur?.klasyfikacje || []);
+        if (wAny.klasyfikacja) klas.add(wAny.klasyfikacja);
         wzMap.set(w.zlecenie_id, {
           suma_kg: (cur?.suma_kg || 0) + Number(w.masa_kg),
           suma_m3: (cur?.suma_m3 || 0) + Number(w.objetosc_m3 || 0),
           suma_palet: (cur?.suma_palet || 0) + Number(wAny.ilosc_palet || 0),
           odbiorca: cur?.odbiorca || wAny.odbiorca || null,
           adres: cur?.adres || wAny.adres || null,
+          klasyfikacje: klas,
         });
       });
     }
@@ -145,6 +150,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
         lng: null,
         deadline_wz: (z as any).deadline_wz || null,
         ma_wz: !!(z as any).ma_wz,
+        klasyfikacje: [...(wzInfo?.klasyfikacje || [])].sort(),
         flaga_brak_wz: !!(z as any).flaga_brak_wz,
       };
     }));
