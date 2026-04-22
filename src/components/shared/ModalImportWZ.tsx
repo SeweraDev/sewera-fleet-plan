@@ -701,8 +701,13 @@ export function parseWZText(rawText: string): WZImportData {
   let odbiorca: string | null = null;
   let odbiornikAdres: string | null = null; // adres z sekcji odbiorcy (fallback gdy brak "Adres dostawy")
 
-  // Priority: find "Odbiorca" or "Nabywca" label and collect ALL lines after it
-  const odbLabelIdx = lines.findIndex((l) => /^(?:Odbiorca|Nabywca)\s*$/i.test(l) || /(?:^|\s)(?:Odbiorca|Nabywca)\s*$/i.test(l));
+  // Priority: find "Odbiorca" or "Nabywca" label and collect ALL lines after it.
+  // Fuzzy: toleruj OCR mutacje (Odiiorca, 0dbiorca, Odbi0rca) i obudowę [__...__]
+  const ODB_LABEL = /(?:Odbiorca|Nabywca|Odiiorca|0dbiorca|Odbi[o0]rca|[0O]dbiorca)/i;
+  const odbLabelIdx = lines.findIndex(
+    (l) => new RegExp(`^(?:${ODB_LABEL.source})\\s*$`, "i").test(l)
+      || new RegExp(`(?:^|\\s|\\[[_\\s]*)${ODB_LABEL.source}[_\\s\\]]*$`, "i").test(l)
+  );
   if (odbLabelIdx >= 0) {
     const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
     const nameParts: string[] = [];
@@ -837,16 +842,29 @@ export function parseWZText(rawText: string): WZImportData {
   if (hasDeliverySection) {
     // Priority 1: ALL lines AFTER "Adres dostawy" header (zbieraj agresywnie)
     if (adresIdx >= 0) {
-      const STOP = /^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Waga|Uwagi|Termin|Wydano|Lp\.|Magazyn|Forma\s+płatn|NIP:|NR BDO:|Ilość|JM|Kod\s+towaru|Nazwa\s+towaru|Sprzedawca|Nabywca|Odbiorca)/i;
+      // Hard STOP — koniec sekcji adresu dostawy (wejście w tabelę towarów / uwagi / sekcję kontrahenta)
+      const STOP = /^(Os\.\s*kontaktowa|Tel\.|Nr\s+zam|PALETA|Uwagi|Lp\.|Ilość|JM|Kod\s+towaru|Nazwa\s+towaru|Sprzedawca|Nabywca|Odbiorca|Odiiorca|0dbiorca|Na\s+podstawie\s+art)/i;
+      // SKIP (nie break) — noise między labelem "Adres dostawy" a faktycznym adresem
+      // (gdy OCR zleja kolumny: po Adres dostawy mogą przyjść Forma/Magazyn/Wydano zanim zacznie się adres)
+      const SKIP = /^(Forma\s+płatn|Magazyn|Wydano\s+na|NIP:|NR\s*BDO:|HR\s*BDO:|Waga\s+netto|Termin|Informacje|e\s+wydaj|Cennik)/i;
       const addrParts: string[] = [];
-      for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 8; i++) {
+      for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 12; i++) {
         const l = lines[i].trim();
         if (!l) continue;
         if (STOP.test(l)) break;
+        if (SKIP.test(l)) continue;
         // Skip lines that are clearly product data (digit + SZT/KG etc)
         if (/^\d+\s+(SZT|KG|M|OP|KPL)/i.test(l)) break;
         if (/^\d+\.\s/.test(l)) break; // product line "1. ..."
-        addrParts.push(l);
+        // Zbieraj tylko linie wyglądające na adres / nazwę: ul./al./kod poczt./miasto-caps
+        // lub w OCR postać zmasakrowana "0.748 Katowice" (zamiast "40-748 Katowice")
+        const looksLikeAddr =
+          /(?:ul|al|os|pl)\.\s/i.test(l) ||
+          /\d{1,2}[-.]\d{3}\s/.test(l) ||
+          /^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ]/.test(l);
+        if (looksLikeAddr || addrParts.length > 0) {
+          addrParts.push(l);
+        }
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
@@ -856,7 +874,8 @@ export function parseWZText(rawText: string): WZImportData {
       for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
         const l = lines[i];
         if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
-        if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(l)) break;
+        // Rozszerzone markery bloku sprzedawcy (Sewera) — HR BDO to typowy artefakt OCR dla "NR BDO"
+        if (/NIP:|N[RH]\s*BDO:|SEWERA|ODDZIAŁ|REDYSTRYBUCJA|Ko[śs]ciuszki|Nr\s+ewid/i.test(l)) break;
         if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
         if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); continue; }
         // Nazwa miasta/lokalizacji (np. TYCHY PSP) — zbierz i kontynuuj
@@ -936,10 +955,23 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // Strategy B: "Waga netto razem:" inline
+  // Strategy B: "Waga netto razem:" inline — tolerancja OCR (brak spacji, bez przecinka)
   if (masa_kg === 0) {
-    const wagaM = text.match(/Waga\s+netto\s+razem[:\s]*([\d]+[\d,.]*)/i);
-    if (wagaM) masa_kg = Math.ceil(parseFloat(wagaM[1].replace(",", ".")) || 0);
+    // \s* zamiast \s+ → łap też "Waganetto razem" (OCR zlewa spację)
+    const wagaM = text.match(/Waga\s*netto\s+razem[:\s]*([\d][\d\s,.]*)/i);
+    if (wagaM) {
+      let raw = wagaM[1].replace(/\s/g, "");
+      // OCR często gubi przecinek dziesiętny ("426,759" → "426755"/"426759").
+      // Heurystyka: liczba > 10000 w kontekście wagi pojedynczego WZ = prawdopodobnie brakuje przecinka
+      // (wstawiamy go przed trzema ostatnimi cyframi: 426759 → 426.759)
+      if (/^\d+$/.test(raw) && raw.length >= 5) {
+        raw = raw.slice(0, raw.length - 3) + "." + raw.slice(raw.length - 3);
+      } else {
+        raw = raw.replace(",", ".");
+      }
+      const val = parseFloat(raw);
+      if (val > 0) masa_kg = Math.ceil(val);
+    }
   }
 
   // Strategy C: "RAZEM:" on same line with number (e.g. "RAZEM: 1 700,00")
