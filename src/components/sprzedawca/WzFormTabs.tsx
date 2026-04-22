@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 
 interface WzFormTabsProps {
@@ -783,11 +784,21 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 }
 
 export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit }: WzFormTabsProps) {
+  const [activeTab, setActiveTab] = useState<string>('reczne');
+
+  // Wrapper dla zakładek importu: po dodaniu WZ automatycznie przełącz na
+  // zakładkę 'Ręcznie' (gdzie user widzi swoje dodane WZ) + toast potwierdzający.
+  // Dzięki temu po kliknięciu 'Użyj tych danych' user NIE zostaje zagubiony
+  // na pustym ekranie uploadu OCR/PDF — widzi od razu że dane zostały zapisane.
+  const setWzListFromImport = useCallback((next: WzInput[]) => {
+    setWzList(next);
+    setActiveTab('reczne');
+    toast.success('✅ WZ dodane do listy — sprawdź w zakładce Ręcznie');
+  }, [setWzList]);
+
   return (
     <div className="space-y-4">
-      
-
-      <Tabs defaultValue="reczne">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
           <TabsTrigger value="pdf" className="flex-1 text-xs">PDF</TabsTrigger>
           <TabsTrigger value="ocr" className="flex-1 text-xs">OCR</TabsTrigger>
@@ -796,10 +807,10 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
           <TabsTrigger value="reczne" className="flex-1 text-xs">Ręcznie</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pdf"><WzPdfTab wzList={wzList} setWzList={setWzList} /></TabsContent>
-        <TabsContent value="ocr"><WzOcrTab wzList={wzList} setWzList={setWzList} /></TabsContent>
-        <TabsContent value="xls"><WzXlsTab wzList={wzList} setWzList={setWzList} /></TabsContent>
-        <TabsContent value="paste"><WzPasteTab wzList={wzList} setWzList={setWzList} /></TabsContent>
+        <TabsContent value="pdf"><WzPdfTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
+        <TabsContent value="ocr"><WzOcrTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
+        <TabsContent value="xls"><WzXlsTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
+        <TabsContent value="paste"><WzPasteTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
         <TabsContent value="reczne"><WzManualForm wzList={wzList} setWzList={setWzList} /></TabsContent>
       </Tabs>
 
