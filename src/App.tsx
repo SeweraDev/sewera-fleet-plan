@@ -12,6 +12,7 @@ import DyspozytorDashboard from "@/pages/dyspozytor/Dashboard";
 import SprzedawcaDashboard from "@/pages/sprzedawca/Dashboard";
 import KierowcaMojaTrasa from "@/pages/kierowca/MojaTrasa";
 import MapaSewera from "@/pages/MapaSewera";
+import KartaDrogowa from "@/pages/KartaDrogowa";
 import { RootRedirect } from "@/components/shared/RootRedirect";
 
 const queryClient = new QueryClient();
@@ -66,6 +67,13 @@ const App = () => (
           <Route path="/mapa" element={
             <ProtectedRoute allowedRoles={['admin', 'zarzad', 'dyspozytor', 'sprzedawca', 'kierowca']}>
               <MapaSewera />
+            </ProtectedRoute>
+          } />
+
+          {/* Karta drogowa — widok do druku (dyspozytor + kierowca + zarząd) */}
+          <Route path="/karta-drogowa/:kursId" element={
+            <ProtectedRoute allowedRoles={['admin', 'zarzad', 'dyspozytor', 'kierowca']}>
+              <KartaDrogowa />
             </ProtectedRoute>
           } />
 

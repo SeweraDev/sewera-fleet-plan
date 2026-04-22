@@ -210,6 +210,16 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                     <StatusBadge status={kurs.status} />
                   </CardTitle>
                   <div className="flex gap-1">
+                    {kurs.status !== 'usuniety' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => window.open(`/karta-drogowa/${kurs.id}`, '_blank')}
+                        title="Otwórz kartę drogową do wydruku"
+                      >
+                        🖨️ Karta
+                      </Button>
+                    )}
                     {kurs.status !== 'usuniety' && <Button size="sm" variant="ghost" onClick={() => setEditKurs(kurs)}>Edytuj</Button>}
                     {kurs.status === 'zaplanowany' && (
                       <Button size="sm" variant="outline" onClick={() => setAddToKurs(kurs)}>+ Dodaj</Button>
