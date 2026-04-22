@@ -197,6 +197,28 @@ export async function getRouteDistance(
   return null;
 }
 
+// Pobierz WSZYSTKIE warianty trasy z OSRM (do 3 alternatyw).
+// Używane w kalkulatorze wyceny, żeby wybrać najkrótszą lub środkową w zależności
+// od typu pojazdu (małe auta najkrótsza, ciężkie – środkowa).
+export async function getRouteAlternatives(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+): Promise<number[] | null> {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false&alternatives=2`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
+      const kms = data.routes.map((r: any) => roundKm(r.distance / 1000));
+      return kms;
+    }
+    console.warn(`[osrm-alt] no routes`, data);
+  } catch (e) {
+    console.warn(`[osrm-alt] error`, e);
+  }
+  return null;
+}
+
 // Oblicz łączną trasę: oddział → stop1 → stop2 → ... (OSRM multi-waypoint)
 export async function calculateRouteTotal(
   oddzialNazwa: string,
