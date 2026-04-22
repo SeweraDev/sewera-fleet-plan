@@ -710,6 +710,7 @@ export function parseWZText(rawText: string): WZImportData {
       /Sprzedawca/i.test(l) &&
       /(?:Odbiorca|Odiiorca|0dbiorca|Odbi[o0]rca|Nabywca)/i.test(l),
   );
+  console.log("[parseWZText] mergedHeaderIdx:", mergedHeaderIdx, mergedHeaderIdx >= 0 ? lines[mergedHeaderIdx] : null);
   if (mergedHeaderIdx >= 0) {
     // Znane "przedrostki" (lewa kolumna Sewera) do odcięcia z początku linii —
     // to co zostanie po prawej stronie to dane Odbiorcy.
@@ -744,6 +745,7 @@ export function parseWZText(rawText: string): WZImportData {
         rightAddr.push(l);
       }
     }
+    console.log("[parseWZText] merged columns extracted:", { rightName, rightAddr });
     if (rightName) odbiorca = rightName;
     if (rightAddr.length) odbiornikAdres = rightAddr.join(", ");
   }
@@ -755,7 +757,13 @@ export function parseWZText(rawText: string): WZImportData {
     (l) => new RegExp(`^(?:${ODB_LABEL.source})\\s*$`, "i").test(l)
       || new RegExp(`(?:^|\\s|\\[[_\\s]*)${ODB_LABEL.source}[_\\s\\]]*$`, "i").test(l)
   );
-  if (odbLabelIdx >= 0) {
+  // Jeśli nagłówek Odbiorca jest na tej samej linii co Sprzedawca (layout
+  // dwukolumnowy), dane już przetworzyliśmy wyżej przez mergedHeaderIdx.
+  // Blokujemy poniższy label-detection żeby nie nadpisać dobrej wartości
+  // śmieciami z bloku Sewera (HR BDO / REDYSTRYBUCJA) które OCR potrafi
+  // postawić bez poprzedzających markerów SELLER_MARKERS.
+  const skipLabelDetection = odbLabelIdx >= 0 && odbLabelIdx === mergedHeaderIdx;
+  if (odbLabelIdx >= 0 && !skipLabelDetection) {
     const SEWERA_CHECK = /SEWERA|KOŚCIUSZKI\s*326|000044503/i;
     const nameParts: string[] = [];
     const addrParts: string[] = [];
