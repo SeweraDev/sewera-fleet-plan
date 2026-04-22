@@ -316,7 +316,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
         const zewTypy = flotaZew.get(kod) || new Set<string>();
         const bestZewType = findBestAvailableType(typPojazdu, zewTypy);
-        const kosztZew = bestZewType ? obliczKosztZew(km, typPojazdu, kod) : null;
+        // Liczymy koszt dla FAKTYCZNIE dostępnego typu (nie oryginalnie żądanego),
+        // żeby oddział z fallbackiem w górę (np. SOS ma HDS 12,0t, user szuka HDS 9,0t)
+        // dostał cenę wg HDS 12,0t zamiast nulla (brak stawki dla HDS 9,0t na SOS).
+        const kosztZew = bestZewType ? obliczKosztZew(km, bestZewType.typ, kod) : null;
         const matchingZewTypy = bestZewType ? [...zewTypy].filter(t => {
           const mapped = mapTypNaCennikowy(t);
           return mapped === typPojazdu || mapped === bestZewType.typ;
