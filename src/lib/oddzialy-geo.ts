@@ -198,6 +198,42 @@ export async function getRouteDistance(
 }
 
 // ============================================================
+// LINIA PROSTA (Haversine) — odległość geograficzna po powierzchni Ziemi
+// ============================================================
+// Używana do rozliczeń karty drogowej i weryfikacji km zgłoszonych przez
+// kierowcę — dyspozytor widzi czy km rzeczywiste są sensowne vs prosta.
+
+const EARTH_R = 6371; // km
+
+export function haversineKm(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(to.lat - from.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(from.lat)) * Math.cos(toRad(to.lat)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_R * c;
+}
+
+// Odległość w linii prostej od oddziału do punktu (lat/lng). Zwraca km
+// zaokrąglone do jednego miejsca po przecinku (standard dla linii prostej).
+export function getKmProstaFromOddzial(
+  oddzialNazwa: string,
+  lat: number | null | undefined,
+  lng: number | null | undefined
+): number | null {
+  if (lat == null || lng == null) return null;
+  const from = getOddzialCoordsByName(oddzialNazwa);
+  if (!from) return null;
+  const km = haversineKm(from, { lat, lng });
+  return Math.round(km * 10) / 10;
+}
+
+// ============================================================
 // STRATEGIA WYBORU TRASY WG TYPU POJAZDU
 // ============================================================
 // Małe auta (do 1,2t, osobówki) → NAJKRÓTSZA trasa (wjadą wszędzie).

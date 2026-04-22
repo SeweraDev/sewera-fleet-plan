@@ -285,7 +285,14 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                           <TableCell className="text-xs">{p.preferowana_godzina || '—'}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
                           <TableCell className="font-mono text-xs max-w-[180px]">{p.numer_wz || p.zl_numer}</TableCell>
-                          <TableCell className="text-xs max-w-[140px] truncate">{p.adres}</TableCell>
+                          <TableCell className="text-xs max-w-[140px]">
+                            <div className="truncate">{p.adres}</div>
+                            {p.km_prosta != null && (
+                              <div className="text-[10px] text-muted-foreground leading-tight">
+                                prosta: {p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
                           <TableCell className="text-right">{p.objetosc_m3 ? Math.round(p.objetosc_m3 * 10) / 10 : '—'}</TableCell>
                           <TableCell className="text-right">{p.ilosc_palet || '—'}</TableCell>

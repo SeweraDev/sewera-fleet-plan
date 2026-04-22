@@ -159,6 +159,11 @@ export default function KierowcaMojaTrasa() {
                               </span>
                             </div>
                             <p className="text-xs text-muted-foreground">{p.adres}</p>
+                            {p.km_prosta != null && (
+                              <p className="text-[10px] text-muted-foreground">
+                                ↔ linia prosta od bazy: {p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km
+                              </p>
+                            )}
                             {p.tel && <p className="text-xs text-muted-foreground">📞 {p.tel}</p>}
                             <p className="text-xs">
                               {p.masa_kg} kg

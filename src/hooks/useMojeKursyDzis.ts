@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { geocodeAddress, getKmProstaFromOddzial } from '@/lib/oddzialy-geo';
 
 export interface KursKierowcy {
   id: string;
@@ -27,6 +28,7 @@ export interface PrzystanekKierowcy {
   nr_wz: string;
   uwagi: string;
   ilosc_palet: number;
+  km_prosta: number | null; // linia prosta od oddziału do adresu (Haversine)
 }
 
 export function useMojeKursyDzis() {
@@ -128,11 +130,49 @@ export function useMojeKursyDzis() {
             nr_wz: wz?.nr_wz || '',
             uwagi: wz?.uwagi || '',
             ilosc_palet: wz?.ilosc_palet || 0,
+            km_prosta: null,
           };
         }),
       };
     }));
     setLoading(false);
+
+    // Wylicz linię prostą od oddziału do adresu w tle (Photon cache sprawia że jest szybkie)
+    (async () => {
+      const oddzialIds = Array.from(new Set(kursyData.map(k => (k as any).oddzial_id).filter(Boolean)));
+      if (oddzialIds.length === 0) return;
+      const { data: odzData } = await supabase
+        .from('oddzialy')
+        .select('id, nazwa')
+        .in('id', oddzialIds);
+      const oddzialMap = new Map<number, string>();
+      (odzData || []).forEach(o => oddzialMap.set(o.id, (o as any).nazwa));
+
+      const uniqueAddresses = Array.from(
+        new Set((przData || [])
+          .map(p => wzMap.get(p.zlecenie_id || '')?.adres || '')
+          .filter(a => a && a.length > 4))
+      );
+      const coordsByAdres = new Map<string, { lat: number; lng: number } | null>();
+      for (const adres of uniqueAddresses) {
+        coordsByAdres.set(adres, await geocodeAddress(adres));
+      }
+
+      setKursy(prev => prev.map(k => {
+        const oddzialNazwa = oddzialMap.get(k.oddzial_id || 0);
+        if (!oddzialNazwa) return k;
+        return {
+          ...k,
+          przystanki: k.przystanki.map(p => {
+            if (!p.adres || p.km_prosta != null) return p;
+            const c = coordsByAdres.get(p.adres);
+            if (!c) return p;
+            const km = getKmProstaFromOddzial(oddzialNazwa, c.lat, c.lng);
+            return km != null ? { ...p, km_prosta: km } : p;
+          }),
+        };
+      }));
+    })();
   }, [user]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { geocodeAddress, getKmProstaFromOddzial } from '@/lib/oddzialy-geo';
 
 export interface KursDto {
   id: string;
@@ -36,6 +37,7 @@ export interface PrzystanekDto {
   tel: string;
   uwagi: string;
   preferowana_godzina: string;
+  km_prosta: number | null; // linia prosta od oddziału do adresu (Haversine)
 }
 
 export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: string) {
@@ -165,6 +167,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
             zlecenie_id: p.zlecenie_id, zl_numer: zl?.numer || '',
             odbiorca: '', adres: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0,
             numer_wz: '', nr_zamowienia: '', tel: '', uwagi: '', preferowana_godzina: zl?.preferowana_godzina || '',
+            km_prosta: null,
           });
         } else {
           wzList.forEach((w, i) => {
@@ -177,6 +180,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
               ilosc_palet: Number(wAny.ilosc_palet) || 0, numer_wz: wAny.numer_wz || '',
               nr_zamowienia: wAny.nr_zamowienia || '', tel: wAny.tel || '', uwagi: wAny.uwagi || '',
               preferowana_godzina: zl?.preferowana_godzina || '',
+              km_prosta: null,
             });
           });
         }
@@ -188,6 +192,34 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
         return (GODZ_ORDER[a.preferowana_godzina] || 9) - (GODZ_ORDER[b.preferowana_godzina] || 9);
       });
       setPrzystanki(expandedPrz);
+
+      // Wylicz linię prostą od oddziału do adresu w tle (Photon 1 req/adres, jest cache).
+      // Najpierw pobierz nazwę oddziału dla getKmProstaFromOddzial.
+      (async () => {
+        const { data: odzData } = await supabase
+          .from('oddzialy')
+          .select('nazwa')
+          .eq('id', oddzialId)
+          .maybeSingle();
+        const oddzialNazwa = (odzData as any)?.nazwa;
+        if (!oddzialNazwa) return;
+
+        const uniqueAddresses = Array.from(
+          new Set(expandedPrz.map(p => p.adres).filter(a => a && a.length > 4))
+        );
+        const coordsByAdres = new Map<string, { lat: number; lng: number } | null>();
+        for (const adres of uniqueAddresses) {
+          const c = await geocodeAddress(adres);
+          coordsByAdres.set(adres, c);
+        }
+        setPrzystanki(prev => prev.map(p => {
+          if (!p.adres || p.km_prosta != null) return p;
+          const c = coordsByAdres.get(p.adres);
+          if (!c) return p;
+          const km = getKmProstaFromOddzial(oddzialNazwa, c.lat, c.lng);
+          return km != null ? { ...p, km_prosta: km } : p;
+        }));
+      })();
     } else {
       setPrzystanki([]);
     }

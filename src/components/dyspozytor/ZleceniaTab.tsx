@@ -545,7 +545,14 @@ export function ZleceniaTab({
                     <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
                     <TableCell className="text-right">{z.suma_m3 ? Math.round(z.suma_m3 * 10) / 10 : '—'}</TableCell>
                     <TableCell className="text-right">{z.suma_palet || '—'}</TableCell>
-                    <TableCell className="text-right text-xs">{z.dystans_km != null ? z.dystans_km : '...'}</TableCell>
+                    <TableCell className="text-right text-xs">
+                      {z.dystans_km != null ? z.dystans_km : '...'}
+                      {z.km_prosta != null && (
+                        <div className="text-[10px] text-muted-foreground font-normal leading-tight">
+                          prosta: {z.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell>
                       {z.kurs_numer || z.kurs_nrrej

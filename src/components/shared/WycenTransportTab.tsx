@@ -12,6 +12,7 @@ import {
   geocodeAddress,
   getRouteAlternatives,
   getStrategiaKm,
+  haversineKm,
   pickKmFromAlternatives,
   searchAddress,
 } from '@/lib/oddzialy-geo';
@@ -35,6 +36,7 @@ interface WynikOddzialu {
   nazwa: string;
   km: number;
   kmInfo: string | null; // np. "środkowa z 3" / "najkrótsza z 3"
+  kmProsta: number | null; // linia prosta (Haversine) oddział → dostawa
   kosztWew: { netto: number; brutto: number } | null;
   kosztZew: { netto: number; brutto: number } | null;
   jestMojOddzial: boolean;
@@ -297,6 +299,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const alternatives = await getRouteAlternatives(dane, coords);
         if (!alternatives || alternatives.length === 0) continue;
         const { km, info: kmInfo } = pickKmFromAlternatives(alternatives, strategy);
+        const kmProsta = Math.round(haversineKm(dane, coords) * 10) / 10;
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
         const bestType = findBestAvailableType(typPojazdu, wlasneTypy);
@@ -324,6 +327,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           nazwa: KOD_TO_NAZWA[kod] || kod,
           km,
           kmInfo: kmInfo || null,
+          kmProsta,
           kosztWew,
           kosztZew,
           jestMojOddzial: kod === mojKod,
@@ -505,6 +509,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.kmInfo && (
                             <div className="text-xs text-muted-foreground font-normal">
                               {w.kmInfo}
+                            </div>
+                          )}
+                          {w.kmProsta != null && (
+                            <div className="text-xs text-muted-foreground font-normal">
+                              prosta: {w.kmProsta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km
                             </div>
                           )}
                         </td>

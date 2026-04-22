@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateDistance, geocodeAddress } from '@/lib/oddzialy-geo';
+import { calculateDistance, geocodeAddress, getKmProstaFromOddzial } from '@/lib/oddzialy-geo';
 
 export interface ZlecenieOddzialuDto {
   id: string;
@@ -18,6 +18,7 @@ export interface ZlecenieOddzialuDto {
   suma_m3: number;
   suma_palet: number;
   dystans_km: number | null;
+  km_prosta: number | null;
   lat: number | null;
   lng: number | null;
   deadline_wz: string | null;
@@ -139,6 +140,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
         suma_m3: wzInfo?.suma_m3 || 0,
         suma_palet: wzInfo?.suma_palet || 0,
         dystans_km: null,
+        km_prosta: null,
         lat: null,
         lng: null,
         deadline_wz: (z as any).deadline_wz || null,
@@ -159,9 +161,11 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
           if (!adres) continue;
           const coords = await geocodeAddress(adres);
           const km = await calculateDistance(oddzialNazwa, adres, z.typ_pojazdu);
+          const kmProsta = coords ? getKmProstaFromOddzial(oddzialNazwa, coords.lat, coords.lng) : null;
           setZlecenia(prev => prev.map(zl => zl.id === z.id ? {
             ...zl,
             dystans_km: km ?? zl.dystans_km,
+            km_prosta: kmProsta ?? zl.km_prosta,
             lat: coords?.lat ?? zl.lat,
             lng: coords?.lng ?? zl.lng,
           } : zl));
