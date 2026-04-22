@@ -701,6 +701,53 @@ export function parseWZText(rawText: string): WZImportData {
   let odbiorca: string | null = null;
   let odbiornikAdres: string | null = null; // adres z sekcji odbiorcy (fallback gdy brak "Adres dostawy")
 
+  // NEW (OCR-friendly): detect MERGED columns where OCR zlewa lewą i prawą kolumnę w jedną linię.
+  // Przykład: "SEWERA POLSKA CHEMIA IRENEUSZ WOLAK Kołton Tomasz" albo
+  // "ul. Tadeusza Kościuszki 326, 40-608 Katowice ul. Nagietek 33, 40-748 Katowice".
+  // Rozpoznajemy gdy label-line zawiera zarówno "Sprzedawca" jak i "Odbiorca" (w dowolnej formie).
+  const mergedHeaderIdx = lines.findIndex(
+    (l) =>
+      /Sprzedawca/i.test(l) &&
+      /(?:Odbiorca|Odiiorca|0dbiorca|Odbi[o0]rca|Nabywca)/i.test(l),
+  );
+  if (mergedHeaderIdx >= 0) {
+    // Znane "przedrostki" (lewa kolumna Sewera) do odcięcia z początku linii —
+    // to co zostanie po prawej stronie to dane Odbiorcy.
+    const SEWERA_PREFIXES: RegExp[] = [
+      /^SEWERA\s+POLSKA\s+CHEMIA\s+IRENEUSZ\s+WOLAK\b[\s,.]*/i,
+      /^ul\.\s+Tadeusza\s+Ko[śs]ciuszki\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice\s*/i,
+      /^NIP:\s*\d{10}\b\s*/i,
+      /^N[RH]\s*BDO:\s*\d+\b\s*/i,
+    ];
+
+    let rightName: string | null = null;
+    const rightAddr: string[] = [];
+    for (let i = mergedHeaderIdx + 1; i < Math.min(mergedHeaderIdx + 6, lines.length); i++) {
+      let l = lines[i];
+      // Odetnij znany prefix lewej kolumny (Sewera) — zostaje część z prawej
+      for (const p of SEWERA_PREFIXES) {
+        const m = l.match(p);
+        if (m) {
+          l = l.slice(m[0].length).trim();
+          break;
+        }
+      }
+      // Zakończenie bloku dwukolumnowego (tylko-lewa-kolumna linie: REDYSTRYBUCJA, Magazyn, Forma, Wydano, Adres dostawy)
+      if (/^REDYSTRYBUCJA|^ODDZIAŁ|^Magazyn|^Forma\s+płatn|^Wydano|^Adres\s+dostawy|^e\s+wydaj/i.test(l)) break;
+      if (/^HR\s*BDO:|^NR\s*BDO:/i.test(l) && (rightName || rightAddr.length > 0)) break;
+      if (/^Nr\s+ewid/i.test(l)) continue; // pomiń nr ewidencyjny odbiorcy
+      if (l.length < 2) continue;
+
+      if (!rightName) {
+        rightName = l;
+      } else if (/(?:ul|al|os|pl)\.\s/i.test(l) || /\d{2}-\d{3}/.test(l)) {
+        rightAddr.push(l);
+      }
+    }
+    if (rightName) odbiorca = rightName;
+    if (rightAddr.length) odbiornikAdres = rightAddr.join(", ");
+  }
+
   // Priority: find "Odbiorca" or "Nabywca" label and collect ALL lines after it.
   // Fuzzy: toleruj OCR mutacje (Odiiorca, 0dbiorca, Odbi0rca) i obudowę [__...__]
   const ODB_LABEL = /(?:Odbiorca|Nabywca|Odiiorca|0dbiorca|Odbi[o0]rca|[0O]dbiorca)/i;
@@ -905,6 +952,17 @@ export function parseWZText(rawText: string): WZImportData {
   // Fallback: brak sekcji "Adres dostawy" — użyj adresu z sekcji odbiorcy
   if (!adres && odbiornikAdres) {
     adres = odbiornikAdres;
+  }
+
+  // OCR guard: jeśli złapany adres dostawy nie ma "ul./al./os./pl." ale adres
+  // odbiorcy ma, użyj adresu odbiorcy (w praktyce Adres dostawy == adres Odbiorcy
+  // gdy klient odbiera u siebie, a OCR często rozmazuje sekcję Adres dostawy).
+  if (adres && odbiornikAdres) {
+    const adresHasStreet = /(?:ul|al|os|pl)\.\s/i.test(adres);
+    const odbHasStreet = /(?:ul|al|os|pl)\.\s/i.test(odbiornikAdres);
+    if (!adresHasStreet && odbHasStreet) {
+      adres = odbiornikAdres;
+    }
   }
 
   // 5. tel — search near delivery section ONLY when document has explicit delivery address
