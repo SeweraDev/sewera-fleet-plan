@@ -710,7 +710,6 @@ export function parseWZText(rawText: string): WZImportData {
       /Sprzedawca/i.test(l) &&
       /(?:Odbiorca|Odiiorca|0dbiorca|Odbi[o0]rca|Nabywca)/i.test(l),
   );
-  console.log("[parseWZText] mergedHeaderIdx:", mergedHeaderIdx, mergedHeaderIdx >= 0 ? lines[mergedHeaderIdx] : null);
   if (mergedHeaderIdx >= 0) {
     // Znane "przedrostki" (lewa kolumna Sewera) do odcięcia z początku linii —
     // to co zostanie po prawej stronie to dane Odbiorcy.
@@ -745,7 +744,6 @@ export function parseWZText(rawText: string): WZImportData {
         rightAddr.push(l);
       }
     }
-    console.log("[parseWZText] merged columns extracted:", { rightName, rightAddr });
     if (rightName) odbiorca = rightName;
     if (rightAddr.length) odbiornikAdres = rightAddr.join(", ");
   }
