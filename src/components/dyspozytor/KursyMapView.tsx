@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { geocodeAddress } from '@/lib/oddzialy-geo';
 import { ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { toast } from 'sonner';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
 
 // Kolory oddziałów
@@ -44,6 +45,7 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
   const [error, setError] = useState<string | null>(null);
   const [coords, setCoords] = useState<Map<string, { lat: number; lng: number }>>(new Map());
   const [geocoding, setGeocoding] = useState(false);
+  const [failedAddresses, setFailedAddresses] = useState<Set<string>>(new Set());
 
   // Geocoduj unikalne adresy
   const uniqueAddresses = [...new Set(
@@ -57,6 +59,7 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
 
     (async () => {
       const newCoords = new Map<string, { lat: number; lng: number }>();
+      const newFailed = new Set<string>();
       // Kopiuj istniejące z cache
       coords.forEach((v, k) => newCoords.set(k, v));
 
@@ -64,11 +67,23 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
       for (const adres of toGeocode) {
         if (cancelled) break;
         const result = await geocodeAddress(adres);
-        if (result) newCoords.set(adres, result);
+        if (result) {
+          newCoords.set(adres, result);
+        } else {
+          newFailed.add(adres);
+        }
       }
       if (!cancelled) {
         setCoords(newCoords);
+        setFailedAddresses(newFailed);
         setGeocoding(false);
+        // Toast ostrzegawczy gdy niektóre adresy się nie zgeocodowały
+        if (newFailed.size > 0) {
+          toast.warning(
+            `⚠️ Nie zlokalizowano ${newFailed.size} ${newFailed.size === 1 ? 'adresu' : 'adresów'} — lista pod mapą`,
+            { duration: 5000 },
+          );
+        }
       }
     })();
 
@@ -232,6 +247,12 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
     return <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">Ładowanie współrzędnych...</div>;
   }
 
+  // Zbierz szczegóły przystanków z adresami których nie udało się zlokalizować —
+  // żeby dyspozytor widział które to WZ i które zlecenie, a nie tylko sam adres.
+  const unlocatedStops = failedAddresses.size > 0
+    ? przystanki.filter(p => p.adres && failedAddresses.has(p.adres))
+    : [];
+
   return (
     <div className="space-y-2">
       <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 600 }} />
@@ -248,6 +269,31 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
               <span className="text-muted-foreground">{kurs.pojazd_typ || ''}</span>
             </div>
           ))}
+        </div>
+      )}
+      {/* Lista adresów które nie zostały zlokalizowane — dyspozytor widzi że są,
+          zamiast niewidoczne znikać z mapy. */}
+      {unlocatedStops.length > 0 && (
+        <div className="rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700 p-3 text-xs">
+          <div className="font-semibold text-yellow-900 dark:text-yellow-200 mb-1">
+            ⚠️ Niezidentyfikowane adresy — {failedAddresses.size}
+          </div>
+          <div className="text-yellow-800 dark:text-yellow-300 mb-2 text-[11px]">
+            Te przystanki nie trafiły na mapę bo Photon (geokoder) nie rozpoznał adresu albo wynik był poza Śląskiem. Popraw adres w edycji zlecenia (dodaj ulicę, kod pocztowy, miasto).
+          </div>
+          <ul className="space-y-1">
+            {unlocatedStops.map(p => (
+              <li key={p.id} className="flex gap-2 items-start">
+                <span className="font-mono text-muted-foreground text-[10px] shrink-0 pt-0.5">
+                  {p.numer_wz || p.zl_numer}
+                </span>
+                <span className="flex-1">
+                  <strong>{p.odbiorca || '—'}</strong>
+                  <span className="text-muted-foreground"> · {p.adres}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

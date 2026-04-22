@@ -188,8 +188,11 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
       {czekaNaGeocoding.length > 0 && (
         <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 px-3 py-2 text-xs">
           <span className="font-medium text-orange-700 dark:text-orange-400">
-            Szukam lokalizacji ({czekaNaGeocoding.length}):
+            ⚠️ Szukam lokalizacji / niezlokalizowane ({czekaNaGeocoding.length}):
           </span>
+          <div className="text-[11px] text-orange-600 dark:text-orange-300 mt-0.5">
+            Jeśli zlecenie pozostaje tu dłużej — popraw adres w edycji (dodaj ulicę, kod, miasto).
+          </div>
           <ul className="mt-1 space-y-0.5 text-orange-600 dark:text-orange-300">
             {czekaNaGeocoding.map(z => (
               <li key={z.id}>{z.numer} — {z.adres}</li>

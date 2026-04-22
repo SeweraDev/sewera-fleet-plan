@@ -240,12 +240,29 @@ export default function MapaSewera() {
             <span className="text-orange-600"><strong>{bezKursu.length}</strong> bez kursu</span>
           )}
           {czekaNaGeo.length > 0 && (
-            <span className="text-muted-foreground">Geokodowanie: {czekaNaGeo.length}...</span>
+            <span className="text-orange-600">⚠️ Niezlokalizowane: {czekaNaGeo.length}</span>
           )}
           {bezAdresu.length > 0 && (
             <span className="text-red-600">Brak adresu: {bezAdresu.length}</span>
           )}
         </div>
+
+        {/* Lista niezlokalizowanych zleceń (lat/lng pozostaje null po geocodingu) */}
+        {czekaNaGeo.length > 0 && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 px-3 py-2 text-xs">
+            <div className="font-medium text-orange-700 dark:text-orange-400">
+              ⚠️ Niezlokalizowane lub w trakcie geokodowania ({czekaNaGeo.length}):
+            </div>
+            <div className="text-[11px] text-orange-600 dark:text-orange-300 mt-0.5">
+              Jeśli zlecenie pozostaje tu dłużej — popraw adres w edycji (dodaj ulicę, kod, miasto).
+            </div>
+            <ul className="mt-1 space-y-0.5 text-orange-600 dark:text-orange-300">
+              {czekaNaGeo.map(z => (
+                <li key={z.id}>{z.numer} — {z.adres}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Mapa */}
         {mapError ? (

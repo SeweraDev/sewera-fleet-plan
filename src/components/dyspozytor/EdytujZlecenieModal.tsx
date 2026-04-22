@@ -12,6 +12,7 @@ import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImpor
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
 import { KLASYFIKACJE } from '@/lib/klasyfikacje';
+import { geocodeAddress } from '@/lib/oddzialy-geo';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -81,6 +82,20 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [showResztaChoice, setShowResztaChoice] = useState(false);
   const [showPrzekaz, setShowPrzekaz] = useState(false);
   const originalWzRef = useRef<WzData[]>([]);
+
+  // Walidacja adresu (geocoding on blur): per index WZ
+  type AdresStatus = 'idle' | 'checking' | 'ok' | 'fail';
+  const [adresStatus, setAdresStatus] = useState<Record<number, AdresStatus>>({});
+
+  const sprawdzAdres = useCallback(async (idx: number, adres: string) => {
+    if (!adres || adres.trim().length < 5) {
+      setAdresStatus(prev => ({ ...prev, [idx]: 'idle' }));
+      return;
+    }
+    setAdresStatus(prev => ({ ...prev, [idx]: 'checking' }));
+    const result = await geocodeAddress(adres);
+    setAdresStatus(prev => ({ ...prev, [idx]: result ? 'ok' : 'fail' }));
+  }, []);
 
   // Pojemność pojazdu z kursu
   const [capacity, setCapacity] = useState<{ kg: number; m3: number; pal: number }>({ kg: 0, m3: 0, pal: 0 });
@@ -426,8 +441,30 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                       <Input className="h-8 text-sm" value={w.odbiorca} onChange={e => updateWz(idx, 'odbiorca', e.target.value)} />
                     </div>
                     <div>
-                      <Label className="text-xs">Adres</Label>
-                      <Input className="h-8 text-sm" value={w.adres} onChange={e => updateWz(idx, 'adres', e.target.value)} />
+                      <Label className="text-xs flex items-center gap-2">
+                        Adres
+                        {adresStatus[idx] === 'checking' && (
+                          <span className="text-[10px] text-muted-foreground">sprawdzam…</span>
+                        )}
+                        {adresStatus[idx] === 'ok' && (
+                          <span className="text-[10px] text-green-600">✓ zlokalizowano</span>
+                        )}
+                        {adresStatus[idx] === 'fail' && (
+                          <span className="text-[10px] text-red-600">⚠️ nie znaleziono — dodaj ulicę/kod/miasto</span>
+                        )}
+                      </Label>
+                      <Input
+                        className={`h-8 text-sm ${adresStatus[idx] === 'fail' ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                        value={w.adres}
+                        onChange={e => {
+                          updateWz(idx, 'adres', e.target.value);
+                          // Reset status przy każdej zmianie — sprawdzamy dopiero na blur
+                          if (adresStatus[idx] && adresStatus[idx] !== 'idle') {
+                            setAdresStatus(prev => ({ ...prev, [idx]: 'idle' }));
+                          }
+                        }}
+                        onBlur={() => sprawdzAdres(idx, w.adres)}
+                      />
                     </div>
                     <div>
                       <Label className="text-xs">Telefon</Label>
