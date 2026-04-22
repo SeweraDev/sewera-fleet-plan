@@ -83,6 +83,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [error, setError] = useState('');
   const [pokazZew, setPokazZew] = useState(false);
 
+  // Zamrożone parametry z czasu ostatniego udanego wyliczenia (żeby header tabeli
+  // nie "kłamał" gdy user zmieni dropdown/adres bez ponownego kliknięcia Wylicz)
+  const [lastCalc, setLastCalc] = useState<{ typ: string; adres: string } | null>(null);
+
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -331,6 +335,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const jestZew = finalResults.some(r => r.kosztZew !== null);
       setPokazZew(jestZew);
       setWyniki(finalResults);
+      setLastCalc({ typ: typPojazdu, adres });
     } catch (e) {
       console.error('[WycenTransport] error:', e);
       setError('Wystąpił błąd podczas wyliczania. Spróbuj ponownie.');
@@ -421,11 +426,16 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         )}
 
         {/* Wyniki */}
-        {wyniki && wyniki.length > 0 && (
+        {wyniki && wyniki.length > 0 && lastCalc && (
           <div className="space-y-3">
             <h3 className="font-semibold text-sm">
-              Wyniki dla: <span className="text-primary">{typPojazdu}</span> → {adres}
+              Wyniki dla: <span className="text-primary">{lastCalc.typ}</span> → {lastCalc.adres}
             </h3>
+            {(typPojazdu !== lastCalc.typ || adres !== lastCalc.adres) && (
+              <div className="text-sm bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 text-yellow-900 dark:text-yellow-100 p-3 rounded-md">
+                ⚠️ Zmieniłeś parametry — kliknij <strong>'Wylicz koszt'</strong>, aby zaktualizować wyniki.
+              </div>
+            )}
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted">
