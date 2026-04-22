@@ -294,16 +294,15 @@ export default function KartaDrogowa() {
               <th className="w-8">#</th>
               <th className="w-20">Godzina</th>
               <th>Odbiorca</th>
-              <th className="w-36">Nr WZ / Nr zam.</th>
+              <th className="w-32">Nr WZ / Nr zam.</th>
               <th>Adres</th>
               <th className="w-16">Prosta (km)</th>
-              <th className="w-24">Km dojazd</th>
-              <th className="w-24">Km wyjazd</th>
+              <th className="w-20">Km dojazd</th>
+              <th className="w-20">Km wyjazd</th>
               <th className="w-12">Kg</th>
               <th className="w-10">Pal</th>
               <th className="w-24">Telefon</th>
-              <th>Uwagi</th>
-              <th className="w-28">Podpis odbiorcy</th>
+              <th className="col-uwagi">Uwagi</th>
             </tr>
           </thead>
           <tbody>
@@ -330,8 +329,7 @@ export default function KartaDrogowa() {
                 <td className="text-right">{Math.round(p.masa_kg)}</td>
                 <td className="text-right">{p.ilosc_palet || ''}</td>
                 <td className="text-[9pt]">{p.tel}</td>
-                <td className="text-[9pt]">{p.uwagi}</td>
-                <td className="fill-cell"></td>
+                <td className="cell-uwagi">{p.uwagi}</td>
               </tr>
             ))}
           </tbody>
@@ -357,15 +355,24 @@ export default function KartaDrogowa() {
       {/* Style wydruku */}
       <style>{`
         .karta-info td { border: 1px solid #000; padding: 3px 6px; font-size: 10pt; }
+        .karta-table { table-layout: auto; }
         .karta-table th, .karta-table td { border: 1px solid #000; padding: 3px 4px; font-size: 9pt; vertical-align: top; }
         .karta-table th { font-weight: 600; text-align: left; }
         .karta-table .fill-cell { height: 28px; background: white; }
+        .karta-table .col-uwagi { min-width: 220px; width: 260px; }
+        .karta-table .cell-uwagi {
+          font-size: 9pt;
+          white-space: pre-wrap;
+          word-break: break-word;
+          min-height: 40px;
+        }
         @media print {
           .no-print { display: none !important; }
           @page { size: A4 landscape; margin: 10mm; }
           body { margin: 0; background: white; }
           .print-page { padding: 0 !important; max-width: none !important; }
           .karta-table .fill-cell { background: white; }
+          .karta-table .col-uwagi { min-width: 60mm; width: 70mm; }
         }
       `}</style>
     </div>
