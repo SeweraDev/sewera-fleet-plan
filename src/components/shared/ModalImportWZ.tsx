@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -1329,12 +1329,16 @@ function OcrTab({ onParsed, onSwitchPaste }: { onParsed: (d: WZImportData) => vo
   const [formData, setFormData] = useState<WZImportData | null>(null);
   const [rawOcrText, setRawOcrText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pasteFlash, setPasteFlash] = useState(false);
 
   const handleImage = useCallback(async (file: File) => {
     const name = file.name.toLowerCase();
-    const isImage = name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")
+    const isImageByName = name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")
       || name.endsWith(".heic") || name.endsWith(".webp");
-    if (!isImage) {
+    // Clipboard paste: nazwa może być pusta/"image.png" bez rozpoznawalnego rozszerzenia,
+    // ale MIME type będzie "image/*". Akceptujemy na podstawie MIME jak typ pliku nie pasuje.
+    const isImageByMime = file.type && file.type.startsWith("image/");
+    if (!isImageByName && !isImageByMime) {
       setError("Wymagane zdjęcie (PNG, JPG, HEIC, WebP).");
       return;
     }
@@ -1395,10 +1399,35 @@ function OcrTab({ onParsed, onSwitchPaste }: { onParsed: (d: WZImportData) => vo
     }
   }, []);
 
+  // Nasłuch wklejania ze schowka (Ctrl+V) — obsługa Narzędzia do wycinania Windows
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            setPasteFlash(true);
+            setTimeout(() => setPasteFlash(false), 600);
+            handleImage(file);
+            return;
+          }
+        }
+      }
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [handleImage]);
+
   return (
     <div className="space-y-3 pt-2">
       {!result && !parsing && (
         <>
+          <div className={`text-xs text-center p-2 rounded-md border border-dashed transition-colors ${pasteFlash ? 'bg-green-100 border-green-500 text-green-900' : 'bg-muted/40 border-muted-foreground/30 text-muted-foreground'}`}>
+            {pasteFlash ? '✅ Obraz wklejony — przetwarzanie…' : '📋 Możesz też wkleić zrzut ekranu ze schowka — naciśnij Ctrl+V (np. po użyciu Narzędzia do wycinania)'}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {/* Camera button (mobile) */}
             <div
