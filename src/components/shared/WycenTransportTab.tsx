@@ -41,6 +41,7 @@ interface WynikOddzialu {
   uzytTyp: string | null;
   isFallback: boolean;
   fallbackDirection: 'down' | 'up' | null;
+  wewTypy: string[]; // konkretne typy aut wew pasujące do żądanego typu
   zewTypy: string[];
 }
 
@@ -314,6 +315,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           fallbackDirection = bestType.direction;
         }
 
+        const matchingWewTypy = bestType ? [...wlasneTypy].filter(t => {
+          const mapped = mapTypNaCennikowy(t);
+          return mapped === typPojazdu || mapped === bestType.typ;
+        }) : [];
+
         const zewTypy = flotaZew.get(kod) || new Set<string>();
         const bestZewType = findBestAvailableType(typPojazdu, zewTypy);
         // Liczymy koszt dla FAKTYCZNIE dostępnego typu (nie oryginalnie żądanego),
@@ -336,6 +342,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           uzytTyp,
           isFallback,
           fallbackDirection,
+          wewTypy: matchingWewTypy,
           zewTypy: matchingZewTypy,
         });
       }
@@ -499,6 +506,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.isFallback && w.uzytTyp && (
                             <div className="text-xs text-orange-600 dark:text-orange-400">
                               {w.fallbackDirection === 'up' ? '↑' : w.fallbackDirection === 'down' ? '↓' : '↳'} auto: {w.uzytTyp}
+                            </div>
+                          )}
+                          {w.wewTypy.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              🚛 Sewera: {w.wewTypy.join(', ')}
                             </div>
                           )}
                           {w.zewTypy.length > 0 && (
