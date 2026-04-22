@@ -11,6 +11,8 @@ import {
   NAZWA_TO_KOD,
   geocodeAddress,
   getRouteAlternatives,
+  getStrategiaKm,
+  pickKmFromAlternatives,
   searchAddress,
 } from '@/lib/oddzialy-geo';
 import type { SearchResult } from '@/lib/oddzialy-geo';
@@ -39,30 +41,6 @@ interface WynikOddzialu {
   uzytTyp: string | null;
   isFallback: boolean;
   zewTypy: string[];
-}
-
-// Typy pojazdów które jeżdżą wszędzie (bez ograniczeń tonażowych/gabarytowych).
-// Dla nich bierzemy NAJKRÓTSZĄ trasę z alternatyw OSRM.
-// Dla pozostałych (windy, HDS) bierzemy ŚRODKOWĄ — omija ograniczenia tonażowe.
-const TYPY_LEKKIE = new Set<string>(['do 700kg', 'do 1,2t bez windy']);
-
-// Wybierz km z listy alternatyw wg strategii:
-// - 'shortest' (małe auta) → minimum
-// - 'middle' (duże auta) → odrzuć skrajne (min + max), bierz środkową.
-//   Dla 2 tras bierzemy dłuższą (bezpieczniej, zgodnie z "nie dopłacać").
-//   Dla 1 trasy bierzemy jedyną dostępną.
-function pickKm(alternatives: number[], strategy: 'shortest' | 'middle'): { km: number; info: string } {
-  const sorted = [...alternatives].sort((a, b) => a - b);
-  const n = sorted.length;
-
-  if (strategy === 'shortest') {
-    return { km: sorted[0], info: n > 1 ? `najkrótsza z ${n}` : '' };
-  }
-
-  // 'middle'
-  if (n >= 3) return { km: sorted[1], info: `środkowa z ${n}` };
-  if (n === 2) return { km: sorted[1], info: `dłuższa z 2` };
-  return { km: sorted[0], info: '' };
 }
 
 const MAX_KM_INNE_ODDZIALY = 25;
@@ -313,12 +291,12 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       });
 
       const results: WynikOddzialu[] = [];
-      const strategy: 'shortest' | 'middle' = TYPY_LEKKIE.has(typPojazdu) ? 'shortest' : 'middle';
+      const strategy = getStrategiaKm(typPojazdu);
 
       for (const [kod, dane] of oddzialyFiltered) {
         const alternatives = await getRouteAlternatives(dane, coords);
         if (!alternatives || alternatives.length === 0) continue;
-        const { km, info: kmInfo } = pickKm(alternatives, strategy);
+        const { km, info: kmInfo } = pickKmFromAlternatives(alternatives, strategy);
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
         const bestType = findBestAvailableType(typPojazdu, wlasneTypy);

@@ -197,9 +197,45 @@ export async function getRouteDistance(
   return null;
 }
 
+// ============================================================
+// STRATEGIA WYBORU TRASY WG TYPU POJAZDU
+// ============================================================
+// Małe auta (do 1,2t, osobówki) → NAJKRÓTSZA trasa (wjadą wszędzie).
+// Duże auta (windy, HDS) → ŚRODKOWA z alternatyw OSRM (omija ograniczenia
+// tonażowe; zgodne z zasadą biznesową "nie dopłacać do transportu").
+//
+// Obsługuje typy SYSTEMOWE (flota.typ, zlecenia.typ_pojazdu) i CENNIKOWE
+// (kalkulator wyceny).
+export const TYPY_LEKKIE_KM = new Set<string>([
+  // systemowe
+  'Dostawczy 1,2t',
+  // cennikowe
+  'do 700kg',
+  'do 1,2t bez windy',
+]);
+
+export function getStrategiaKm(typPojazdu: string | null | undefined): 'shortest' | 'middle' {
+  if (!typPojazdu) return 'middle'; // domyślnie bezpieczna (nie dopłacać)
+  const clean = typPojazdu.replace(/^zew:\s*/i, '').trim();
+  return TYPY_LEKKIE_KM.has(clean) ? 'shortest' : 'middle';
+}
+
+export function pickKmFromAlternatives(
+  alternatives: number[],
+  strategy: 'shortest' | 'middle'
+): { km: number; info: string } {
+  const sorted = [...alternatives].sort((a, b) => a - b);
+  const n = sorted.length;
+  if (strategy === 'shortest') {
+    return { km: sorted[0], info: n > 1 ? `najkrótsza z ${n}` : '' };
+  }
+  if (n >= 3) return { km: sorted[1], info: `środkowa z ${n}` };
+  if (n === 2) return { km: sorted[1], info: `dłuższa z 2` };
+  return { km: sorted[0], info: '' };
+}
+
 // Pobierz WSZYSTKIE warianty trasy z OSRM (do 3 alternatyw).
-// Używane w kalkulatorze wyceny, żeby wybrać najkrótszą lub środkową w zależności
-// od typu pojazdu (małe auta najkrótsza, ciężkie – środkowa).
+// Używane razem z pickKmFromAlternatives do wyboru km wg strategii typu pojazdu.
 export async function getRouteAlternatives(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number }
@@ -259,14 +295,23 @@ export async function calculateRouteTotal(
   return null;
 }
 
-// Cache dystansu — klucz: "oddział:adres". Null NIE jest cache'owany.
+// Cache dystansu — klucz: "oddział:adres:strategia". Null NIE jest cache'owany.
 const distanceCache = new Map<string, number>();
 
-// Oblicz dystans od oddziału do adresu dostawy (km po drogach)
-export async function calculateDistance(oddzialNazwa: string, adresDostawy: string): Promise<number | null> {
+// Oblicz dystans od oddziału do adresu dostawy (km po drogach).
+// Strategia wyboru km zależy od typu pojazdu (patrz getStrategiaKm):
+//  - małe auta (≤1,2t) → najkrótsza trasa
+//  - ciężkie (windy, HDS) → środkowa z 3 alternatyw (omija ograniczenia tonażowe)
+// Gdy typPojazdu nie podany → strategia 'middle' (bezpieczna, nie dopłacać).
+export async function calculateDistance(
+  oddzialNazwa: string,
+  adresDostawy: string,
+  typPojazdu?: string | null
+): Promise<number | null> {
   if (!adresDostawy || !oddzialNazwa) return null;
 
-  const cacheKey = `${oddzialNazwa}:${adresDostawy.trim().toLowerCase()}`;
+  const strategy = getStrategiaKm(typPojazdu);
+  const cacheKey = `${oddzialNazwa}:${adresDostawy.trim().toLowerCase()}:${strategy}`;
   if (distanceCache.has(cacheKey)) return distanceCache.get(cacheKey)!;
 
   const from = getOddzialCoordsByName(oddzialNazwa);
@@ -278,9 +323,10 @@ export async function calculateDistance(oddzialNazwa: string, adresDostawy: stri
   const to = await geocodeAddress(adresDostawy);
   if (!to) return null;
 
-  const km = await getRouteDistance(from, to);
-  if (km != null) {
-    distanceCache.set(cacheKey, km);
-  }
+  const alternatives = await getRouteAlternatives(from, to);
+  if (!alternatives || alternatives.length === 0) return null;
+
+  const { km } = pickKmFromAlternatives(alternatives, strategy);
+  distanceCache.set(cacheKey, km);
   return km;
 }

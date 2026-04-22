@@ -158,7 +158,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
           const adres = wzMap.get(z.id)?.adres;
           if (!adres) continue;
           const coords = await geocodeAddress(adres);
-          const km = await calculateDistance(oddzialNazwa, adres);
+          const km = await calculateDistance(oddzialNazwa, adres, z.typ_pojazdu);
           setZlecenia(prev => prev.map(zl => zl.id === z.id ? {
             ...zl,
             dystans_km: km ?? zl.dystans_km,
