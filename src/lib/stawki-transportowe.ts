@@ -164,31 +164,57 @@ const CENNIKOWY_TO_SYSTEMOWE: Record<string, string[]> = {
   'HDS 12,0t': ['HDS 12,0t', 'HDS 11,7t', 'HDS 12T'],
 };
 
-// Hierarchia fallback: jeśli nie ma danego typu, próbuj mniejszy
+// Hierarchia fallback — kolejność: najpierw mniejszy (tańszy), potem większy (droższy).
+// Dzięki temu oddział bez dokładnego typu pokaże się z najbliższym dostępnym
+// (w dół jak można, w górę jak nie ma nic mniejszego).
 const FALLBACK_CHAIN: Record<string, string[]> = {
+  // HDS — w ramach rodziny HDS
   'HDS 12,0t': ['HDS 9,0t'],
-  'HDS 9,0t': [],
+  'HDS 9,0t': ['HDS 12,0t'],
+  // Windy — w ramach rodziny wind
   'z windą do 15t': ['z windą do 6t', 'z windą do 1,8t'],
-  'z windą do 6t': ['z windą do 1,8t'],
-  'z windą do 1,8t': [],
-  'do 1,2t bez windy': ['z windą do 1,8t'],
-  'do 700kg': ['do 1,2t bez windy', 'z windą do 1,8t'],
+  'z windą do 6t': ['z windą do 1,8t', 'z windą do 15t'],
+  'z windą do 1,8t': ['z windą do 6t', 'z windą do 15t'],
+  // Dostawcze — fallback na windę (brak osobówki → można wziąć windę)
+  'do 1,2t bez windy': ['z windą do 1,8t', 'z windą do 6t', 'z windą do 15t'],
+  'do 700kg': ['do 1,2t bez windy', 'z windą do 1,8t', 'z windą do 6t', 'z windą do 15t'],
 };
+
+// Ranking typów wg ładowności — do określenia kierunku fallbacku (↓ w dół / ↑ w górę).
+const TYPY_RANKING: Record<string, number> = {
+  'do 700kg': 0,
+  'do 1,2t bez windy': 1,
+  'z windą do 1,8t': 2,
+  'z windą do 6t': 3,
+  'z windą do 15t': 4,
+  'HDS 9,0t': 5,
+  'HDS 12,0t': 6,
+};
+
+function fallbackDirection(from: string, to: string): 'down' | 'up' | null {
+  const rFrom = TYPY_RANKING[from];
+  const rTo = TYPY_RANKING[to];
+  if (rFrom == null || rTo == null || rFrom === rTo) return null;
+  return rTo < rFrom ? 'down' : 'up';
+}
 
 /**
  * Znajdź najlepszy dostępny typ cennikowy dla danego oddziału.
- * @param typCennikowy — wybrany typ (np. "HDS 12t")
+ * @param typCennikowy — wybrany typ (np. "HDS 12,0t")
  * @param flotaTypy — Set typów systemowych dostępnych na oddziale (np. Set(["HDS 8,9t", "Winda 6,3t"]))
- * @returns { typ: string, fallback: boolean } — typ cennikowy do użycia + czy to fallback
+ * @returns
+ *  - typ: cennikowy typ do użycia
+ *  - fallback: czy to fallback (nie dokładny dopasowanie)
+ *  - direction: 'down' (mniejszy niż żądany) / 'up' (większy) / null (dokładny albo ta sama klasa)
  */
 export function findBestAvailableType(
   typCennikowy: string,
   flotaTypy: Set<string>
-): { typ: string; fallback: boolean } | null {
+): { typ: string; fallback: boolean; direction: 'down' | 'up' | null } | null {
   // Sprawdź czy oddział ma dokładny typ
   const systemowe = CENNIKOWY_TO_SYSTEMOWE[typCennikowy] || [];
   if (systemowe.some(t => flotaTypy.has(t))) {
-    return { typ: typCennikowy, fallback: false };
+    return { typ: typCennikowy, fallback: false, direction: null };
   }
 
   // Próbuj fallback chain
@@ -196,7 +222,11 @@ export function findBestAvailableType(
   for (const fallbackTyp of chain) {
     const fbSystemowe = CENNIKOWY_TO_SYSTEMOWE[fallbackTyp] || [];
     if (fbSystemowe.some(t => flotaTypy.has(t))) {
-      return { typ: fallbackTyp, fallback: true };
+      return {
+        typ: fallbackTyp,
+        fallback: true,
+        direction: fallbackDirection(typCennikowy, fallbackTyp),
+      };
     }
   }
 

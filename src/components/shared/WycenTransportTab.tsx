@@ -40,6 +40,7 @@ interface WynikOddzialu {
   jestMojOddzial: boolean;
   uzytTyp: string | null;
   isFallback: boolean;
+  fallbackDirection: 'down' | 'up' | null;
   zewTypy: string[];
 }
 
@@ -304,11 +305,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         let kosztWew: { netto: number; brutto: number } | null = null;
         let uzytTyp: string | null = null;
         let isFallback = false;
+        let fallbackDirection: 'down' | 'up' | null = null;
 
         if (bestType) {
           kosztWew = obliczKosztWew(km, bestType.typ);
           uzytTyp = bestType.typ;
           isFallback = bestType.fallback;
+          fallbackDirection = bestType.direction;
         }
 
         const zewTypy = flotaZew.get(kod) || new Set<string>();
@@ -329,6 +332,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           jestMojOddzial: kod === mojKod,
           uzytTyp,
           isFallback,
+          fallbackDirection,
           zewTypy: matchingZewTypy,
         });
       }
@@ -491,7 +495,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           )}
                           {w.isFallback && w.uzytTyp && (
                             <div className="text-xs text-orange-600 dark:text-orange-400">
-                              ↳ auto: {w.uzytTyp}
+                              {w.fallbackDirection === 'up' ? '↑' : w.fallbackDirection === 'down' ? '↓' : '↳'} auto: {w.uzytTyp}
                             </div>
                           )}
                           {w.zewTypy.length > 0 && (
