@@ -84,8 +84,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [pokazZew, setPokazZew] = useState(false);
 
   // Zamrożone parametry z czasu ostatniego udanego wyliczenia (żeby header tabeli
-  // nie "kłamał" gdy user zmieni dropdown/adres bez ponownego kliknięcia Wylicz)
-  const [lastCalc, setLastCalc] = useState<{ typ: string; adres: string } | null>(null);
+  // nie "kłamał" gdy user zmieni dropdown/adres/oddział bez ponownego kliknięcia Wylicz)
+  const [lastCalc, setLastCalc] = useState<{ typ: string; adres: string; oddzialNazwa: string } | null>(null);
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
@@ -265,6 +265,20 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const flotaWlasna = buildTypMap(flotaData || []);
       const flotaZew = buildTypMap(flotaZewData || []);
 
+      // KAT i R dzielą fizycznie to samo miejsce (ul. Kościuszki 326) i tę samą flotę.
+      // Mergujemy pule typów pod oba klucze, żeby każdy z nich widział wszystkie auta.
+      const mergeKATR = (map: Map<string, Set<string>>) => {
+        const kat = map.get('KAT') || new Set<string>();
+        const r = map.get('R') || new Set<string>();
+        const merged = new Set<string>([...kat, ...r]);
+        if (merged.size > 0) {
+          map.set('KAT', merged);
+          map.set('R', merged);
+        }
+      };
+      mergeKATR(flotaWlasna);
+      mergeKATR(flotaZew);
+
       // 3. Oblicz odległość od KAŻDEGO oddziału
       const oddzialy = Object.entries(ODDZIAL_COORDS);
       const oddzialyFiltered = oddzialy.filter(([kod]) => {
@@ -335,14 +349,14 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const jestZew = finalResults.some(r => r.kosztZew !== null);
       setPokazZew(jestZew);
       setWyniki(finalResults);
-      setLastCalc({ typ: typPojazdu, adres });
+      setLastCalc({ typ: typPojazdu, adres, oddzialNazwa });
     } catch (e) {
       console.error('[WycenTransport] error:', e);
       setError('Wystąpił błąd podczas wyliczania. Spróbuj ponownie.');
     } finally {
       setLoading(false);
     }
-  }, [typPojazdu, adres, mojKod, selectedCoords]);
+  }, [typPojazdu, adres, mojKod, selectedCoords, oddzialNazwa]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !loading) {
@@ -431,7 +445,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             <h3 className="font-semibold text-sm">
               Wyniki dla: <span className="text-primary">{lastCalc.typ}</span> → {lastCalc.adres}
             </h3>
-            {(typPojazdu !== lastCalc.typ || adres !== lastCalc.adres) && (
+            {(typPojazdu !== lastCalc.typ || adres !== lastCalc.adres || oddzialNazwa !== lastCalc.oddzialNazwa) && (
               <div className="text-sm bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 text-yellow-900 dark:text-yellow-100 p-3 rounded-md">
                 ⚠️ Zmieniłeś parametry — kliknij <strong>'Wylicz koszt'</strong>, aby zaktualizować wyniki.
               </div>
