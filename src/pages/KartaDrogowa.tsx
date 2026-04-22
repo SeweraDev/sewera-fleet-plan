@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { geocodeAddress, getKmProstaFromOddzial, ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { useAuth } from '@/hooks/useAuth';
 
 interface KursFull {
   id: string;
@@ -40,6 +41,7 @@ interface PrzystanekFull {
 
 export default function KartaDrogowa() {
   const { kursId } = useParams<{ kursId: string }>();
+  const { profile } = useAuth();
   const [kurs, setKurs] = useState<KursFull | null>(null);
   const [przystanki, setPrzystanki] = useState<PrzystanekFull[]>([]);
   const [loading, setLoading] = useState(true);
@@ -263,8 +265,8 @@ export default function KartaDrogowa() {
               <td colSpan={3}>{kurs.oddzial_adres}</td>
             </tr>
             <tr>
-              <td className="font-semibold">Godzina wyjazdu:</td>
-              <td>{kurs.godzina_start || '_____________'}</td>
+              <td className="font-semibold">Dyspozytor:</td>
+              <td>{profile?.full_name || '—'}</td>
               <td className="font-semibold">Ładowność:</td>
               <td>{kurs.ladownosc_kg} kg{kurs.max_palet ? ` · ${kurs.max_palet} pal` : ''}</td>
             </tr>
@@ -296,7 +298,7 @@ export default function KartaDrogowa() {
               <th>Odbiorca</th>
               <th className="w-32">Nr WZ / Nr zam.</th>
               <th>Adres</th>
-              <th className="w-16">Prosta (km)</th>
+              <th className="w-20">Linia prosta (km)</th>
               <th className="w-20">Km dojazd</th>
               <th className="w-20">Km wyjazd</th>
               <th className="w-12">Kg</th>
@@ -315,12 +317,7 @@ export default function KartaDrogowa() {
                   {p.numer_wz || p.zl_numer}
                   {p.nr_zamowienia && <div className="text-[8pt] text-muted-foreground">{p.nr_zamowienia}</div>}
                 </td>
-                <td>
-                  {p.adres}
-                  {p.km_prosta != null && (
-                    <div className="text-[8pt] text-muted-foreground">prosta: {p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km</div>
-                  )}
-                </td>
+                <td>{p.adres}</td>
                 <td className="text-right">
                   {p.km_prosta != null ? p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
                 </td>
@@ -334,18 +331,6 @@ export default function KartaDrogowa() {
             ))}
           </tbody>
         </table>
-
-        {/* Stopka */}
-        <div className="mt-6 grid grid-cols-2 gap-8">
-          <div>
-            <div className="text-xs font-semibold mb-6">Podpis kierowcy:</div>
-            <div className="border-b border-black"></div>
-          </div>
-          <div>
-            <div className="text-xs font-semibold mb-6">Podpis dyspozytora:</div>
-            <div className="border-b border-black"></div>
-          </div>
-        </div>
 
         <div className="text-[8pt] text-muted-foreground mt-4 text-center">
           Wydrukowano: {new Date().toLocaleString('pl-PL')}
