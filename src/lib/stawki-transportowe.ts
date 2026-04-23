@@ -233,6 +233,43 @@ export function findBestAvailableType(
   return null; // oddział nie ma żadnego pasującego auta
 }
 
+export interface AplicableType {
+  typ: string; // typ cennikowy (np. 'HDS 9,0t')
+  rawTypy: string[]; // konkretne typy systemowe w flocie oddziału (np. ['HDS 9,0t', 'HDS 9,1t'])
+  isFallback: boolean;
+  direction: 'down' | 'up' | null;
+}
+
+/**
+ * Zwraca WSZYSTKIE typy cennikowe, dla których oddział ma pasujące auta w puli.
+ * Uwzględnia typ żądany oraz całą ścieżkę fallback.
+ * Deduplikacja po typie cennikowym (jeśli pula ma HDS 9,0t i HDS 9,1t, obie mapują
+ * na 'HDS 9,0t' — zwraca jeden wpis z rawTypy = ['HDS 9,0t', 'HDS 9,1t']).
+ */
+export function listApplicableTypes(
+  typCennikowy: string,
+  flotaTypy: Set<string>
+): AplicableType[] {
+  const applicableTypes = [typCennikowy, ...(FALLBACK_CHAIN[typCennikowy] || [])];
+  const result: AplicableType[] = [];
+  const seen = new Set<string>();
+  for (const appTyp of applicableTypes) {
+    if (seen.has(appTyp)) continue;
+    seen.add(appTyp);
+    const systemowe = CENNIKOWY_TO_SYSTEMOWE[appTyp] || [];
+    const matchingRaw = systemowe.filter(t => flotaTypy.has(t));
+    if (matchingRaw.length === 0) continue;
+    const isFallback = appTyp !== typCennikowy;
+    result.push({
+      typ: appTyp,
+      rawTypy: matchingRaw,
+      isFallback,
+      direction: isFallback ? fallbackDirection(typCennikowy, appTyp) : null,
+    });
+  }
+  return result;
+}
+
 // ============================================================
 // OBLICZANIE KOSZTÓW — TRANSPORT WEWNĘTRZNY
 // ============================================================
