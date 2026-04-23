@@ -276,22 +276,6 @@ export default function KartaDrogowa() {
           </tbody>
         </table>
 
-        {/* Km bazowe — wyjazd i powrót */}
-        <div className="flex gap-4 mb-3 border border-black p-2 bg-gray-50">
-          <div className="flex-1">
-            <div className="text-[10px] font-semibold">Km licznika — wyjazd z bazy:</div>
-            <div className="border-b border-black h-6 mt-1"></div>
-          </div>
-          <div className="flex-1">
-            <div className="text-[10px] font-semibold">Km licznika — powrót do bazy:</div>
-            <div className="border-b border-black h-6 mt-1"></div>
-          </div>
-          <div className="flex-1">
-            <div className="text-[10px] font-semibold">Łączny przejazd (km):</div>
-            <div className="border-b border-black h-6 mt-1"></div>
-          </div>
-        </div>
-
         {/* Tabela przystanków */}
         <table className="w-full border-collapse karta-table">
           <thead>
@@ -303,8 +287,8 @@ export default function KartaDrogowa() {
               <th>Adres</th>
               <th className="w-20">Linia prosta (km)</th>
               <th className="w-14">Klasyf.</th>
-              <th className="w-20">Km dojazd</th>
               <th className="w-20">Km wyjazd</th>
+              <th className="w-20">Km przyjazd</th>
               <th className="w-12">Kg</th>
               <th className="w-10">Pal</th>
               <th className="w-24">Telefon</th>
