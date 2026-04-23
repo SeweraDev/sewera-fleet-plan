@@ -46,18 +46,23 @@ export function useMapaZlecen(dzien: string) {
       .eq('dzien', dzien);
     const kursIdsZDnia = (kursyDnia || []).map(k => k.id);
 
-    // 1b. Zlecenia: (dzien == wybrany dzień) LUB (przypisane do kursu z wybranego dnia)
+    // 1b. Zlecenia: (dzien == wybrany dzień)
+    //          LUB (przypisane do kursu z wybranego dnia)
+    //          LUB (bez kursu — zaległe/nieprzydzielone, niezależnie od daty)
+    // Zlecenia bez kursu muszą być widoczne na mapie żeby dyspozytor mógł je
+    // zaplanować — dotyczy to też zleceń przekazanych z innych oddziałów,
+    // które trafiają bez kursu.
     let query = supabase
       .from('zlecenia')
       .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id')
       .in('status', ['robocza', 'do_weryfikacji', 'potwierdzona', 'w_trasie'])
       .order('created_at', { ascending: true });
 
+    const orParts = [`dzien.eq.${dzien}`, 'kurs_id.is.null'];
     if (kursIdsZDnia.length > 0) {
-      query = query.or(`dzien.eq.${dzien},kurs_id.in.(${kursIdsZDnia.join(',')})`);
-    } else {
-      query = query.eq('dzien', dzien);
+      orParts.push(`kurs_id.in.(${kursIdsZDnia.join(',')})`);
     }
+    query = query.or(orParts.join(','));
 
     const { data: zlData } = await query;
 
