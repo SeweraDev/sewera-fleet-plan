@@ -37,13 +37,29 @@ export function useMapaZlecen(dzien: string) {
   const refetch = useCallback(async () => {
     setLoading(true);
 
-    // 1. Zlecenia na dany dzień — zaplanowane + w trasie (bez dostarczonych i anulowanych)
-    const { data: zlData } = await supabase
+    // 1a. Kursy z wybranego dnia — żeby zlecenia przypisane do nich też były
+    //     widoczne, nawet jeśli ich zlecenia.dzien wskazuje na inny dzień
+    //     (zlecenie mogło być planowane na wczoraj, a dziś jedzie w kursie).
+    const { data: kursyDnia } = await supabase
+      .from('kursy')
+      .select('id')
+      .eq('dzien', dzien);
+    const kursIdsZDnia = (kursyDnia || []).map(k => k.id);
+
+    // 1b. Zlecenia: (dzien == wybrany dzień) LUB (przypisane do kursu z wybranego dnia)
+    let query = supabase
       .from('zlecenia')
       .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id')
-      .eq('dzien', dzien)
       .in('status', ['robocza', 'do_weryfikacji', 'potwierdzona', 'w_trasie'])
       .order('created_at', { ascending: true });
+
+    if (kursIdsZDnia.length > 0) {
+      query = query.or(`dzien.eq.${dzien},kurs_id.in.(${kursIdsZDnia.join(',')})`);
+    } else {
+      query = query.eq('dzien', dzien);
+    }
+
+    const { data: zlData } = await query;
 
     if (!zlData || zlData.length === 0) {
       setZlecenia([]);
