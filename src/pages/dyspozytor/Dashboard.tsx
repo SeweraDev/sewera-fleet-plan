@@ -48,7 +48,7 @@ const KursyMapView = lazy(() => import('@/components/dyspozytor/KursyMapView'));
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
   { id: 'zlecenia', label: '📋 Zlecenia' },
-  { id: 'kolejka', label: '🔍 Podgląd' },
+  { id: 'kolejka', label: '🔍 Podgląd zleceń' },
   { id: 'nowe_zlecenie', label: '➕ Nowe zlecenie' },
   { id: 'wycen', label: '💰 Wyceń transport' },
   { id: 'flota', label: '🔧 Flota' },
