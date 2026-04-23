@@ -44,8 +44,6 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   dyspozytor: [
     { title: 'Dashboard', url: '/dyspozytor', icon: LayoutDashboard },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
-    { title: 'Flota', url: '/dyspozytor/flota', icon: Truck },
-    { title: 'Trasy', url: '/dyspozytor/trasy', icon: MapPin },
   ],
   sprzedawca: [
     { title: 'Dashboard', url: '/sprzedawca', icon: LayoutDashboard },
