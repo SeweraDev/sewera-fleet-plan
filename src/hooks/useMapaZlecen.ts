@@ -24,6 +24,18 @@ export interface MapaZlecenieDto {
   lng: number | null;
 }
 
+export interface MapaKursDto {
+  id: string;
+  numer: string;
+  status: string;
+  godzina_start: string | null;
+  kierowca_nazwa: string | null;
+  oddzial_kod: string;
+  oddzial_nazwa: string;
+  nr_rej: string | null;
+  pojazd_typ: string | null;
+}
+
 import { NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
 
 /**
@@ -32,19 +44,21 @@ import { NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
  */
 export function useMapaZlecen(dzien: string) {
   const [zlecenia, setZlecenia] = useState<MapaZlecenieDto[]>([]);
+  const [kursyDnia, setKursyDnia] = useState<MapaKursDto[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refetch = useCallback(async () => {
     setLoading(true);
 
-    // 1a. Kursy z wybranego dnia — żeby zlecenia przypisane do nich też były
-    //     widoczne, nawet jeśli ich zlecenia.dzien wskazuje na inny dzień
-    //     (zlecenie mogło być planowane na wczoraj, a dziś jedzie w kursie).
-    const { data: kursyDnia } = await supabase
+    // 1a. Kursy z wybranego dnia (pełne dane) — żeby zlecenia przypisane do
+    //     nich były widoczne nawet jeśli ich zlecenia.dzien wskazuje na inny
+    //     dzień, plus żeby pokazać listę kursów dnia pod mapą.
+    const { data: kursyDniaRaw } = await supabase
       .from('kursy')
-      .select('id')
-      .eq('dzien', dzien);
-    const kursIdsZDnia = (kursyDnia || []).map(k => k.id);
+      .select('id, numer, status, godzina_start, kierowca_nazwa, flota_id, nr_rej_zewn, oddzial_id')
+      .eq('dzien', dzien)
+      .order('godzina_start', { ascending: true, nullsFirst: false });
+    const kursIdsZDnia = (kursyDniaRaw || []).map(k => k.id);
 
     // 1b. Zlecenia: (dzien == wybrany dzień)
     //          LUB (przypisane do kursu z wybranego dnia)
@@ -66,14 +80,11 @@ export function useMapaZlecen(dzien: string) {
 
     const { data: zlData } = await query;
 
-    if (!zlData || zlData.length === 0) {
-      setZlecenia([]);
-      setLoading(false);
-      return;
-    }
-
-    // 2. Oddziały
-    const oddzialIds = [...new Set(zlData.map(z => z.oddzial_id).filter(Boolean))];
+    // 2. Oddziały — dla zleceń i kursów dnia
+    const oddzialIdsSet = new Set<number>();
+    (zlData || []).forEach(z => { if (z.oddzial_id) oddzialIdsSet.add(z.oddzial_id); });
+    (kursyDniaRaw || []).forEach(k => { if ((k as any).oddzial_id) oddzialIdsSet.add((k as any).oddzial_id); });
+    const oddzialIds = [...oddzialIdsSet];
     const oddzialMap = new Map<number, string>();
     if (oddzialIds.length > 0) {
       const { data: oData } = await supabase
@@ -83,19 +94,50 @@ export function useMapaZlecen(dzien: string) {
       (oData || []).forEach(o => oddzialMap.set(o.id, o.nazwa));
     }
 
-    // 3. Kursy
-    const kursIds = zlData.map(z => z.kurs_id).filter(Boolean) as string[];
-    const kursMap = new Map<string, { numer: string; flota_id: string | null; nr_rej_zewn: string | null }>();
-    if (kursIds.length > 0) {
+    // 3. Kursy — łączymy kursy z wybranego dnia (pełne dane) z kursami przypisanymi
+    //     do zleceń (mogą być z innego dnia, pobieramy je dodatkowo).
+    interface KursRow {
+      numer: string;
+      flota_id: string | null;
+      nr_rej_zewn: string | null;
+      status: string;
+      godzina_start: string | null;
+      kierowca_nazwa: string | null;
+      oddzial_id: number | null;
+    }
+    const kursMap = new Map<string, KursRow>();
+    (kursyDniaRaw || []).forEach(k => {
+      const kAny = k as any;
+      kursMap.set(k.id, {
+        numer: kAny.numer || k.id.slice(0, 8),
+        flota_id: kAny.flota_id,
+        nr_rej_zewn: k.nr_rej_zewn,
+        status: kAny.status,
+        godzina_start: kAny.godzina_start,
+        kierowca_nazwa: kAny.kierowca_nazwa,
+        oddzial_id: kAny.oddzial_id,
+      });
+    });
+    // Dopełnij kursami przypisanymi do zleceń a nieobecnymi w kursMap
+    const brakKurs = [...new Set((zlData || []).map(z => z.kurs_id).filter(Boolean) as string[])]
+      .filter(id => !kursMap.has(id));
+    if (brakKurs.length > 0) {
       const { data: kData } = await supabase
         .from('kursy')
-        .select('id, numer, flota_id, nr_rej_zewn')
-        .in('id', kursIds);
-      (kData || []).forEach(k => kursMap.set(k.id, {
-        numer: (k as any).numer || k.id.slice(0, 8),
-        flota_id: (k as any).flota_id,
-        nr_rej_zewn: k.nr_rej_zewn,
-      }));
+        .select('id, numer, flota_id, nr_rej_zewn, status, godzina_start, kierowca_nazwa, oddzial_id')
+        .in('id', brakKurs);
+      (kData || []).forEach(k => {
+        const kAny = k as any;
+        kursMap.set(k.id, {
+          numer: kAny.numer || k.id.slice(0, 8),
+          flota_id: kAny.flota_id,
+          nr_rej_zewn: k.nr_rej_zewn,
+          status: kAny.status,
+          godzina_start: kAny.godzina_start,
+          kierowca_nazwa: kAny.kierowca_nazwa,
+          oddzial_id: kAny.oddzial_id,
+        });
+      });
     }
 
     // 4. Flota (nr_rej + typ per kurs)
@@ -123,7 +165,7 @@ export function useMapaZlecen(dzien: string) {
     }
 
     // 6. WZ sumy + odbiorca/adres
-    const ids = zlData.map(z => z.id);
+    const ids = (zlData || []).map(z => z.id);
     const wzMap = new Map<string, { suma_kg: number; suma_m3: number; suma_palet: number; odbiorca: string | null; adres: string | null }>();
     if (ids.length > 0) {
       const { data: wzData } = await supabase
@@ -144,7 +186,7 @@ export function useMapaZlecen(dzien: string) {
     }
 
     // 7. Buduj DTOs
-    const result: MapaZlecenieDto[] = zlData.map(z => {
+    const result: MapaZlecenieDto[] = (zlData || []).map(z => {
       const oddzialNazwa = z.oddzial_id ? oddzialMap.get(z.oddzial_id) || '' : '';
       const oddzialKod = NAZWA_TO_KOD[oddzialNazwa] || '';
       const kursInfo = z.kurs_id ? kursMap.get(z.kurs_id) : null;
@@ -175,7 +217,28 @@ export function useMapaZlecen(dzien: string) {
       };
     });
 
+    // 7b. Buduj listę kursów dnia (pod mapą)
+    const kursyDniaResult: MapaKursDto[] = (kursyDniaRaw || []).map(k => {
+      const kRow = kursMap.get(k.id);
+      const flotaInfo = kRow?.flota_id ? flotaMap.get(kRow.flota_id) : null;
+      const flotaZewInfo = kRow?.nr_rej_zewn ? flotaZewMap.get(kRow.nr_rej_zewn) : null;
+      const oddzialNazwa = kRow?.oddzial_id ? oddzialMap.get(kRow.oddzial_id) || '' : '';
+      const oddzialKod = NAZWA_TO_KOD[oddzialNazwa] || '';
+      return {
+        id: k.id,
+        numer: kRow?.numer || k.id.slice(0, 8),
+        status: kRow?.status || '',
+        godzina_start: kRow?.godzina_start || null,
+        kierowca_nazwa: kRow?.kierowca_nazwa || null,
+        oddzial_kod: oddzialKod,
+        oddzial_nazwa: oddzialNazwa,
+        nr_rej: flotaInfo?.nr_rej || kRow?.nr_rej_zewn || null,
+        pojazd_typ: flotaInfo?.typ || flotaZewInfo?.typ || null,
+      };
+    });
+
     setZlecenia(result);
+    setKursyDnia(kursyDniaResult);
     setLoading(false);
 
     // 8. Geocoding w tle — sekwencyjnie
@@ -201,5 +264,5 @@ export function useMapaZlecen(dzien: string) {
     return () => { supabase.removeChannel(channel); };
   }, [refetch]);
 
-  return { zlecenia, loading, refetch };
+  return { zlecenia, kursyDnia, loading, refetch };
 }

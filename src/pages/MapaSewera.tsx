@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/shared/AppLayout';
 import { useMapaZlecen } from '@/hooks/useMapaZlecen';
 import type { MapaZlecenieDto } from '@/hooks/useMapaZlecen';
@@ -45,7 +46,18 @@ function formatDatePL(iso: string): string {
 
 export default function MapaSewera() {
   const [dzien, setDzien] = useState(today);
-  const { zlecenia, loading } = useMapaZlecen(dzien);
+  const { zlecenia, kursyDnia, loading } = useMapaZlecen(dzien);
+
+  // Podliczenie przystanków per kurs (do karty kursu pod mapą)
+  const przystankiPoKursie = useMemo(() => {
+    const m = new Map<string, MapaZlecenieDto[]>();
+    zlecenia.forEach(z => {
+      if (!z.kurs_id) return;
+      if (!m.has(z.kurs_id)) m.set(z.kurs_id, []);
+      m.get(z.kurs_id)!.push(z);
+    });
+    return m;
+  }, [zlecenia]);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -285,6 +297,72 @@ export default function MapaSewera() {
             </div>
           ))}
         </div>
+
+        {/* Kursy dnia — lista kursów wszystkich oddziałów na wybrany dzień */}
+        {kursyDnia.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <h2 className="text-sm font-semibold">
+              🚛 Kursy dnia ({kursyDnia.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {kursyDnia.map(k => {
+                const oddzialColor = ODDZIAL_COLORS[k.oddzial_kod] || DEFAULT_COLOR;
+                const przystanki = przystankiPoKursie.get(k.id) || [];
+                const sumaKg = przystanki.reduce((s, p) => s + p.suma_kg, 0);
+                const sumaPal = przystanki.reduce((s, p) => s + p.suma_palet, 0);
+                return (
+                  <div key={k.id} className="rounded-lg border bg-card p-3 text-xs space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: oddzialColor }} />
+                        <span className="font-semibold truncate">{k.numer}</span>
+                        <span className="text-muted-foreground">({k.oddzial_kod})</span>
+                      </div>
+                      <Link
+                        to={`/karta-drogowa/${k.id}`}
+                        className="text-[10px] text-primary hover:underline shrink-0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        🖨️ Karta
+                      </Link>
+                    </div>
+                    <div className="text-muted-foreground space-y-0.5">
+                      {k.nr_rej && (
+                        <div>
+                          <span className="font-mono">{k.nr_rej}</span>
+                          {k.pojazd_typ && <span className="ml-1">· {k.pojazd_typ}</span>}
+                        </div>
+                      )}
+                      {k.kierowca_nazwa && <div>👤 {k.kierowca_nazwa}</div>}
+                      {k.godzina_start && <div>🕐 start: {k.godzina_start.slice(0, 5)}</div>}
+                      <div>
+                        📦 {przystanki.length} przyst. · {Math.round(sumaKg)} kg
+                        {sumaPal > 0 && ` · ${sumaPal} pal`}
+                      </div>
+                    </div>
+                    {przystanki.length > 0 && (
+                      <div className="pt-1 border-t space-y-0.5 text-[11px]">
+                        {przystanki.slice(0, 4).map((p, i) => (
+                          <div key={p.id} className="truncate text-muted-foreground">
+                            <span className="font-medium text-foreground">{i + 1}.</span>{' '}
+                            {p.odbiorca || '?'}
+                            {p.adres && <span className="text-muted-foreground/70"> — {p.adres}</span>}
+                          </div>
+                        ))}
+                        {przystanki.length > 4 && (
+                          <div className="text-muted-foreground/70">
+                            + {przystanki.length - 4} więcej…
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
