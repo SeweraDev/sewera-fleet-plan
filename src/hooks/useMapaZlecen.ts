@@ -57,6 +57,7 @@ export function useMapaZlecen(dzien: string) {
       .from('kursy')
       .select('id, numer, status, godzina_start, kierowca_nazwa, flota_id, nr_rej_zewn, oddzial_id')
       .eq('dzien', dzien)
+      .neq('status', 'usuniety')
       .order('godzina_start', { ascending: true, nullsFirst: false });
     const kursIdsZDnia = (kursyDniaRaw || []).map(k => k.id);
 

@@ -5,6 +5,7 @@ import { useMapaZlecen } from '@/hooks/useMapaZlecen';
 import type { MapaZlecenieDto } from '@/hooks/useMapaZlecen';
 import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import { Button } from '@/components/ui/button';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Kolory oddziałów — stałe
@@ -327,6 +328,7 @@ export default function MapaSewera() {
                         🖨️ Karta
                       </Link>
                     </div>
+                    <div><StatusBadge status={k.status} /></div>
                     <div className="text-muted-foreground space-y-0.5">
                       {k.nr_rej && (
                         <div>
