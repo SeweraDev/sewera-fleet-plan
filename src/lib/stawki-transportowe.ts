@@ -281,7 +281,9 @@ export function obliczKosztWew(km: number, typCennikowy: string): KosztTransport
 
 /**
  * Oblicz koszt transportu zewnętrznego.
- * Interpolacja liniowa między punktami cenowymi.
+ * Metoda stref (analogicznie do transportu wewnętrznego): cena punktu
+ * obowiązuje dla km ≤ km_punktu. Dla km ≤ pierwszego punktu — cena pierwszego.
+ * Powyżej ostatniego punktu — stawka za km (gdy ustalona) lub ekstrapolacja.
  * @param km — odległość w jedną stronę
  * @param typCennikowy — typ cennikowy (np. "HDS 12t")
  * @param oddzialKod — kod oddziału (np. "GL", "KAT")
@@ -297,29 +299,17 @@ export function obliczKosztZew(km: number, typCennikowy: string, oddzialKod: str
   const kmRounded = Math.ceil(km);
   const punkty = stawka.punkty;
 
-  // Poniżej pierwszego punktu — użyj ceny pierwszego punktu
-  if (kmRounded <= punkty[0].km) {
-    return {
-      netto: round2(punkty[0].cena),
-      brutto: round2(punkty[0].cena * VAT),
-    };
-  }
-
-  // Interpolacja liniowa między punktami
-  for (let i = 1; i < punkty.length; i++) {
-    if (kmRounded <= punkty[i].km) {
-      const prev = punkty[i - 1];
-      const curr = punkty[i];
-      const ratio = (kmRounded - prev.km) / (curr.km - prev.km);
-      const netto = prev.cena + ratio * (curr.cena - prev.cena);
+  // Strefy: znajdź pierwszy punkt gdzie km ≤ punkt.km i użyj jego ceny.
+  for (const p of punkty) {
+    if (kmRounded <= p.km) {
       return {
-        netto: round2(netto),
-        brutto: round2(netto * VAT),
+        netto: round2(p.cena),
+        brutto: round2(p.cena * VAT),
       };
     }
   }
 
-  // Powyżej ostatniego punktu
+  // Powyżej ostatniego punktu — stawka za km, gdy znana
   if (stawka.stawkaZaKmPonad20 !== null) {
     const ostatni = punkty[punkty.length - 1];
     const netto = ostatni.cena + (kmRounded - ostatni.km) * stawka.stawkaZaKmPonad20;

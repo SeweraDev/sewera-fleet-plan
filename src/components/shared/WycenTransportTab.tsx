@@ -521,11 +521,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                         </td>
                         <td className="text-center p-3 tabular-nums border-r border-gray-400">
                           {w.km} km
-                          {w.kmInfo && (
-                            <div className="text-xs text-muted-foreground font-normal">
-                              {w.kmInfo}
-                            </div>
-                          )}
                         </td>
                         <td className="text-center p-3 tabular-nums">
                           {w.kosztWew ? formatPLN(w.kosztWew.netto) : '—'}
