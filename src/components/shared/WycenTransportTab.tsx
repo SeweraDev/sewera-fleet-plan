@@ -19,30 +19,28 @@ import {
   TYPY_KALKULATOR,
   obliczKosztWew,
   obliczKosztZew,
-  listApplicableTypes,
+  maStawkiZew,
+  findBestAvailableType,
+  mapTypNaCennikowy,
 } from '@/lib/stawki-transportowe';
-import type { KosztTransportu } from '@/lib/stawki-transportowe';
 
 interface WycenTransportTabProps {
   /** Nazwa oddziału zalogowanego usera, np. "Gliwice" */
   oddzialNazwa: string;
 }
 
-interface WycenaOpcja {
-  typ: string; // typ cennikowy np. 'HDS 9,0t'
-  koszt: KosztTransportu;
-  isFallback: boolean;
-  direction: 'down' | 'up' | null;
-  rawTypy: string[]; // konkretne typy systemowe w puli (np. ['HDS 11,7t'])
-}
-
 interface WynikOddzialu {
   kod: string;
   nazwa: string;
   km: number;
-  wewOpcje: WycenaOpcja[];
-  zewOpcje: WycenaOpcja[];
+  kosztWew: { netto: number; brutto: number } | null;
+  kosztZew: { netto: number; brutto: number } | null;
   jestMojOddzial: boolean;
+  uzytTyp: string | null;
+  isFallback: boolean;
+  fallbackDirection: 'down' | 'up' | null;
+  wewTypy: string[]; // konkretne typy aut wew pasujące do żądanego typu
+  zewTypy: string[];
 }
 
 const MAX_KM_INNE_ODDZIALY = 25;
@@ -298,59 +296,57 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         if (!alternatives || alternatives.length === 0) continue;
         const km = pickKmFromAlternatives(alternatives);
 
-        // Wew: wszystkie aplikowalne typy z puli własnej → po jednym wpisie per typ cennikowy
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
-        const wewAppl = listApplicableTypes(typPojazdu, wlasneTypy);
-        const wewOpcje: WycenaOpcja[] = [];
-        for (const a of wewAppl) {
-          const koszt = obliczKosztWew(km, a.typ);
-          if (!koszt) continue;
-          wewOpcje.push({
-            typ: a.typ,
-            koszt,
-            isFallback: a.isFallback,
-            direction: a.direction,
-            rawTypy: a.rawTypy,
-          });
+        const bestType = findBestAvailableType(typPojazdu, wlasneTypy);
+
+        let kosztWew: { netto: number; brutto: number } | null = null;
+        let uzytTyp: string | null = null;
+        let isFallback = false;
+        let fallbackDirection: 'down' | 'up' | null = null;
+
+        if (bestType) {
+          kosztWew = obliczKosztWew(km, bestType.typ);
+          uzytTyp = bestType.typ;
+          isFallback = bestType.fallback;
+          fallbackDirection = bestType.direction;
         }
 
-        // Zew: wszystkie aplikowalne typy z puli zewnętrznej → po jednym wpisie per typ cennikowy
-        const zewTypySet = flotaZew.get(kod) || new Set<string>();
-        const zewAppl = listApplicableTypes(typPojazdu, zewTypySet);
-        const zewOpcje: WycenaOpcja[] = [];
-        for (const a of zewAppl) {
-          const koszt = obliczKosztZew(km, a.typ, kod);
-          if (!koszt) continue;
-          zewOpcje.push({
-            typ: a.typ,
-            koszt,
-            isFallback: a.isFallback,
-            direction: a.direction,
-            rawTypy: a.rawTypy,
-          });
-        }
+        const matchingWewTypy = bestType ? [...wlasneTypy].filter(t => {
+          const mapped = mapTypNaCennikowy(t);
+          return mapped === typPojazdu || mapped === bestType.typ;
+        }) : [];
+
+        const zewTypy = flotaZew.get(kod) || new Set<string>();
+        const bestZewType = findBestAvailableType(typPojazdu, zewTypy);
+        // Liczymy koszt dla FAKTYCZNIE dostępnego typu (nie oryginalnie żądanego),
+        // żeby oddział z fallbackiem w górę (np. SOS ma HDS 12,0t, user szuka HDS 9,0t)
+        // dostał cenę wg HDS 12,0t zamiast nulla (brak stawki dla HDS 9,0t na SOS).
+        const kosztZew = bestZewType ? obliczKosztZew(km, bestZewType.typ, kod) : null;
+        const matchingZewTypy = bestZewType ? [...zewTypy].filter(t => {
+          const mapped = mapTypNaCennikowy(t);
+          return mapped === typPojazdu || mapped === bestZewType.typ;
+        }) : [];
 
         results.push({
           kod,
           nazwa: KOD_TO_NAZWA[kod] || kod,
           km,
-          wewOpcje,
-          zewOpcje,
+          kosztWew,
+          kosztZew,
           jestMojOddzial: kod === mojKod,
+          uzytTyp,
+          isFallback,
+          fallbackDirection,
+          wewTypy: matchingWewTypy,
+          zewTypy: matchingZewTypy,
         });
       }
 
       // 4. Filtruj
-      const minCena = (r: WynikOddzialu): number => {
-        const all = [...r.wewOpcje, ...r.zewOpcje].map(o => o.koszt.netto);
-        return all.length > 0 ? Math.min(...all) : 9999;
-      };
-      const maCene = (r: WynikOddzialu) => r.wewOpcje.length > 0 || r.zewOpcje.length > 0;
-
       const mojOddzial = results.find(r => r.jestMojOddzial);
       const inne = results
-        .filter(r => !r.jestMojOddzial && r.km <= MAX_KM_INNE_ODDZIALY && maCene(r))
-        .sort((a, b) => minCena(a) - minCena(b));
+        .filter(r => !r.jestMojOddzial && r.km <= MAX_KM_INNE_ODDZIALY && (r.kosztWew || r.kosztZew))
+        .sort((a, b) => (a.kosztWew?.netto ?? a.kosztZew?.netto ?? 9999) - (b.kosztWew?.netto ?? b.kosztZew?.netto ?? 9999));
 
       const finalResults: WynikOddzialu[] = [];
       if (mojOddzial) finalResults.push(mojOddzial);
@@ -358,9 +354,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         finalResults.push(r);
       }
 
-      finalResults.sort((a, b) => minCena(a) - minCena(b));
+      finalResults.sort((a, b) => {
+        const priceA = Math.min(a.kosztWew?.netto ?? 9999, a.kosztZew?.netto ?? 9999);
+        const priceB = Math.min(b.kosztWew?.netto ?? 9999, b.kosztZew?.netto ?? 9999);
+        return priceA - priceB;
+      });
 
-      const jestZew = finalResults.some(r => r.zewOpcje.length > 0);
+      const jestZew = finalResults.some(r => r.kosztZew !== null);
       setPokazZew(jestZew);
       setWyniki(finalResults);
       setLastCalc({ typ: typPojazdu, adres, oddzialNazwa });
@@ -490,42 +490,45 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                 <tbody>
                   {wyniki.map((w, idx) => {
                     const color = getRowColor(idx, wyniki.length);
-                    const wewRawy = Array.from(new Set(w.wewOpcje.flatMap(o => o.rawTypy)));
-                    const zewRawy = Array.from(new Set(w.zewOpcje.flatMap(o => o.rawTypy)));
                     return (
-                      <tr key={w.kod} className={`${color} border-t align-top`}>
+                      <tr key={w.kod} className={`${color} border-t`}>
                         <td className="p-3 font-medium">
                           {w.jestMojOddzial ? '📍 ' : ''}{w.nazwa}
                           {w.jestMojOddzial && (
                             <span className="text-xs text-muted-foreground ml-1">(Twój)</span>
                           )}
-                          {wewRawy.length > 0 && (
-                            <div className="text-xs text-muted-foreground">
-                              🚛 Sewera: {wewRawy.join(', ')}
+                          {w.isFallback && w.uzytTyp && (
+                            <div className="text-xs text-orange-600 dark:text-orange-400">
+                              {w.fallbackDirection === 'up' ? '↑' : w.fallbackDirection === 'down' ? '↓' : '↳'} auto: {w.uzytTyp}
                             </div>
                           )}
-                          {zewRawy.length > 0 && (
+                          {w.wewTypy.length > 0 && (
                             <div className="text-xs text-muted-foreground">
-                              🚛 zew: {zewRawy.join(', ')}
+                              🚛 Sewera: {w.wewTypy.join(', ')}
+                            </div>
+                          )}
+                          {w.zewTypy.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              🚛 zew: {w.zewTypy.join(', ')}
                             </div>
                           )}
                         </td>
                         <td className="text-center p-3 tabular-nums border-r border-gray-400">
                           {w.km} km
                         </td>
-                        <td className="p-3">
-                          {renderOpcjeCell(w.wewOpcje, 'netto')}
+                        <td className="text-center p-3 tabular-nums">
+                          {w.kosztWew ? formatPLN(w.kosztWew.netto) : '—'}
                         </td>
-                        <td className="p-3 border-r border-gray-400">
-                          {renderOpcjeCell(w.wewOpcje, 'brutto')}
+                        <td className="text-center p-3 tabular-nums font-bold border-r border-gray-400">
+                          {w.kosztWew ? formatPLN(w.kosztWew.brutto) : '—'}
                         </td>
                         {pokazZew && (
                           <>
-                            <td className="p-3">
-                              {renderOpcjeCell(w.zewOpcje, 'netto')}
+                            <td className="text-center p-3 tabular-nums">
+                              {w.kosztZew ? formatPLN(w.kosztZew.netto) : '—'}
                             </td>
-                            <td className="p-3">
-                              {renderOpcjeCell(w.zewOpcje, 'brutto')}
+                            <td className="text-center p-3 tabular-nums font-bold">
+                              {w.kosztZew ? formatPLN(w.kosztZew.brutto) : '—'}
                             </td>
                           </>
                         )}
@@ -568,27 +571,6 @@ function formatPLN(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }) + ' zł';
-}
-
-function renderOpcjeCell(opcje: WycenaOpcja[], field: 'netto' | 'brutto') {
-  if (opcje.length === 0) {
-    return <div className="text-center tabular-nums">—</div>;
-  }
-  return (
-    <div className="space-y-1">
-      {opcje.map((o, i) => (
-        <div key={o.typ + i} className="text-center tabular-nums leading-tight">
-          <div className={field === 'brutto' ? 'font-bold' : ''}>
-            {formatPLN(o.koszt[field])}
-          </div>
-          <div className="text-[11px] text-muted-foreground">
-            {o.isFallback && (o.direction === 'up' ? '↑ ' : o.direction === 'down' ? '↓ ' : '↳ ')}
-            {o.typ}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function getRowColor(idx: number, total: number): string {
