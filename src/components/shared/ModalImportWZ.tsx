@@ -861,10 +861,11 @@ export function parseWZText(rawText: string): WZImportData {
     if (/\(.*(?:SPÓŁKA|SP\.|S\.A\.|S\.C\.)/i.test(line)) continue;
     if (/^[A-Z]{1,3}-\d/.test(line)) continue;
     const hasLegalForm = /SPÓŁKA|SP\.\s*K|SP\.\s*Z|S\.A\.?|S\.C\.|Sp\.\s*z\s*o\.o\.|KOMANDYT/i.test(line);
-    const capsWords = line.split(/\s+/).filter((w) => /^[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}$/.test(w)).length;
+    // Allow optional surrounding quotes ("KOMPLEX", «FIRMA», 'ABC')
+    const capsWords = line.split(/\s+/).filter((w) => /^["'«»]?[A-ZĄĆĘŁŃÓŚŹŻ\-]{2,}["'«»]?$/.test(w)).length;
     // Match company-like names: initials with dots (P.A, P.H.U.), mixed case brand names
     const hasInitials = /\b[A-Z]\.[A-Z]\.?\b/.test(line);
-    const allCapsName = line.split(/\s+/).filter((w) => /^[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}$/.test(w)).length >= 2;
+    const allCapsName = line.split(/\s+/).filter((w) => /^["'«»]?[A-ZĄĆĘŁŃÓŚŹŻ][A-Za-ząćęłńóśźż.\-]{1,}["'«»]?$/.test(w)).length >= 2;
     if (hasLegalForm || capsWords >= 3 || (hasInitials && allCapsName)) {
       // Zbierz nazwę firmy + dane teleadresowe (obcinanie robimy w post-processing)
       const parts = [line];
@@ -1187,14 +1188,15 @@ export function parseWZText(rawText: string): WZImportData {
   }
 
   // Wyciągnij telefony z uwag (zawsze, niezależnie od sekcji adresu)
+  // Akceptujemy separatory: spacja, myślnik, kropka albo brak (np. "515-526-234", "515 526 234", "515526234")
   if (uwagi && !tel) {
     const uwagiLines = uwagi.split(/[\n,]/).map(l => l.trim()).filter(Boolean);
     const phoneNumbers: string[] = [];
     for (const line of uwagiLines) {
-      const phoneRegex = /(\d{3}\s?\d{3}\s?\d{3})/g;
+      const phoneRegex = /(\d{3}[\s\-.]?\d{3}[\s\-.]?\d{3})/g;
       let pm;
       while ((pm = phoneRegex.exec(line)) !== null) {
-        const digits = pm[1].replace(/\s/g, '');
+        const digits = pm[1].replace(/[\s\-.]/g, '');
         if (digits.length === 9) {
           phoneNumbers.push(digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'));
         }
