@@ -44,7 +44,6 @@ interface WynikOddzialu {
 }
 
 const MAX_KM_INNE_ODDZIALY = 25;
-const MAX_WYNIKOW = 3;
 
 const ODDZIAL_COLORS: Record<string, string> = {
   KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
@@ -352,7 +351,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const finalResults: WynikOddzialu[] = [];
       if (mojOddzial) finalResults.push(mojOddzial);
       for (const r of inne) {
-        if (finalResults.length >= MAX_WYNIKOW) break;
         finalResults.push(r);
       }
 
