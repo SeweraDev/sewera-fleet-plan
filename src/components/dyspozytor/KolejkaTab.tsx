@@ -52,12 +52,10 @@ interface Props {
   dzienDo?: string;
 }
 
-interface FlotaTypInfo {
-  total: number;       // wszystkie auta tego typu na oddziale (wlasna + zew)
-  totalWlasna: number;
-  totalZew: number;
-  zablokowane: number; // zablokowane na wybrany dzień (ref day)
-  dostepne: number;
+interface DostepneAuto {
+  id: string;
+  nr_rej: string;
+  jest_zewnetrzny: boolean;
 }
 
 export function KolejkaTab({ oddzialId, oddzialNazwa, dzien, dzienDo }: Props) {
@@ -87,23 +85,32 @@ export function KolejkaTab({ oddzialId, oddzialNazwa, dzien, dzienDo }: Props) {
     [pozycje, oddzialNazwa]
   );
 
-  // Info o flocie per typ kanoniczny — podstawa do pokazywania kolumn
-  // Referencyjny dzień dla blokad = dzien (pierwszy dzień zakresu)
+  // Dostępne auta per typ kanoniczny — lista konkretnych pojazdów (po nr_rej),
+  // POMIJAJĄC te zablokowane w dniu referencyjnym (= dzien / pierwszy dzień zakresu).
   const flotaPerTyp = useMemo(() => {
-    const m = new Map<TypKanoniczny, FlotaTypInfo>();
+    const m = new Map<TypKanoniczny, DostepneAuto[]>();
     for (const v of flota) {
       const kanon = TYP_NORM_LOCAL[v.typ];
-      if (!kanon) continue; // pomiń nieznane typy
-      const prev = m.get(kanon) || { total: 0, totalWlasna: 0, totalZew: 0, zablokowane: 0, dostepne: 0 };
-      prev.total += 1;
-      if (v.jest_zewnetrzny) prev.totalZew += 1; else prev.totalWlasna += 1;
-      // Blokada dla tego pojazdu na referencyjny dzień
+      if (!kanon) continue;
+      // Jeśli pojazd jest zablokowany na dziś — nie pokazujemy go wcale
       const typBlokady = v.jest_zewnetrzny ? 'zewnetrzny' : 'pojazd';
       const jestZablokowany = blokady.some(b => b.typ === typBlokady && b.zasob_id === v.id && b.dzien === dzien);
-      if (jestZablokowany) prev.zablokowane += 1;
-      prev.dostepne = prev.total - prev.zablokowane;
+      if (jestZablokowany) continue;
+      const prev = m.get(kanon) || [];
+      prev.push({
+        id: v.id,
+        nr_rej: v.nr_rej_raw || v.nr_rej, // bez sufiksu "(zew)" w samym nr rej
+        jest_zewnetrzny: !!v.jest_zewnetrzny,
+      });
       m.set(kanon, prev);
     }
+    // Sortuj: wlasne najpierw, potem zew; wewnątrz po nr_rej
+    m.forEach((arr) => {
+      arr.sort((a, b) => {
+        if (a.jest_zewnetrzny !== b.jest_zewnetrzny) return a.jest_zewnetrzny ? 1 : -1;
+        return a.nr_rej.localeCompare(b.nr_rej);
+      });
+    });
     return m;
   }, [flota, blokady, dzien]);
 
@@ -178,25 +185,28 @@ export function KolejkaTab({ oddzialId, oddzialNazwa, dzien, dzienDo }: Props) {
                       </span>
                     </div>
                   </div>
-                  {info ? (
-                    <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
-                      <span className="tabular-nums">
-                        🚛 {info.dostepne}/{info.total} aut
-                      </span>
-                      {info.zablokowane > 0 && (
-                        <span className="text-red-600 dark:text-red-400" title={`${info.zablokowane} auto zablokowane na ${dzien}`}>
-                          · 🚫 {info.zablokowane} zablok.
+                  {info && info.length > 0 ? (
+                    <div className="mt-1 flex items-center gap-1 flex-wrap">
+                      {info.map(a => (
+                        <span
+                          key={a.id}
+                          className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${a.jest_zewnetrzny
+                              ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200'
+                              : 'bg-background border-border'
+                            }`}
+                          title={a.jest_zewnetrzny ? 'Auto zewnętrzne' : 'Auto własne'}
+                        >
+                          {a.nr_rej}{a.jest_zewnetrzny ? ' (zew)' : ''}
                         </span>
-                      )}
-                      {info.totalZew > 0 && (
-                        <span className="text-muted-foreground/70">
-                          · zew: {info.totalZew}
-                        </span>
-                      )}
+                      ))}
                     </div>
                   ) : kod !== TYP_BEZ_PREF && cards.length > 0 ? (
                     <div className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
                       ⚠️ brak auta w flocie
+                    </div>
+                  ) : kod !== TYP_BEZ_PREF ? (
+                    <div className="text-[10px] text-muted-foreground mt-0.5 italic">
+                      brak aut dostępnych
                     </div>
                   ) : null}
                 </div>
