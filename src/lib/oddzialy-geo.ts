@@ -172,10 +172,10 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
 
 // Odległość po drogach → OSRM (darmowy publiczny serwer)
 
-// Zaokrąglenie km + korekta ×1.1 do 10 km (OSRM zaniża krótkie trasy)
+// Zaokrąglenie km + globalna korekta ×1.1 (OSRM systemowo zaniża km vs Google;
+// biznesowo wolimy nie dopłacać do transportu).
 function roundKm(rawKm: number): number {
-  const corrected = rawKm <= 10 ? rawKm * 1.1 : rawKm;
-  return Math.round(corrected);
+  return Math.round(rawKm * 1.1);
 }
 
 export async function getRouteDistance(
@@ -234,40 +234,16 @@ export function getKmProstaFromOddzial(
 }
 
 // ============================================================
-// STRATEGIA WYBORU TRASY WG TYPU POJAZDU
+// STRATEGIA WYBORU TRASY
 // ============================================================
-// Małe auta (do 1,2t, osobówki) → NAJKRÓTSZA trasa (wjadą wszędzie).
-// Duże auta (windy, HDS) → ŚRODKOWA z alternatyw OSRM (omija ograniczenia
-// tonażowe; zgodne z zasadą biznesową "nie dopłacać do transportu").
-//
-// Obsługuje typy SYSTEMOWE (flota.typ, zlecenia.typ_pojazdu) i CENNIKOWE
-// (kalkulator wyceny).
-export const TYPY_LEKKIE_KM = new Set<string>([
-  // systemowe
-  'Dostawczy 1,2t',
-  // cennikowe
-  'do 700kg',
-  'do 1,2t bez windy',
-]);
+// Dla wszystkich typów pojazdów bierzemy NAJDŁUŻSZĄ z dostępnych alternatyw
+// OSRM — biznesowa zasada "nie dopłacać do transportu". Wraz z globalną
+// korektą ×1.1 w roundKm daje km porównywalne lub nieco wyższe niż Google,
+// co zabezpiecza fakturowanie przed zaniżeniem.
 
-export function getStrategiaKm(typPojazdu: string | null | undefined): 'shortest' | 'middle' {
-  if (!typPojazdu) return 'middle'; // domyślnie bezpieczna (nie dopłacać)
-  const clean = typPojazdu.replace(/^zew:\s*/i, '').trim();
-  return TYPY_LEKKIE_KM.has(clean) ? 'shortest' : 'middle';
-}
-
-export function pickKmFromAlternatives(
-  alternatives: number[],
-  strategy: 'shortest' | 'middle'
-): { km: number; info: string } {
+export function pickKmFromAlternatives(alternatives: number[]): number {
   const sorted = [...alternatives].sort((a, b) => a - b);
-  const n = sorted.length;
-  if (strategy === 'shortest') {
-    return { km: sorted[0], info: n > 1 ? `najkrótsza z ${n}` : '' };
-  }
-  if (n >= 3) return { km: sorted[1], info: `środkowa z ${n}` };
-  if (n === 2) return { km: sorted[1], info: `dłuższa z 2` };
-  return { km: sorted[0], info: '' };
+  return sorted[sorted.length - 1]; // najdłuższa
 }
 
 // Pobierz WSZYSTKIE warianty trasy z OSRM (do 3 alternatyw).
@@ -331,23 +307,18 @@ export async function calculateRouteTotal(
   return null;
 }
 
-// Cache dystansu — klucz: "oddział:adres:strategia". Null NIE jest cache'owany.
+// Cache dystansu — klucz: "oddział:adres". Null NIE jest cache'owany.
 const distanceCache = new Map<string, number>();
 
-// Oblicz dystans od oddziału do adresu dostawy (km po drogach).
-// Strategia wyboru km zależy od typu pojazdu (patrz getStrategiaKm):
-//  - małe auta (≤1,2t) → najkrótsza trasa
-//  - ciężkie (windy, HDS) → środkowa z 3 alternatyw (omija ograniczenia tonażowe)
-// Gdy typPojazdu nie podany → strategia 'middle' (bezpieczna, nie dopłacać).
+// Oblicz dystans od oddziału do adresu dostawy (km po drogach, najdłuższa
+// z alternatyw OSRM + globalna korekta ×1.1 w roundKm).
 export async function calculateDistance(
   oddzialNazwa: string,
-  adresDostawy: string,
-  typPojazdu?: string | null
+  adresDostawy: string
 ): Promise<number | null> {
   if (!adresDostawy || !oddzialNazwa) return null;
 
-  const strategy = getStrategiaKm(typPojazdu);
-  const cacheKey = `${oddzialNazwa}:${adresDostawy.trim().toLowerCase()}:${strategy}`;
+  const cacheKey = `${oddzialNazwa}:${adresDostawy.trim().toLowerCase()}`;
   if (distanceCache.has(cacheKey)) return distanceCache.get(cacheKey)!;
 
   const from = getOddzialCoordsByName(oddzialNazwa);
@@ -362,7 +333,7 @@ export async function calculateDistance(
   const alternatives = await getRouteAlternatives(from, to);
   if (!alternatives || alternatives.length === 0) return null;
 
-  const { km } = pickKmFromAlternatives(alternatives, strategy);
+  const km = pickKmFromAlternatives(alternatives);
   distanceCache.set(cacheKey, km);
   return km;
 }

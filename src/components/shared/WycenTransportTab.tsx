@@ -11,7 +11,6 @@ import {
   NAZWA_TO_KOD,
   geocodeAddress,
   getRouteAlternatives,
-  getStrategiaKm,
   pickKmFromAlternatives,
   searchAddress,
 } from '@/lib/oddzialy-geo';
@@ -34,7 +33,6 @@ interface WynikOddzialu {
   kod: string;
   nazwa: string;
   km: number;
-  kmInfo: string | null; // np. "środkowa z 3" / "najkrótsza z 3"
   kosztWew: { netto: number; brutto: number } | null;
   kosztZew: { netto: number; brutto: number } | null;
   jestMojOddzial: boolean;
@@ -293,12 +291,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       });
 
       const results: WynikOddzialu[] = [];
-      const strategy = getStrategiaKm(typPojazdu);
 
       for (const [kod, dane] of oddzialyFiltered) {
         const alternatives = await getRouteAlternatives(dane, coords);
         if (!alternatives || alternatives.length === 0) continue;
-        const { km, info: kmInfo } = pickKmFromAlternatives(alternatives, strategy);
+        const km = pickKmFromAlternatives(alternatives);
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
         const bestType = findBestAvailableType(typPojazdu, wlasneTypy);
@@ -335,7 +332,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           kod,
           nazwa: KOD_TO_NAZWA[kod] || kod,
           km,
-          kmInfo: kmInfo || null,
           kosztWew,
           kosztZew,
           jestMojOddzial: kod === mojKod,
