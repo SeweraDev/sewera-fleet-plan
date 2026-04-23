@@ -1187,6 +1187,17 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
+  // Ostatni fallback: gdy nadal brak adresu dostawy a w odbiorca jest adres siedziby
+  // (ul./al./os./pl. + kod pocztowy) — wyciągnij go do adres i zostaw odbiorca jako samą nazwę.
+  // Przypadek: klient odbiera towar u siebie, WZ nie ma sekcji "Adres dostawy" ani wskazówek w Uwagach.
+  if (!adres && odbiorca) {
+    const ulMatch = odbiorca.match(/,\s*((?:ul|al|os|pl)\.\s*.+)$/i);
+    if (ulMatch && ulMatch.index != null) {
+      adres = ulMatch[1].trim();
+      odbiorca = odbiorca.substring(0, ulMatch.index).replace(/[,\s]+$/, '').trim();
+    }
+  }
+
   // Wyciągnij telefony z uwag (zawsze, niezależnie od sekcji adresu)
   // Akceptujemy separatory: spacja, myślnik, kropka albo brak (np. "515-526-234", "515 526 234", "515526234")
   if (uwagi && !tel) {
