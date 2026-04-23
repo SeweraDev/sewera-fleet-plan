@@ -8,7 +8,6 @@ import {
   MapPin,
   Map,
   LogOut,
-  BarChartHorizontal,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,29 +35,24 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   admin: [
     { title: 'Użytkownicy', url: '/admin', icon: Users },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
-    { title: 'Podgląd oddziałów', url: '/przeglad-oddzialow', icon: BarChartHorizontal },
     { title: 'Ustawienia', url: '/admin/ustawienia', icon: Settings },
   ],
   zarzad: [
     { title: 'Dashboard', url: '/zarzad', icon: BarChart3 },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
-    { title: 'Podgląd oddziałów', url: '/przeglad-oddzialow', icon: BarChartHorizontal },
   ],
   dyspozytor: [
     { title: 'Dashboard', url: '/dyspozytor', icon: LayoutDashboard },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
-    { title: 'Podgląd oddziałów', url: '/przeglad-oddzialow', icon: BarChartHorizontal },
   ],
   sprzedawca: [
     { title: 'Dashboard', url: '/sprzedawca', icon: LayoutDashboard },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
-    { title: 'Podgląd oddziałów', url: '/przeglad-oddzialow', icon: BarChartHorizontal },
     { title: 'Zlecenia', url: '/sprzedawca/zlecenia', icon: ShoppingCart },
   ],
   kierowca: [
     { title: 'Moja trasa', url: '/kierowca', icon: MapPin },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
-    { title: 'Podgląd oddziałów', url: '/przeglad-oddzialow', icon: BarChartHorizontal },
   ],
 };
 

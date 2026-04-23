@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { FlotaSection } from '@/components/dyspozytor/FlotaSection';
 import { ImportExcelModal } from '@/components/dyspozytor/ImportExcelModal';
 import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
+import { KolejkaTab } from '@/components/dyspozytor/KolejkaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
 import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
@@ -47,6 +48,7 @@ const KursyMapView = lazy(() => import('@/components/dyspozytor/KursyMapView'));
 const SIDEBAR_ITEMS = [
   { id: 'kursy', label: '🚛 Kursy' },
   { id: 'zlecenia', label: '📋 Zlecenia' },
+  { id: 'kolejka', label: '📅 Kolejka' },
   { id: 'nowe_zlecenie', label: '➕ Nowe zlecenie' },
   { id: 'wycen', label: '💰 Wyceń transport' },
   { id: 'flota', label: '🔧 Flota' },
@@ -820,6 +822,14 @@ export default function DyspozytorDashboard() {
                   oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
                   dzien={dzien}
                   onOpenKursModal={(zlIds) => { setPreSelectedZlIds(zlIds); setShowModal(true); }}
+                />
+              )}
+              {activeId === 'kolejka' && (
+                <KolejkaTab
+                  oddzialId={oddzialId}
+                  oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
+                  dzien={dzien}
+                  dzienDo={rangeMode ? dzienDo : undefined}
                 />
               )}
               {activeId === 'nowe_zlecenie' && (

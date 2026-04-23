@@ -12,7 +12,6 @@ import DyspozytorDashboard from "@/pages/dyspozytor/Dashboard";
 import SprzedawcaDashboard from "@/pages/sprzedawca/Dashboard";
 import KierowcaMojaTrasa from "@/pages/kierowca/MojaTrasa";
 import MapaSewera from "@/pages/MapaSewera";
-import PrzegladOddzialow from "@/pages/PrzegladOddzialow";
 import KartaDrogowa from "@/pages/KartaDrogowa";
 import { RootRedirect } from "@/components/shared/RootRedirect";
 
@@ -68,13 +67,6 @@ const App = () => (
           <Route path="/mapa" element={
             <ProtectedRoute allowedRoles={['admin', 'zarzad', 'dyspozytor', 'sprzedawca', 'kierowca']}>
               <MapaSewera />
-            </ProtectedRoute>
-          } />
-
-          {/* Podgląd oddziałów — te same role co Mapa dostaw */}
-          <Route path="/przeglad-oddzialow" element={
-            <ProtectedRoute allowedRoles={['admin', 'zarzad', 'dyspozytor', 'sprzedawca', 'kierowca']}>
-              <PrzegladOddzialow />
             </ProtectedRoute>
           } />
 
