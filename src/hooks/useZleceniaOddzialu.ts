@@ -57,8 +57,12 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
       .order('created_at', { ascending: true });
 
     if (dzien) {
-      // Zlecenia z wybranego dnia + zaległe bez kursu (data < dziś)
-      query = query.or(`dzien.eq.${dzien},and(dzien.lt.${today},kurs_id.is.null,status.in.(robocza,do_weryfikacji))`);
+      // Pokazujemy:
+      //  - zlecenia z wybranego dnia (z kursem lub bez),
+      //  - WSZYSTKIE zlecenia bez kursu niezależnie od daty — dotyczy zaległych,
+      //    przyszłych nieprzydzielonych oraz przekazanych do tego oddziału
+      //    (które trafiają tu bez kursu, więc dyspozytor musi je zobaczyć żeby zaplanować).
+      query = query.or(`dzien.eq.${dzien},kurs_id.is.null`);
     } else if (pastOnly) {
       query = query.lt('dzien', today);
     }
