@@ -2,6 +2,10 @@ import { useState, useCallback } from 'react';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
@@ -12,14 +16,71 @@ import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
 import { DostepnoscStep } from '@/components/sprzedawca/DostepnoscStep';
 import { MojeZleceniaTab } from '@/components/sprzedawca/MojeZleceniaTab';
 import { WycenTransportTab } from '@/components/shared/WycenTransportTab';
+import { KolejkaTab } from '@/components/dyspozytor/KolejkaTab';
 import { useAuth } from '@/hooks/useAuth';
 
 const SIDEBAR_ITEMS = [
   { id: 'nowe', label: '➕ Nowe zlecenie' },
   { id: 'moje', label: '📋 Moje zlecenia' },
+  { id: 'podglad', label: '🔍 Podgląd zleceń' },
   { id: 'wycen', label: '💰 Wyceń transport' },
   { id: 'mapa', label: '🗺️ Mapa dostaw', url: '/mapa' },
 ];
+
+function PodgladZlecenWrapper() {
+  const { oddzialy } = useOddzialy();
+  const today = new Date().toISOString().split('T')[0];
+  const [oddzialId, setOddzialId] = useState<number | null>(null);
+  const [dzien, setDzien] = useState(today);
+  const [rangeMode, setRangeMode] = useState(false);
+  const [dzienDo, setDzienDo] = useState(today);
+
+  const oddzialNazwa = oddzialy.find(o => o.id === oddzialId)?.nazwa || '';
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">🔍 Podgląd zleceń</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-end gap-3 flex-wrap">
+          <div>
+            <Label className="text-xs text-muted-foreground">Oddział</Label>
+            <Select value={oddzialId?.toString() || ''} onValueChange={v => setOddzialId(Number(v))}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="Wybierz oddział" /></SelectTrigger>
+              <SelectContent>
+                {oddzialy.map(o => <SelectItem key={o.id} value={o.id.toString()}>{o.nazwa}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">{rangeMode ? 'Od' : 'Dzień'}</Label>
+            <Input type="date" value={dzien} onChange={e => setDzien(e.target.value)} className="w-40" />
+          </div>
+          {rangeMode && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Do</Label>
+              <Input type="date" value={dzienDo} onChange={e => setDzienDo(e.target.value)} className="w-40" />
+            </div>
+          )}
+          <Button
+            size="sm"
+            variant={rangeMode ? 'default' : 'outline'}
+            onClick={() => setRangeMode(!rangeMode)}
+          >
+            📅 Zakres
+          </Button>
+        </div>
+        <KolejkaTab
+          oddzialId={oddzialId}
+          oddzialNazwa={oddzialNazwa}
+          dzien={dzien}
+          dzienDo={rangeMode ? dzienDo : undefined}
+        />
+      </CardContent>
+    </Card>
+  );
+}
 
 function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [step, setStep] = useState(1);
@@ -140,6 +201,7 @@ export default function SprzedawcaDashboard() {
         <main className="flex-1 p-6 overflow-auto">
           {activeId === 'nowe' && <NoweZlecenieForm onSuccess={handleSuccess} />}
           {activeId === 'moje' && <MojeZleceniaTab />}
+          {activeId === 'podglad' && <PodgladZlecenWrapper />}
           {activeId === 'wycen' && <WycenTransportTab oddzialNazwa={profile?.branch || 'Katowice'} />}
         </main>
       </div>
