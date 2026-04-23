@@ -490,10 +490,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                 <tbody>
                   {wyniki.map((w, idx) => {
                     const color = getRowColor(idx, wyniki.length);
-                    const wewOpcje = w.wewOpcje || [];
-                    const zewOpcje = w.zewOpcje || [];
-                    const wewRawy = Array.from(new Set(wewOpcje.flatMap(o => o.rawTypy || [])));
-                    const zewRawy = Array.from(new Set(zewOpcje.flatMap(o => o.rawTypy || [])));
+                    const wewRawy = Array.from(new Set(w.wewOpcje.flatMap(o => o.rawTypy)));
+                    const zewRawy = Array.from(new Set(w.zewOpcje.flatMap(o => o.rawTypy)));
                     return (
                       <tr key={w.kod} className={`${color} border-t align-top`}>
                         <td className="p-3 font-medium">
@@ -516,18 +514,18 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.km} km
                         </td>
                         <td className="p-3">
-                          {renderOpcjeCell(wewOpcje, 'netto')}
+                          {renderOpcjeCell(w.wewOpcje, 'netto')}
                         </td>
                         <td className="p-3 border-r border-gray-400">
-                          {renderOpcjeCell(wewOpcje, 'brutto')}
+                          {renderOpcjeCell(w.wewOpcje, 'brutto')}
                         </td>
                         {pokazZew && (
                           <>
                             <td className="p-3">
-                              {renderOpcjeCell(zewOpcje, 'netto')}
+                              {renderOpcjeCell(w.zewOpcje, 'netto')}
                             </td>
                             <td className="p-3">
-                              {renderOpcjeCell(zewOpcje, 'brutto')}
+                              {renderOpcjeCell(w.zewOpcje, 'brutto')}
                             </td>
                           </>
                         )}
@@ -572,27 +570,23 @@ function formatPLN(amount: number): string {
   }) + ' zł';
 }
 
-function renderOpcjeCell(opcje: WycenaOpcja[] | undefined, field: 'netto' | 'brutto') {
-  const list = opcje || [];
-  if (list.length === 0) {
+function renderOpcjeCell(opcje: WycenaOpcja[], field: 'netto' | 'brutto') {
+  if (opcje.length === 0) {
     return <div className="text-center tabular-nums">—</div>;
   }
   return (
     <div className="space-y-1">
-      {list.map((o, i) => {
-        if (!o || !o.koszt) return null;
-        return (
-          <div key={(o.typ || '') + i} className="text-center tabular-nums leading-tight">
-            <div className={field === 'brutto' ? 'font-bold' : ''}>
-              {formatPLN(o.koszt[field])}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {o.isFallback && (o.direction === 'up' ? '↑ ' : o.direction === 'down' ? '↓ ' : '↳ ')}
-              {o.typ}
-            </div>
+      {opcje.map((o, i) => (
+        <div key={o.typ + i} className="text-center tabular-nums leading-tight">
+          <div className={field === 'brutto' ? 'font-bold' : ''}>
+            {formatPLN(o.koszt[field])}
           </div>
-        );
-      })}
+          <div className="text-[11px] text-muted-foreground">
+            {o.isFallback && (o.direction === 'up' ? '↑ ' : o.direction === 'down' ? '↓ ' : '↳ ')}
+            {o.typ}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
