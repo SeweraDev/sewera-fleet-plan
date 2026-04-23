@@ -502,14 +502,14 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                               {w.fallbackDirection === 'up' ? '↑' : w.fallbackDirection === 'down' ? '↓' : '↳'} auto: {w.uzytTyp}
                             </div>
                           )}
-                          {w.wewTypy.length > 0 && (
+                          {(w.wewTypy || []).length > 0 && (
                             <div className="text-xs text-muted-foreground">
-                              🚛 Sewera: {w.wewTypy.join(', ')}
+                              🚛 Sewera: {(w.wewTypy || []).join(', ')}
                             </div>
                           )}
-                          {w.zewTypy.length > 0 && (
+                          {(w.zewTypy || []).length > 0 && (
                             <div className="text-xs text-muted-foreground">
-                              🚛 zew: {w.zewTypy.join(', ')}
+                              🚛 zew: {(w.zewTypy || []).join(', ')}
                             </div>
                           )}
                         </td>
