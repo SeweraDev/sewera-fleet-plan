@@ -172,10 +172,11 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
 
 // Odległość po drogach → OSRM (darmowy publiczny serwer)
 
-// Zaokrąglenie km + globalna korekta ×1.1 (OSRM systemowo zaniża km vs Google;
-// biznesowo wolimy nie dopłacać do transportu).
+// Zaokrąglenie km (bez korekty) — OSRM z alternatives=2 daje zwykle 2-3 trasy,
+// a pickKmFromAlternatives wybiera najdłuższą, co samo w sobie zabezpiecza
+// przed zaniżeniem fakturowania.
 function roundKm(rawKm: number): number {
-  return Math.round(rawKm * 1.1);
+  return Math.round(rawKm);
 }
 
 export async function getRouteDistance(
