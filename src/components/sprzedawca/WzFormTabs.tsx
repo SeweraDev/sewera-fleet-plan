@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
-import { KLASYFIKACJE } from '@/lib/klasyfikacje';
+import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong } from '@/lib/klasyfikacje';
 
 interface WzFormTabsProps {
   wzList: WzInput[];
@@ -18,6 +18,10 @@ interface WzFormTabsProps {
   submitting: boolean;
   onBack: () => void;
   onSubmit: () => void;
+  /** Typ pojazdu wybrany w kroku 2 (TypPojazduStep). Gdy konkretny typ —
+   *  klasyfikacja jest auto-ustawiana z tego typu i ukrywana w UI.
+   *  Gdy 'bez_preferencji' lub puste — klasyfikacja wymagana ręcznie. */
+  typPojazdu?: string;
 }
 
 
@@ -25,7 +29,7 @@ const EMPTY_WZ: WzInput = {
   numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '',
 };
 
-function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void }) {
+function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void; autoKlasyfikacja?: string | null }) {
   const addWz = () => setWzList([...wzList, { ...EMPTY_WZ }]);
 
   const updateWz = (idx: number, field: keyof WzInput, value: string | number | boolean) => {
@@ -73,17 +77,27 @@ function WzManualForm({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz
               </label>
             </div>
             <div className="col-span-2">
-              <Label className="text-xs">Klasyfikacja transportu *</Label>
-              <Select value={wz.klasyfikacja || ''} onValueChange={(v) => updateWz(idx, 'klasyfikacja', v)}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Wybierz klasyfikację…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {KLASYFIKACJE.map(k => (
-                    <SelectItem key={k.kod} value={k.kod}>{k.kod} — {k.opis}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {autoKlasyfikacja ? (
+                <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs flex items-center gap-2">
+                  <span className="text-muted-foreground">Klasyfikacja transportu:</span>
+                  <span className="font-medium">{formatKlasyfikacjaLong(autoKlasyfikacja)}</span>
+                  <span className="text-[10px] text-muted-foreground ml-auto">automatycznie z typu pojazdu</span>
+                </div>
+              ) : (
+                <>
+                  <Label className="text-xs">Klasyfikacja transportu *</Label>
+                  <Select value={wz.klasyfikacja || ''} onValueChange={(v) => updateWz(idx, 'klasyfikacja', v)}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Wybierz klasyfikację…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {KLASYFIKACJE.map(k => (
+                        <SelectItem key={k.kod} value={k.kod}>{k.kod} — {k.opis}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
             </div>
             <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={wz.uwagi || ''} onChange={e => updateWz(idx, 'uwagi', e.target.value)} /></div>
           </div>
@@ -799,18 +813,33 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
   );
 }
 
-export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit }: WzFormTabsProps) {
+export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit, typPojazdu }: WzFormTabsProps) {
   const [activeTab, setActiveTab] = useState<string>('reczne');
+
+  // Auto-klasyfikacja z typu pojazdu — gdy user wybrał konkretny typ (nie 'bez_preferencji'),
+  // klasyfikacja jest jednoznacznie wyprowadzana i nie trzeba jej wpisywać ręcznie.
+  const autoKlas = klasyfikacjaZTypu(typPojazdu);
+  useEffect(() => {
+    if (!autoKlas || wzList.length === 0) return;
+    // Sprawdź czy jakieś WZ ma inną/brakującą klasyfikację — tylko wtedy aktualizuj
+    const needsUpdate = wzList.some(w => (w.klasyfikacja || '') !== autoKlas);
+    if (!needsUpdate) return;
+    setWzList(wzList.map(w => ({ ...w, klasyfikacja: autoKlas })));
+  }, [autoKlas, wzList, setWzList]);
 
   // Wrapper dla zakładek importu: po dodaniu WZ automatycznie przełącz na
   // zakładkę 'Ręcznie' (gdzie user widzi swoje dodane WZ) + toast potwierdzający.
   // Dzięki temu po kliknięciu 'Użyj tych danych' user NIE zostaje zagubiony
   // na pustym ekranie uploadu OCR/PDF — widzi od razu że dane zostały zapisane.
   const setWzListFromImport = useCallback((next: WzInput[]) => {
-    setWzList(next);
+    // Jeśli mamy auto-klasyfikację, nadpisz ją na każdym importowanym WZ (parser
+    // mógł wstawić własną, ale user explicit wskazał typ pojazdu — jego intencja
+    // wygrywa).
+    const final = autoKlas ? next.map(w => ({ ...w, klasyfikacja: autoKlas })) : next;
+    setWzList(final);
     setActiveTab('reczne');
     toast.success('✅ WZ dodane do listy — sprawdź w zakładce Ręcznie');
-  }, [setWzList]);
+  }, [setWzList, autoKlas]);
 
   return (
     <div className="space-y-4">
@@ -827,7 +856,7 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
         <TabsContent value="ocr"><WzOcrTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
         <TabsContent value="xls"><WzXlsTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
         <TabsContent value="paste"><WzPasteTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
-        <TabsContent value="reczne"><WzManualForm wzList={wzList} setWzList={setWzList} /></TabsContent>
+        <TabsContent value="reczne"><WzManualForm wzList={wzList} setWzList={setWzList} autoKlasyfikacja={autoKlas} /></TabsContent>
       </Tabs>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

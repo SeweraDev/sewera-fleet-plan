@@ -102,6 +102,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             error={error} submitting={submitting}
             onBack={() => setStep(2)}
             onSubmit={handleGoToCheck}
+            typPojazdu={typPojazdu}
           />
         )}
         {step === 4 && oddzialId && (
