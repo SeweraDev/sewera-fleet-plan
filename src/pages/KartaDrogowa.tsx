@@ -237,11 +237,11 @@ export default function KartaDrogowa() {
       </div>
 
       {/* Treść karty */}
-      <div className="print-page p-6 max-w-[297mm] mx-auto text-[10pt]">
+      <div className="print-page p-6 max-w-[297mm] mx-auto text-[9pt]">
         <div className="flex justify-between items-start mb-3 border-b-2 border-black pb-2">
           <div>
-            <h1 className="text-xl font-bold">KARTA DROGOWA</h1>
-            <div className="text-xs text-muted-foreground">Sewera Polska Chemia — {kurs.oddzial_nazwa}</div>
+            <h1 className="text-lg font-bold">KARTA DROGOWA</h1>
+            <div className="text-[10px] text-muted-foreground">Sewera Polska Chemia — {kurs.oddzial_nazwa}</div>
           </div>
           <div className="text-right">
             <div className="font-mono font-bold">{kurs.numer || '—'}</div>
@@ -279,15 +279,15 @@ export default function KartaDrogowa() {
         {/* Km bazowe — wyjazd i powrót */}
         <div className="flex gap-4 mb-3 border border-black p-2 bg-gray-50">
           <div className="flex-1">
-            <div className="text-xs font-semibold">Km licznika — wyjazd z bazy:</div>
+            <div className="text-[10px] font-semibold">Km licznika — wyjazd z bazy:</div>
             <div className="border-b border-black h-6 mt-1"></div>
           </div>
           <div className="flex-1">
-            <div className="text-xs font-semibold">Km licznika — powrót do bazy:</div>
+            <div className="text-[10px] font-semibold">Km licznika — powrót do bazy:</div>
             <div className="border-b border-black h-6 mt-1"></div>
           </div>
           <div className="flex-1">
-            <div className="text-xs font-semibold">Łączny przejazd (km):</div>
+            <div className="text-[10px] font-semibold">Łączny przejazd (km):</div>
             <div className="border-b border-black h-6 mt-1"></div>
           </div>
         </div>
@@ -317,9 +317,9 @@ export default function KartaDrogowa() {
                 <td className="text-center">{p.kolejnosc}</td>
                 <td>{p.preferowana_godzina || '—'}</td>
                 <td className="truncate-cell">{p.odbiorca}</td>
-                <td className="font-mono text-[9pt]">
+                <td className="font-mono text-[8pt]">
                   {p.numer_wz || p.zl_numer}
-                  {p.nr_zamowienia && <div className="text-[8pt] text-muted-foreground">{p.nr_zamowienia}</div>}
+                  {p.nr_zamowienia && <div className="text-[7pt] text-muted-foreground">{p.nr_zamowienia}</div>}
                 </td>
                 <td>{p.adres}</td>
                 <td className="text-right">
@@ -330,28 +330,28 @@ export default function KartaDrogowa() {
                 <td className="fill-cell"></td>
                 <td className="text-right">{Math.round(p.masa_kg)}</td>
                 <td className="text-right">{p.ilosc_palet || ''}</td>
-                <td className="text-[9pt]">{p.tel}</td>
+                <td className="text-[8pt]">{p.tel}</td>
                 <td className="cell-uwagi">{p.uwagi}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
-        <div className="text-[8pt] text-muted-foreground mt-4 text-center">
+        <div className="text-[7pt] text-muted-foreground mt-4 text-center">
           Wydrukowano: {new Date().toLocaleString('pl-PL')}
         </div>
       </div>
 
       {/* Style wydruku */}
       <style>{`
-        .karta-info td { border: 1px solid #000; padding: 3px 6px; font-size: 10pt; }
+        .karta-info td { border: 1px solid #000; padding: 3px 6px; font-size: 9pt; }
         .karta-table { table-layout: auto; }
-        .karta-table th, .karta-table td { border: 1px solid #000; padding: 3px 4px; font-size: 9pt; vertical-align: top; }
+        .karta-table th, .karta-table td { border: 1px solid #000; padding: 3px 4px; font-size: 8pt; vertical-align: top; }
         .karta-table th { font-weight: 600; text-align: left; }
         .karta-table .fill-cell { height: 28px; background: white; }
         .karta-table .col-uwagi { min-width: 220px; width: 260px; }
         .karta-table .cell-uwagi {
-          font-size: 9pt;
+          font-size: 8pt;
           white-space: pre-wrap;
           word-break: break-word;
           min-height: 40px;
