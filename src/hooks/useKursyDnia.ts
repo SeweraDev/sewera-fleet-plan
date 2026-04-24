@@ -188,11 +188,23 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
           });
         }
       });
-      // Sortuj przystanki wg godziny dostawy (rosnąco) wewnątrz każdego kursu
-      const GODZ_ORDER: Record<string, number> = { 'do 8:00': 1, 'do 10:00': 2, 'do 12:00': 3, 'do 14:00': 4, 'do 16:00': 5, 'dowolna': 6 };
+      // Sortuj przystanki wg godziny dostawy (rosnąco) wewnątrz każdego kursu.
+      // Parser obsługuje sloty ("do 8:00"), konkretne godziny ("08:00", "7:30"), "dowolna" / pusto.
+      const parseGodzinaMin = (g: string | null | undefined): number => {
+        if (!g) return 9999;
+        const s = g.trim().toLowerCase();
+        if (s === 'dowolna' || s === '') return 9999;
+        const m = s.match(/(\d{1,2})[:.](\d{2})/);
+        if (!m) return 9999;
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      };
       expandedPrz.sort((a, b) => {
         if (a.kurs_id !== b.kurs_id) return 0; // nie mieszaj kursów
-        return (GODZ_ORDER[a.preferowana_godzina] || 9) - (GODZ_ORDER[b.preferowana_godzina] || 9);
+        const am = parseGodzinaMin(a.preferowana_godzina);
+        const bm = parseGodzinaMin(b.preferowana_godzina);
+        if (am !== bm) return am - bm;
+        // W obrębie tej samej godziny: grupuj WZ tego samego przystanku razem
+        return a.kolejnosc - b.kolejnosc;
       });
       setPrzystanki(expandedPrz);
 

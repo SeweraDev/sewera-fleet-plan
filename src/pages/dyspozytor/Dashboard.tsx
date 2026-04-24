@@ -286,14 +286,21 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {kPrz.map((p, pIdx) => {
-                        // Pokaż # i akcje tylko dla pierwszego WZ w grupie (ten sam kolejnosc)
-                        const isFirst = pIdx === 0 || kPrz[pIdx - 1].kolejnosc !== p.kolejnosc;
-                        const groupSize = kPrz.filter(x => x.kolejnosc === p.kolejnosc).length;
-                        return (
+                      {(() => {
+                        // Renumeracja # po chronologii: unikalne kolejnosc → 1,2,3… w kolejności wystąpienia
+                        const displayNumMap = new Map<number, number>();
+                        kPrz.forEach(x => {
+                          if (!displayNumMap.has(x.kolejnosc)) displayNumMap.set(x.kolejnosc, displayNumMap.size + 1);
+                        });
+                        return kPrz.map((p, pIdx) => {
+                          // Pokaż # i akcje tylko dla pierwszego WZ w grupie (ten sam kolejnosc)
+                          const isFirst = pIdx === 0 || kPrz[pIdx - 1].kolejnosc !== p.kolejnosc;
+                          const groupSize = kPrz.filter(x => x.kolejnosc === p.kolejnosc).length;
+                          const displayNum = displayNumMap.get(p.kolejnosc)!;
+                          return (
                         <TableRow key={p.id}>
                           {isFirst ? (
-                            <TableCell rowSpan={groupSize} className="align-top font-medium">{p.kolejnosc}</TableCell>
+                            <TableCell rowSpan={groupSize} className="align-top font-medium">{displayNum}</TableCell>
                           ) : null}
                           <TableCell className="text-xs">{p.preferowana_godzina || '—'}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
@@ -354,7 +361,8 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                           ) : null}
                         </TableRow>
                         );
-                      })}
+                        });
+                      })()}
                     </TableBody>
                   </Table>
                 </CardContent>
