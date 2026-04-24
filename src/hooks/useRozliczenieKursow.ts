@@ -81,7 +81,7 @@ export function useRozliczenieKursow(oddzialId: number | null, dzienOd: string, 
       const { data: wzData } = zlIds.length
         ? await supabase
             .from('zlecenia_wz')
-            .select('id, zlecenie_id, odbiorca, adres, masa_kg, klasyfikacja, wartosc_netto, numer_wz')
+            .select('id, zlecenie_id, odbiorca, adres, masa_kg, klasyfikacja, wartosc_netto, numer_wz, km_prosta_override')
             .in('zlecenie_id', zlIds)
         : { data: [] as any[] };
 
@@ -118,7 +118,7 @@ export function useRozliczenieKursow(oddzialId: number | null, dzienOd: string, 
           }
         }
 
-        // Geocode adresów → km_prosta
+        // Geocode adresów → km_prosta (Photon+Haversine)
         const adresyArr = Array.from(adresyUnique);
         const prostyMap = new Map<string, number | null>();
         for (const adres of adresyArr) {
@@ -127,7 +127,14 @@ export function useRozliczenieKursow(oddzialId: number | null, dzienOd: string, 
           if (!coords) { prostyMap.set(adres, null); continue; }
           prostyMap.set(adres, getKmProstaFromOddzial(oddzialNazwa, coords.lat, coords.lng));
         }
-        wzDoRozl.forEach(w => { w.km_prosta = prostyMap.get(w.adres) ?? null; });
+        // Override z zlecenia_wz.km_prosta_override ma priorytet nad Haversine
+        const wzRawMap = new Map<string, any>();
+        (wzData || []).forEach((w: any) => wzRawMap.set(w.id, w));
+        wzDoRozl.forEach(w => {
+          const raw = wzRawMap.get(w.id);
+          const override = raw?.km_prosta_override != null ? Number(raw.km_prosta_override) : null;
+          w.km_prosta = override ?? (prostyMap.get(w.adres) ?? null);
+        });
 
         // Km OSRM kółka: oddział → unikalne adresy → oddział
         const kmKolka = adresyArr.length > 0 ? (await calculateRouteTotal(oddzialNazwa, adresyArr)) || 0 : 0;

@@ -5,7 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { calculateRouteTotal } from '@/lib/oddzialy-geo';
 import { rozliczKurs, type WzDoRozliczenia, type RozliczenieKursu } from '@/lib/rozliczenie-kolka';
 import { EdytujKmModal } from '@/components/dyspozytor/EdytujKmModal';
+import { EdytujProstaModal } from '@/components/dyspozytor/EdytujProstaModal';
 import { KLASYFIKACJE } from '@/lib/klasyfikacje';
+import { ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -124,6 +126,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
   const [editZlId, setEditZlId] = useState<string | null>(null);
   const [editKurs, setEditKurs] = useState<KursDto | null>(null);
   const [editKmKurs, setEditKmKurs] = useState<KursDto | null>(null);
+  const [editProsta, setEditProsta] = useState<{ kursId: string; zlecenieIds: string[]; adres: string; kmProsta: number | null; override: number | null } | null>(null);
 
   /** Zmień klasyfikację dla wszystkich WZ na danym adresie w obrębie kursa. */
   const handleChangeKlasyfikacjaAdres = async (kursId: string, adres: string, nowaKlasyf: string) => {
@@ -239,7 +242,9 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
             const wzListRozl: WzDoRozliczenia[] = kPrz.map(p => ({
               id: p.id, numer_wz: p.numer_wz || '', odbiorca: p.odbiorca, adres: p.adres,
               klasyfikacja: p.klasyfikacja, masa_kg: p.masa_kg, wartosc_netto: p.wartosc_netto,
-              kolejnosc: p.kolejnosc, km_prosta: p.km_prosta,
+              kolejnosc: p.kolejnosc,
+              // Override z ręcznej edycji ma priorytet nad Haversine z Photona
+              km_prosta: p.km_prosta_override ?? p.km_prosta,
             }));
             rozliczenie = rozliczKurs(kmEfektywne, wzListRozl);
           }
@@ -472,9 +477,34 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                           <TableCell className="text-right">{p.ilosc_palet || '—'}</TableCell>
                           {isZakonczony ? (
                             <>
-                              <TableCell className="text-right text-xs">
-                                {p.km_prosta != null ? p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'}
-                              </TableCell>
+                              {isFirst ? (
+                                <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
+                                  {(() => {
+                                    const eff = p.km_prosta_override ?? p.km_prosta;
+                                    const zlecenieIds = Array.from(new Set(
+                                      kPrzSorted
+                                        .filter(x => groupKeyOf(x) === key && x.zlecenie_id)
+                                        .map(x => x.zlecenie_id!)
+                                    ));
+                                    return (
+                                      <button
+                                        onClick={() => setEditProsta({
+                                          kursId: kurs.id,
+                                          zlecenieIds,
+                                          adres: p.adres,
+                                          kmProsta: p.km_prosta,
+                                          override: p.km_prosta_override,
+                                        })}
+                                        className="hover:underline"
+                                        title="Kliknij, aby edytować linię prostą"
+                                      >
+                                        {eff != null ? eff.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'}
+                                        {p.km_prosta_override != null && <span className="text-[9px] text-primary ml-0.5">✎</span>}
+                                      </button>
+                                    );
+                                  })()}
+                                </TableCell>
+                              ) : null}
                               {isFirst ? (
                                 <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
                                   {(() => { const u = udzialProcByAdres.get(normAdres(p.adres)); return u != null ? (u * 100).toFixed(1) + ' %' : '—'; })()}
@@ -565,6 +595,20 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         kmOsrm={editKmKurs ? (kursKm[editKmKurs.id] ?? null) : null}
         kmRozliczeniowe={editKmKurs?.km_rozliczeniowe ?? null}
         odcinkiTech={editKmKurs?.odcinki_techniczne || []}
+        onSaved={refetch}
+      />
+
+      <EdytujProstaModal
+        open={!!editProsta}
+        onClose={() => setEditProsta(null)}
+        zlecenieIds={editProsta?.zlecenieIds || []}
+        adres={editProsta?.adres || ''}
+        oddzialAdres={(() => {
+          const kod = NAZWA_TO_KOD[oddzialNazwa || ''];
+          return kod ? (ODDZIAL_COORDS[kod]?.adres || oddzialNazwa || '') : (oddzialNazwa || '');
+        })()}
+        aktualneKmProsta={editProsta?.kmProsta ?? null}
+        aktualnyOverride={editProsta?.override ?? null}
         onSaved={refetch}
       />
 

@@ -500,6 +500,7 @@ export type Database = {
           tel: string | null
           uwagi: string | null
           wartosc_netto: number | null
+          km_prosta_override: number | null
           zlecenie_id: string
         }
         Insert: {
@@ -516,6 +517,7 @@ export type Database = {
           tel?: string | null
           uwagi?: string | null
           wartosc_netto?: number | null
+          km_prosta_override?: number | null
           zlecenie_id: string
         }
         Update: {
@@ -532,6 +534,7 @@ export type Database = {
           tel?: string | null
           uwagi?: string | null
           wartosc_netto?: number | null
+          km_prosta_override?: number | null
           zlecenie_id?: string
         }
         Relationships: [
