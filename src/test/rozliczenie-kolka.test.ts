@@ -102,11 +102,11 @@ describe('rozliczKurs — przykład z arkusza usera (24.04)', () => {
   const wzList: WzDoRozliczenia[] = [
     {
       id: '1', numer_wz: 'WZ/001', odbiorca: 'Normy', adres: 'Normy, 40-211 Katowice, PL',
-      klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9,
+      klasyfikacja: 'D', masa_kg: 1000, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9,
     },
     {
       id: '2', numer_wz: 'WZ/002', odbiorca: 'Wodna', adres: 'Wodna 13, 40-008 Katowice, PL',
-      klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 2, km_prosta: 5.7,
+      klasyfikacja: 'D', masa_kg: 1500, wartosc_netto: null, kolejnosc: 2, km_prosta: 5.7,
     },
   ];
 
@@ -131,52 +131,68 @@ describe('rozliczKurs — przykład z arkusza usera (24.04)', () => {
   });
 });
 
-describe('rozliczKurs — rozdział per WZ po wartości netto', () => {
-  it('jeden adres, 2 WZ z różną wartością — koszt dzielony proporcjonalnie', () => {
+describe('rozliczKurs — rozdział per WZ (priorytet: wartość → masa → równy)', () => {
+  it('wszystkie WZ mają wartość netto → podział po wartości', () => {
     const wzList: WzDoRozliczenia[] = [
-      {
-        id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ul. Testowa 1',
-        klasyfikacja: 'D', wartosc_netto: 3000, kolejnosc: 1, km_prosta: 5.9,
-      },
-      {
-        id: '2', numer_wz: 'WZ/B', odbiorca: 'X', adres: 'ul. Testowa 1',
-        klasyfikacja: 'D', wartosc_netto: 1000, kolejnosc: 1, km_prosta: 5.9,
-      },
-      {
-        id: '3', numer_wz: 'WZ/C', odbiorca: 'Y', adres: 'Inny adres',
-        klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 2, km_prosta: 5.7,
-      },
+      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ul. Testowa 1', klasyfikacja: 'D', masa_kg: 500, wartosc_netto: 3000, kolejnosc: 1, km_prosta: 5.9 },
+      { id: '2', numer_wz: 'WZ/B', odbiorca: 'X', adres: 'ul. Testowa 1', klasyfikacja: 'D', masa_kg: 500, wartosc_netto: 1000, kolejnosc: 1, km_prosta: 5.9 },
+      { id: '3', numer_wz: 'WZ/C', odbiorca: 'Y', adres: 'Inny adres',   klasyfikacja: 'D', masa_kg: 100, wartosc_netto: 500,  kolejnosc: 2, km_prosta: 5.7 },
     ];
     const r = rozliczKurs(25.9, wzList);
     const punktX = r.punkty.find(p => p.kolejnosc === 1)!;
-    expect(punktX.wz).toHaveLength(2);
-    // WZ/A: 3000/4000 = 75% × 138,29 = 103,72
+    expect(punktX.zrodlo_rozdzialu).toBe('wartosc_netto');
+    // WZ/A: 3000/4000 = 75% × 138,29 = 103,72 (mimo że masy 500/500 = 50/50)
     expect(punktX.wz[0].koszt_wz).toBeCloseTo(103.72, 2);
-    // WZ/B: 1000/4000 = 25% × 138,29 = 34,57
     expect(punktX.wz[1].koszt_wz).toBeCloseTo(34.57, 2);
-    // Razem: 138,29
-    const suma = punktX.wz.reduce((s, w) => s + w.koszt_wz, 0);
-    expect(suma).toBeCloseTo(138.29, 1);
   });
 
-  it('brak wartości netto → podział równy + ostrzeżenie', () => {
+  it('brak wartości → podział po masie (domyślnie)', () => {
     const wzList: WzDoRozliczenia[] = [
-      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ul. Testowa', klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9 },
-      { id: '2', numer_wz: 'WZ/B', odbiorca: 'X', adres: 'ul. Testowa', klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9 },
-      { id: '3', numer_wz: 'WZ/C', odbiorca: 'Y', adres: 'Inny', klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 2, km_prosta: 5.7 },
+      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ul. Testowa 1', klasyfikacja: 'D', masa_kg: 2000, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9 },
+      { id: '2', numer_wz: 'WZ/B', odbiorca: 'X', adres: 'ul. Testowa 1', klasyfikacja: 'D', masa_kg: 500,  wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9 },
+    ];
+    const r = rozliczKurs(25.9, [...wzList, { id: '3', numer_wz: 'WZ/C', odbiorca: 'Y', adres: 'Inny', klasyfikacja: 'D', masa_kg: 100, wartosc_netto: null, kolejnosc: 2, km_prosta: 5.7 }]);
+    const punktX = r.punkty.find(p => p.kolejnosc === 1)!;
+    expect(punktX.zrodlo_rozdzialu).toBe('masa_kg');
+    // WZ/A: 2000/2500 = 80% × 138,29 = 110,63
+    expect(punktX.wz[0].koszt_wz).toBeCloseTo(110.63, 2);
+    // WZ/B: 500/2500 = 20% × 138,29 = 27,66
+    expect(punktX.wz[1].koszt_wz).toBeCloseTo(27.66, 2);
+  });
+
+  it('częściowe wartości (nie wszystkie) → fallback do masy', () => {
+    const wzList: WzDoRozliczenia[] = [
+      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ul. Testowa', klasyfikacja: 'D', masa_kg: 1000, wartosc_netto: 5000, kolejnosc: 1, km_prosta: 5.9 },
+      { id: '2', numer_wz: 'WZ/B', odbiorca: 'X', adres: 'ul. Testowa', klasyfikacja: 'D', masa_kg: 1000, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9 },
+      { id: '3', numer_wz: 'WZ/C', odbiorca: 'Y', adres: 'Inny',        klasyfikacja: 'D', masa_kg: 100,  wartosc_netto: null, kolejnosc: 2, km_prosta: 5.7 },
     ];
     const r = rozliczKurs(25.9, wzList);
     const punktX = r.punkty.find(p => p.kolejnosc === 1)!;
-    expect(punktX.wz[0].koszt_wz).toBeCloseTo(69.15, 2); // 138,29 / 2
+    // Mieszane — używamy masy, obie po 50%
+    expect(punktX.zrodlo_rozdzialu).toBe('masa_kg');
+    expect(punktX.wz[0].koszt_wz).toBeCloseTo(69.15, 2);
     expect(punktX.wz[1].koszt_wz).toBeCloseTo(69.15, 2);
-    expect(r.ostrzezenia.some(o => o.includes('brak wartości netto'))).toBe(true);
+  });
+
+  it('wszystkie masy = 0 i brak wartości → podział równy + ostrzeżenie', () => {
+    const wzList: WzDoRozliczenia[] = [
+      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ul. Testowa', klasyfikacja: 'D', masa_kg: 0, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9 },
+      { id: '2', numer_wz: 'WZ/B', odbiorca: 'X', adres: 'ul. Testowa', klasyfikacja: 'D', masa_kg: 0, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.9 },
+      { id: '3', numer_wz: 'WZ/C', odbiorca: 'Y', adres: 'Inny',        klasyfikacja: 'D', masa_kg: 100, wartosc_netto: null, kolejnosc: 2, km_prosta: 5.7 },
+    ];
+    const r = rozliczKurs(25.9, wzList);
+    const punktX = r.punkty.find(p => p.kolejnosc === 1)!;
+    expect(punktX.zrodlo_rozdzialu).toBe('rowny');
+    expect(punktX.wz[0].koszt_wz).toBeCloseTo(69.15, 2);
+    expect(punktX.wz[1].koszt_wz).toBeCloseTo(69.15, 2);
+    expect(r.ostrzezenia.some(o => o.includes('brak masy i wartości'))).toBe(true);
   });
 });
 
 describe('rozliczKurs — edge cases', () => {
   it('brak linii prostych → koszt 0 + ostrzeżenie', () => {
     const wzList: WzDoRozliczenia[] = [
-      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'nieznany', klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 1, km_prosta: null },
+      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'nieznany', klasyfikacja: 'D', masa_kg: 100, wartosc_netto: null, kolejnosc: 1, km_prosta: null },
     ];
     const r = rozliczKurs(20, wzList);
     expect(r.koszt_calkowity).toBe(0);
@@ -186,8 +202,8 @@ describe('rozliczKurs — edge cases', () => {
 
   it('WZ bez klasyfikacji → pominięty + ostrzeżenie', () => {
     const wzList: WzDoRozliczenia[] = [
-      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ok', klasyfikacja: null, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.0 },
-      { id: '2', numer_wz: 'WZ/B', odbiorca: 'Y', adres: 'ok2', klasyfikacja: 'D', wartosc_netto: null, kolejnosc: 2, km_prosta: 5.0 },
+      { id: '1', numer_wz: 'WZ/A', odbiorca: 'X', adres: 'ok', klasyfikacja: null, masa_kg: 100, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.0 },
+      { id: '2', numer_wz: 'WZ/B', odbiorca: 'Y', adres: 'ok2', klasyfikacja: 'D', masa_kg: 100, wartosc_netto: null, kolejnosc: 2, km_prosta: 5.0 },
     ];
     const r = rozliczKurs(20, wzList);
     expect(r.punkty).toHaveLength(1); // tylko Y

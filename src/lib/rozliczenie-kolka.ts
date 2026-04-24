@@ -15,12 +15,18 @@ export interface WzDoRozliczenia {
   odbiorca: string;
   adres: string;
   klasyfikacja: string | null;
+  /** Masa WZ w kg — używana do rozdziału kosztu adresu gdy brak wartosc_netto */
+  masa_kg: number;
+  /** Wartość netto dokumentu (opcjonalne). Gdy podane — ma priorytet nad masą. */
   wartosc_netto: number | null;
   /** Indeks „przystanku" w kursie — WZ z tą samą kolejnoscia są na tym samym adresie */
   kolejnosc: number;
   /** Linia prosta oddział → adres (km, Haversine). Null gdy nie udało się zgeocodować. */
   km_prosta: number | null;
 }
+
+/** Źródło wagi do rozdziału kosztu adresu na WZ-y (do UI ostrzegania). */
+export type ZrodloRozdzialu = 'wartosc_netto' | 'masa_kg' | 'rowny';
 
 export interface RozliczeniePunkt {
   kolejnosc: number;
@@ -34,10 +40,13 @@ export interface RozliczeniePunkt {
   wz: {
     id: string;
     numer_wz: string;
+    masa_kg: number;
     wartosc_netto: number | null;
-    udzial_wartosci: number; // 0..1, null-value WZ otrzymują równy udział
+    udzial: number; // 0..1
     koszt_wz: number;
   }[];
+  /** Jak rozdzielono koszt między WZ-ami tego punktu */
+  zrodlo_rozdzialu: ZrodloRozdzialu;
 }
 
 export interface RozliczenieKursu {
@@ -110,32 +119,44 @@ export function rozliczKurs(kmKolka: number, wzList: WzDoRozliczenia[]): Rozlicz
     const kosztPunktu = kosztKolka(kmPunktu, klasyfikacja);
     kosztCalkowity += kosztPunktu;
 
-    // Rozdział per WZ — po wartości netto, fallback równy
-    const wzzWartoscia = p.wzy.filter(w => w.wartosc_netto != null && w.wartosc_netto > 0);
-    const sumaWartosci = wzzWartoscia.reduce((s, w) => s + (w.wartosc_netto || 0), 0);
+    // Rozdział per WZ — priorytet:
+    //   1) wartosc_netto (jeśli wszystkie WZ w grupie mają podaną)
+    //   2) masa_kg (fallback — zawsze dostępna)
+    //   3) podział równy (gdy wszystkie masy = 0)
+    const wszystkieMajaWartosc = p.wzy.every(w => w.wartosc_netto != null && w.wartosc_netto > 0);
+    const sumaMas = p.wzy.reduce((s, w) => s + (w.masa_kg || 0), 0);
+
+    let zrodlo: ZrodloRozdzialu;
+    if (wszystkieMajaWartosc) {
+      zrodlo = 'wartosc_netto';
+    } else if (sumaMas > 0) {
+      zrodlo = 'masa_kg';
+    } else {
+      zrodlo = 'rowny';
+      if (p.wzy.length > 1) {
+        ostrzezenia.push(`Punkt #${p.kolejnosc}: brak masy i wartości dla WZ — podział równy.`);
+      }
+    }
 
     const wzRozpis = p.wzy.map(w => {
-      let udzialW: number;
-      if (sumaWartosci > 0 && w.wartosc_netto != null && w.wartosc_netto > 0) {
-        udzialW = w.wartosc_netto / sumaWartosci;
+      let udzial: number;
+      if (zrodlo === 'wartosc_netto') {
+        const sumaW = p.wzy.reduce((s, x) => s + (x.wartosc_netto || 0), 0);
+        udzial = (w.wartosc_netto || 0) / sumaW;
+      } else if (zrodlo === 'masa_kg') {
+        udzial = (w.masa_kg || 0) / sumaMas;
       } else {
-        udzialW = 1 / p.wzy.length; // równy podział gdy brak wartości
-        if (sumaWartosci > 0 && (w.wartosc_netto == null || w.wartosc_netto <= 0)) {
-          ostrzezenia.push(`WZ ${w.numer_wz}: brak wartości netto — dzielę koszt adresu równo.`);
-        }
+        udzial = 1 / p.wzy.length;
       }
       return {
         id: w.id,
         numer_wz: w.numer_wz,
+        masa_kg: w.masa_kg,
         wartosc_netto: w.wartosc_netto,
-        udzial_wartosci: udzialW,
-        koszt_wz: Math.round(kosztPunktu * udzialW * 100) / 100,
+        udzial,
+        koszt_wz: Math.round(kosztPunktu * udzial * 100) / 100,
       };
     });
-
-    if (p.wzy.length > 1 && sumaWartosci === 0) {
-      ostrzezenia.push(`Punkt #${p.kolejnosc}: brak wartości netto dla wszystkich WZ — podział równy.`);
-    }
 
     punkty.push({
       kolejnosc: p.kolejnosc,
@@ -146,6 +167,7 @@ export function rozliczKurs(kmKolka: number, wzList: WzDoRozliczenia[]): Rozlicz
       km_punktu: kmPunktu,
       koszt_punktu: kosztPunktu,
       wz: wzRozpis,
+      zrodlo_rozdzialu: zrodlo,
     });
   }
 
