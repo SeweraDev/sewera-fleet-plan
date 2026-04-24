@@ -341,17 +341,35 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                         const groupKeyOf = (w: { kolejnosc: number; adres: string }) =>
                           isZakonczony ? normAdres(w.adres) : String(w.kolejnosc);
 
-                        // Renumeracja # po chronologii
+                        // Dla zakończonych — posortuj WZ tak, żeby ten sam adres był
+                        // w ciągłym bloku (rowSpan musi być spójny). Zachowujemy kolejność
+                        // pierwszego wystąpienia adresu (stabilnie), by chronologia ogólna została.
+                        let kPrzSorted = kPrz;
+                        if (isZakonczony) {
+                          const firstIdxByKey = new Map<string, number>();
+                          kPrz.forEach((x, i) => {
+                            const k = groupKeyOf(x);
+                            if (!firstIdxByKey.has(k)) firstIdxByKey.set(k, i);
+                          });
+                          kPrzSorted = [...kPrz].sort((a, b) => {
+                            const ka = groupKeyOf(a);
+                            const kb = groupKeyOf(b);
+                            if (ka === kb) return 0; // stabilny — zachowaj porządek w grupie
+                            return (firstIdxByKey.get(ka)! - firstIdxByKey.get(kb)!);
+                          });
+                        }
+
+                        // Renumeracja # po kolejności grup
                         const displayNumMap = new Map<string, number>();
-                        kPrz.forEach(x => {
+                        kPrzSorted.forEach(x => {
                           const k = groupKeyOf(x);
                           if (!displayNumMap.has(k)) displayNumMap.set(k, displayNumMap.size + 1);
                         });
-                        return kPrz.map((p, pIdx) => {
+                        return kPrzSorted.map((p, pIdx) => {
                           const key = groupKeyOf(p);
-                          const prevKey = pIdx > 0 ? groupKeyOf(kPrz[pIdx - 1]) : null;
+                          const prevKey = pIdx > 0 ? groupKeyOf(kPrzSorted[pIdx - 1]) : null;
                           const isFirst = pIdx === 0 || prevKey !== key;
-                          const groupSize = kPrz.filter(x => groupKeyOf(x) === key).length;
+                          const groupSize = kPrzSorted.filter(x => groupKeyOf(x) === key).length;
                           const displayNum = displayNumMap.get(key)!;
                           return (
                         <TableRow key={p.id}>
