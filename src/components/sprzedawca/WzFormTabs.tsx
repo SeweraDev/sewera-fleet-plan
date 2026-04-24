@@ -26,7 +26,7 @@ interface WzFormTabsProps {
 
 
 const EMPTY_WZ: WzInput = {
-  numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '',
+  numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
 };
 
 function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void; autoKlasyfikacja?: string | null }) {
@@ -76,6 +76,13 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
                 <span className="text-[11px] text-muted-foreground">Bez palet</span>
               </label>
             </div>
+            <div>
+              <Label className="text-xs">Wartość netto (zł)</Label>
+              <Input className="h-8 text-sm" type="number" step="0.01" min={0} placeholder="opcjonalnie"
+                value={wz.wartosc_netto ?? ''}
+                onChange={e => updateWz(idx, 'wartosc_netto' as keyof WzInput, e.target.value === '' ? (null as any) : Number(e.target.value))} />
+            </div>
+            <div></div>
             <div className="col-span-2">
               {autoKlasyfikacja ? (
                 <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs flex items-center gap-2">
@@ -193,7 +200,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '' };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -374,7 +381,7 @@ function WzXlsTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       numer_wz: r.numer_wz || '', nr_zamowienia: '', odbiorca: r.odbiorca || '',
       adres: r.adres || '', tel: '', masa_kg: r.masa_kg || 0,
       objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: r.uwagi || '',
-      klasyfikacja: '',
+      klasyfikacja: '', wartosc_netto: null,
     }));
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList(newWzList);
@@ -528,7 +535,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '' };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -764,7 +771,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '' };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {

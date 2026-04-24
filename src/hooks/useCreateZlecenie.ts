@@ -19,6 +19,8 @@ export interface WzInput {
   uwagi: string | null;
   /** Klasyfikacja rozliczeniowa (A/B/C/D/E/F/H) — obowiązkowa przed submit */
   klasyfikacja: string;
+  /** Wartość netto dokumentu WZ (zł) — opcjonalna, używana przy rozdziale kosztów */
+  wartosc_netto: number | null;
 }
 
 export interface ZlecenieInput {
@@ -76,6 +78,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
         uwagi: wz.uwagi,
         nr_zamowienia: wz.nr_zamowienia,
         klasyfikacja: wz.klasyfikacja || null,
+        wartosc_netto: wz.wartosc_netto,
       }));
 
       const { error: err2 } = await supabase.from('zlecenia_wz').insert(wzRows);

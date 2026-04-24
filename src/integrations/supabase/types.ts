@@ -456,6 +456,7 @@ export type Database = {
           created_at: string
           id: string
           ilosc_palet: number | null
+          klasyfikacja: string | null
           masa_kg: number
           nr_zamowienia: string | null
           numer_wz: string | null
@@ -463,6 +464,7 @@ export type Database = {
           odbiorca: string | null
           tel: string | null
           uwagi: string | null
+          wartosc_netto: number | null
           zlecenie_id: string
         }
         Insert: {
@@ -470,6 +472,7 @@ export type Database = {
           created_at?: string
           id?: string
           ilosc_palet?: number | null
+          klasyfikacja?: string | null
           masa_kg?: number
           nr_zamowienia?: string | null
           numer_wz?: string | null
@@ -477,6 +480,7 @@ export type Database = {
           odbiorca?: string | null
           tel?: string | null
           uwagi?: string | null
+          wartosc_netto?: number | null
           zlecenie_id: string
         }
         Update: {
@@ -484,6 +488,7 @@ export type Database = {
           created_at?: string
           id?: string
           ilosc_palet?: number | null
+          klasyfikacja?: string | null
           masa_kg?: number
           nr_zamowienia?: string | null
           numer_wz?: string | null
@@ -491,6 +496,7 @@ export type Database = {
           odbiorca?: string | null
           tel?: string | null
           uwagi?: string | null
+          wartosc_netto?: number | null
           zlecenie_id?: string
         }
         Relationships: [

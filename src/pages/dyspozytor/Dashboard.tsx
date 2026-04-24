@@ -665,7 +665,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
   const [dzien, setDzien] = useState('');
   const [godzina, setGodzina] = useState('');
   const [wzList, setWzList] = useState<WzInput[]>([{
-    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '',
+    numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
   }]);
   const { oddzialy, loading: loadingOddzialy } = useOddzialy();
   const { flota: flotaList, loading: loadingFlota } = useFlotaOddzialu(oddzialId);

@@ -66,6 +66,7 @@ interface WzData {
   numer_wz: string;
   nr_zamowienia: string;
   klasyfikacja: string;
+  wartosc_netto: number | null;
 }
 
 export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Props) {
@@ -107,7 +108,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
     Promise.all([
       supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, typ_pojazdu, nadawca_id, oddzial_id').eq('id', zlecenieId).single(),
-      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja').eq('zlecenie_id', zlecenieId),
+      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja, wartosc_netto').eq('zlecenie_id', zlecenieId),
     ]).then(async ([zlRes, wzRes]) => {
       const zl = zlRes.data;
       if (zl) {
@@ -135,6 +136,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         numer_wz: w.numer_wz || '',
         nr_zamowienia: w.nr_zamowienia || '',
         klasyfikacja: w.klasyfikacja || '',
+        wartosc_netto: w.wartosc_netto != null ? Number(w.wartosc_netto) : null,
       }));
       setWzList(wzData);
       originalWzRef.current = wzData.map(w => ({ ...w }));
@@ -231,7 +233,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const overPal = capacity.pal > 0 && totalLoad.pal > capacity.pal;
   const isOverloaded = overKg || overM3 || overPal;
 
-  const updateWz = (idx: number, field: keyof WzData, value: string | number) => {
+  const updateWz = (idx: number, field: keyof WzData, value: string | number | null) => {
     setWzList(prev => prev.map((w, i) => i === idx ? { ...w, [field]: value } : w));
   };
 
@@ -255,7 +257,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
   // Oblicz reszty (różnice po zmniejszeniu)
   const computeReszty = () => {
-    const reszty: { odbiorca: string; adres: string; tel: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number; uwagi: string; numer_wz: string; nr_zamowienia: string; klasyfikacja: string }[] = [];
+    const reszty: { odbiorca: string; adres: string; tel: string; masa_kg: number; objetosc_m3: number; ilosc_palet: number; uwagi: string; numer_wz: string; nr_zamowienia: string; klasyfikacja: string; wartosc_netto: number | null }[] = [];
     for (const w of wzList) {
       const orig = originalWzRef.current.find(o => o.id === w.id);
       if (!orig) continue;
@@ -268,6 +270,8 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           masa_kg: Math.max(0, diffKg), objetosc_m3: Math.max(0, diffM3), ilosc_palet: Math.max(0, diffPal),
           uwagi: 'Reszta z ' + (zlecenie?.numer || ''), numer_wz: w.numer_wz, nr_zamowienia: w.nr_zamowienia,
           klasyfikacja: w.klasyfikacja || '',
+          // Reszta = nowy dokument; user uzupełni wartość netto ręcznie
+          wartosc_netto: null,
         });
       }
     }
@@ -301,6 +305,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           ilosc_palet: w.ilosc_palet || 0,
           uwagi: w.uwagi || null,
           klasyfikacja: w.klasyfikacja || null,
+          wartosc_netto: w.wartosc_netto,
         })
         .eq('id', w.id);
     }
@@ -332,6 +337,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                 masa_kg: r.masa_kg, objetosc_m3: r.objetosc_m3, ilosc_palet: r.ilosc_palet,
                 uwagi: r.uwagi, numer_wz: r.numer_wz, nr_zamowienia: r.nr_zamowienia,
                 klasyfikacja: r.klasyfikacja || null,
+                wartosc_netto: r.wartosc_netto,
               });
             }
             toast({ title: 'Utworzono zlecenie z resztą: ' + numer });
@@ -484,6 +490,12 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                         <Input className="h-8 text-sm" type="number" value={w.ilosc_palet || ''} onChange={e => updateWz(idx, 'ilosc_palet', Number(e.target.value))} />
                       </div>
                     </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Wartość netto (zł)</Label>
+                    <Input className="h-8 text-sm" type="number" step="0.01" min={0} placeholder="opcjonalnie"
+                      value={w.wartosc_netto ?? ''}
+                      onChange={e => updateWz(idx, 'wartosc_netto', e.target.value === '' ? null : Number(e.target.value))} />
                   </div>
                   <div>
                     <Label className="text-xs">Klasyfikacja transportu *</Label>
