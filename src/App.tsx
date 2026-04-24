@@ -13,6 +13,7 @@ import SprzedawcaDashboard from "@/pages/sprzedawca/Dashboard";
 import KierowcaMojaTrasa from "@/pages/kierowca/MojaTrasa";
 import MapaSewera from "@/pages/MapaSewera";
 import KartaDrogowa from "@/pages/KartaDrogowa";
+import RozliczenieKosztow from "@/pages/RozliczenieKosztow";
 import { RootRedirect } from "@/components/shared/RootRedirect";
 
 const queryClient = new QueryClient();
@@ -74,6 +75,13 @@ const App = () => (
           <Route path="/karta-drogowa/:kursId" element={
             <ProtectedRoute allowedRoles={['admin', 'zarzad', 'dyspozytor', 'kierowca']}>
               <KartaDrogowa />
+            </ProtectedRoute>
+          } />
+
+          {/* Rozliczenie kosztów transportu — zarząd i admin */}
+          <Route path="/rozliczenie-kosztow" element={
+            <ProtectedRoute allowedRoles={['admin', 'zarzad']}>
+              <RozliczenieKosztow />
             </ProtectedRoute>
           } />
 

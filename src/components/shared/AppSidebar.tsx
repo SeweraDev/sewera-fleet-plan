@@ -8,6 +8,7 @@ import {
   MapPin,
   Map,
   LogOut,
+  Calculator,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,6 +40,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   ],
   zarzad: [
     { title: 'Dashboard', url: '/zarzad', icon: BarChart3 },
+    { title: 'Rozliczenie kosztów', url: '/rozliczenie-kosztow', icon: Calculator },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
   ],
   dyspozytor: [
