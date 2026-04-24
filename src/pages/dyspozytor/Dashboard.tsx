@@ -213,17 +213,20 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
             }));
             rozliczenie = rozliczKurs(kursKm[kurs.id] || 0, wzListRozl);
           }
+          // Mapy per adres (grupowanie spójne z algorytmem — ten sam adres = jeden punkt)
+          const normAdres = (a: string) => (a || '').trim().toLowerCase().replace(/\s+/g, ' ');
           const kosztByWzId = new Map<string, number>();
-          const udzialByWzId = new Map<string, number>();
-          const kmPunktuByKolejnosc = new Map<number, number>();
-          const udzialProcByKolejnosc = new Map<number, number>();
+          const kmPunktuByAdres = new Map<string, number>();
+          const udzialProcByAdres = new Map<string, number>();
+          const kosztPunktuByAdres = new Map<string, number>();
           if (rozliczenie) {
             for (const pt of rozliczenie.punkty) {
-              kmPunktuByKolejnosc.set(pt.kolejnosc, pt.km_punktu);
-              udzialProcByKolejnosc.set(pt.kolejnosc, pt.udzial_proc);
+              const key = normAdres(pt.adres);
+              kmPunktuByAdres.set(key, pt.km_punktu);
+              udzialProcByAdres.set(key, pt.udzial_proc);
+              kosztPunktuByAdres.set(key, pt.koszt_punktu);
               for (const w of pt.wz) {
                 kosztByWzId.set(w.id, w.koszt_wz);
-                udzialByWzId.set(w.id, w.udzial);
               }
             }
           }
@@ -332,16 +335,24 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                     </TableHeader>
                     <TableBody>
                       {(() => {
-                        // Renumeracja # po chronologii: unikalne kolejnosc → 1,2,3… w kolejności wystąpienia
-                        const displayNumMap = new Map<number, number>();
+                        // Klucz grupowania: dla zakończonych = adres (spójnie z algorytmem rozliczenia,
+                        // ten sam adres w różnych kolejnosc = jeden przystanek).
+                        // Dla planowanych/aktywnych — stary styl (po kolejnosc), bez zmian.
+                        const groupKeyOf = (w: { kolejnosc: number; adres: string }) =>
+                          isZakonczony ? normAdres(w.adres) : String(w.kolejnosc);
+
+                        // Renumeracja # po chronologii
+                        const displayNumMap = new Map<string, number>();
                         kPrz.forEach(x => {
-                          if (!displayNumMap.has(x.kolejnosc)) displayNumMap.set(x.kolejnosc, displayNumMap.size + 1);
+                          const k = groupKeyOf(x);
+                          if (!displayNumMap.has(k)) displayNumMap.set(k, displayNumMap.size + 1);
                         });
                         return kPrz.map((p, pIdx) => {
-                          // Pokaż # i akcje tylko dla pierwszego WZ w grupie (ten sam kolejnosc)
-                          const isFirst = pIdx === 0 || kPrz[pIdx - 1].kolejnosc !== p.kolejnosc;
-                          const groupSize = kPrz.filter(x => x.kolejnosc === p.kolejnosc).length;
-                          const displayNum = displayNumMap.get(p.kolejnosc)!;
+                          const key = groupKeyOf(p);
+                          const prevKey = pIdx > 0 ? groupKeyOf(kPrz[pIdx - 1]) : null;
+                          const isFirst = pIdx === 0 || prevKey !== key;
+                          const groupSize = kPrz.filter(x => groupKeyOf(x) === key).length;
+                          const displayNum = displayNumMap.get(key)!;
                           return (
                         <TableRow key={p.id}>
                           {isFirst ? (
@@ -373,12 +384,12 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                               </TableCell>
                               {isFirst ? (
                                 <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
-                                  {(() => { const u = udzialProcByKolejnosc.get(p.kolejnosc); return u != null ? (u * 100).toFixed(1) + ' %' : '—'; })()}
+                                  {(() => { const u = udzialProcByAdres.get(normAdres(p.adres)); return u != null ? (u * 100).toFixed(1) + ' %' : '—'; })()}
                                 </TableCell>
                               ) : null}
                               {isFirst ? (
                                 <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
-                                  {(() => { const km = kmPunktuByKolejnosc.get(p.kolejnosc); return km != null ? km.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'; })()}
+                                  {(() => { const km = kmPunktuByAdres.get(normAdres(p.adres)); return km != null ? km.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'; })()}
                                 </TableCell>
                               ) : null}
                               <TableCell className="text-right text-xs font-semibold">

@@ -64,21 +64,29 @@ export interface RozliczenieKursu {
  * @param kmKolka liczba km kółka (z OSRM lub drogomierza kierowcy)
  * @param wzList wszystkie WZ w kursie, pogrupowane niejawnie po `kolejnosc`
  */
+/** Klucz grupowania adresu — trim + lowercase + zlepek spacji */
+function normAdres(a: string): string {
+  return (a || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 export function rozliczKurs(kmKolka: number, wzList: WzDoRozliczenia[]): RozliczenieKursu {
   const ostrzezenia: string[] = [];
 
-  // Grupuj WZ per punkt (kolejnosc = ten sam adres)
-  const punktyMap = new Map<number, WzDoRozliczenia[]>();
+  // Grupuj WZ per ADRES (nie per kolejnosc).
+  // Ten sam adres w różnych `kolejnosc` (osobne zlecenia) to w algorytmie jeden punkt.
+  const punktyMap = new Map<string, WzDoRozliczenia[]>();
   wzList.forEach(wz => {
-    const g = punktyMap.get(wz.kolejnosc) || [];
+    const key = normAdres(wz.adres);
+    const g = punktyMap.get(key) || [];
     g.push(wz);
-    punktyMap.set(wz.kolejnosc, g);
+    punktyMap.set(key, g);
   });
 
   // Suma linii prostych — podstawa do procentów
-  const punktyList = Array.from(punktyMap.entries())
-    .map(([kolejnosc, wzy]) => {
-      // Linia prosta per punkt — bierzemy pierwszą dostępną (powinny być te same na tym samym adresie)
+  const punktyList = Array.from(punktyMap.values())
+    .map(wzy => {
+      // Kolejnosc wyświetlania = najmniejsza z grupy (żeby sortować naturalnie w tabeli)
+      const kolejnosc = Math.min(...wzy.map(w => w.kolejnosc));
       const kmProsta = wzy.find(w => w.km_prosta != null)?.km_prosta ?? null;
       return { kolejnosc, wzy, kmProsta };
     })

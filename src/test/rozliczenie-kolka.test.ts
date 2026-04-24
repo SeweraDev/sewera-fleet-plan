@@ -189,6 +189,44 @@ describe('rozliczKurs — rozdział per WZ (priorytet: wartość → masa → r�
   });
 });
 
+describe('rozliczKurs — grupowanie po adresie (nie po kolejnosc)', () => {
+  it('4 WZ tego samego adresu z różnymi kolejnosc → jeden punkt, rozdział po masie', () => {
+    // Scenariusz z rzeczywistego kursu: MAŃKA RUDA ŚLĄSKA — 4 osobne zlecenia,
+    // każde z innym kolejnosc w kurs_przystanki, ale ten sam adres.
+    // Algorytm musi to zgrupować jako jeden punkt.
+    const wzList: WzDoRozliczenia[] = [
+      { id: '1', numer_wz: 'WZ/1', odbiorca: 'Mańka', adres: 'ODDZIAŁÓW MŁ.POWST. 7, RUDA ŚLĄSKA', klasyfikacja: 'D', masa_kg: 9,    wartosc_netto: null, kolejnosc: 1, km_prosta: 7.0 },
+      { id: '2', numer_wz: 'WZ/2', odbiorca: 'Mańka', adres: 'ODDZIAŁÓW MŁ.POWST. 7, RUDA ŚLĄSKA', klasyfikacja: 'D', masa_kg: 166,  wartosc_netto: null, kolejnosc: 2, km_prosta: 7.0 },
+      { id: '3', numer_wz: 'WZ/3', odbiorca: 'Mańka', adres: 'ODDZIAŁÓW MŁ.POWST. 7, RUDA ŚLĄSKA', klasyfikacja: 'D', masa_kg: 1390, wartosc_netto: null, kolejnosc: 3, km_prosta: 7.0 },
+      { id: '4', numer_wz: 'WZ/4', odbiorca: 'Mańka', adres: 'ODDZIAŁÓW MŁ.POWST. 7, RUDA ŚLĄSKA', klasyfikacja: 'D', masa_kg: 928,  wartosc_netto: null, kolejnosc: 4, km_prosta: 7.0 },
+      // Drugi adres dla kontrastu
+      { id: '5', numer_wz: 'WZ/5', odbiorca: 'Univers', adres: 'KS. FICKA 11, CHORZÓW', klasyfikacja: 'B', masa_kg: 100, wartosc_netto: null, kolejnosc: 5, km_prosta: 10.6 },
+    ];
+    const r = rozliczKurs(58, wzList);
+    expect(r.punkty).toHaveLength(2); // 2 adresy, nie 5 kolejnosci
+    const mankaP = r.punkty.find(p => p.adres.includes('MŁ.POWST'))!;
+    expect(mankaP.wz).toHaveLength(4);
+    // Udział MAŃKA = 7.0 / (7.0 + 10.6) ≈ 39.77 %, nie 4×
+    expect(mankaP.udzial_proc).toBeCloseTo(7.0 / 17.6, 3);
+    // Suma kosztów WZ w grupie = koszt punktu
+    const suma = mankaP.wz.reduce((s, w) => s + w.koszt_wz, 0);
+    expect(suma).toBeCloseTo(mankaP.koszt_punktu, 1);
+    // WZ z największą masą (1390kg) ma największy koszt
+    const maxWz = mankaP.wz.reduce((a, b) => a.masa_kg > b.masa_kg ? a : b);
+    expect(maxWz.numer_wz).toBe('WZ/3');
+  });
+
+  it('normalizacja adresu — różna wielkość liter + trim → ta sama grupa', () => {
+    const wzList: WzDoRozliczenia[] = [
+      { id: '1', numer_wz: 'WZ/1', odbiorca: 'X', adres: '  UL. Testowa 1 ', klasyfikacja: 'D', masa_kg: 100, wartosc_netto: null, kolejnosc: 1, km_prosta: 5.0 },
+      { id: '2', numer_wz: 'WZ/2', odbiorca: 'X', adres: 'ul. Testowa  1', klasyfikacja: 'D', masa_kg: 200, wartosc_netto: null, kolejnosc: 2, km_prosta: 5.0 },
+    ];
+    const r = rozliczKurs(20, wzList);
+    expect(r.punkty).toHaveLength(1);
+    expect(r.punkty[0].wz).toHaveLength(2);
+  });
+});
+
 describe('rozliczKurs — edge cases', () => {
   it('brak linii prostych → koszt 0 + ostrzeżenie', () => {
     const wzList: WzDoRozliczenia[] = [
