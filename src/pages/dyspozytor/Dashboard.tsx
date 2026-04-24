@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateRouteTotal } from '@/lib/oddzialy-geo';
+import { rozliczKurs, type WzDoRozliczenia, type RozliczenieKursu } from '@/lib/rozliczenie-kolka';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -201,6 +202,31 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
           const usedKg = kPrz.reduce((s, p) => s + p.masa_kg, 0);
           const usedM3 = kPrz.reduce((s, p) => s + p.objetosc_m3, 0);
           const usedPal = kPrz.reduce((s, p) => s + p.ilosc_palet, 0);
+          // Rozliczenie kosztów — tylko dla kursów zakończonych (km kółka z OSRM)
+          const isZakonczony = kurs.status === 'zakonczony';
+          let rozliczenie: RozliczenieKursu | null = null;
+          if (isZakonczony) {
+            const wzListRozl: WzDoRozliczenia[] = kPrz.map(p => ({
+              id: p.id, numer_wz: p.numer_wz || '', odbiorca: p.odbiorca, adres: p.adres,
+              klasyfikacja: p.klasyfikacja, masa_kg: p.masa_kg, wartosc_netto: p.wartosc_netto,
+              kolejnosc: p.kolejnosc, km_prosta: p.km_prosta,
+            }));
+            rozliczenie = rozliczKurs(kursKm[kurs.id] || 0, wzListRozl);
+          }
+          const kosztByWzId = new Map<string, number>();
+          const udzialByWzId = new Map<string, number>();
+          const kmPunktuByKolejnosc = new Map<number, number>();
+          const udzialProcByKolejnosc = new Map<number, number>();
+          if (rozliczenie) {
+            for (const pt of rozliczenie.punkty) {
+              kmPunktuByKolejnosc.set(pt.kolejnosc, pt.km_punktu);
+              udzialProcByKolejnosc.set(pt.kolejnosc, pt.udzial_proc);
+              for (const w of pt.wz) {
+                kosztByWzId.set(w.id, w.koszt_wz);
+                udzialByWzId.set(w.id, w.udzial);
+              }
+            }
+          }
           return (
             <Card key={kurs.id}>
               <CardHeader className="pb-2">
@@ -251,7 +277,15 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                   {kursKm[kurs.id] != null && <span> · {kursKm[kurs.id]} km trasa</span>}
                   {kursKm[kurs.id] === undefined && kPrz.length > 0 && <span> · ... km</span>}
                   {kurs.max_palet != null && <> · 📦 {usedPal}/{kurs.max_palet} pal</>}
+                  {rozliczenie && <span className="font-semibold text-foreground"> · 💰 {rozliczenie.koszt_calkowity.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł</span>}
                 </p>
+                {rozliczenie && rozliczenie.ostrzezenia.length > 0 && (
+                  <div className="mt-2 rounded border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-900 px-2 py-1">
+                    <ul className="text-[11px] text-yellow-800 dark:text-yellow-200 list-disc pl-4">
+                      {rozliczenie.ostrzezenia.map((o, i) => <li key={i}>{o}</li>)}
+                    </ul>
+                  </div>
+                )}
                 {kurs.ladownosc_kg > 0 && (
                   <div className="flex gap-4 mt-2">
                     <CapacityBar used={usedKg} total={kurs.ladownosc_kg} unit="kg" />
@@ -278,11 +312,22 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                         <TableHead className="text-right">Kg</TableHead>
                         <TableHead className="text-right">m³</TableHead>
                         <TableHead className="text-right">Pal.</TableHead>
-                        <TableHead>Tel / Kontakt</TableHead>
-                        <TableHead>Uwagi</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead></TableHead>
-                        <TableHead></TableHead>
+                        {isZakonczony ? (
+                          <>
+                            <TableHead className="text-right">Prosta</TableHead>
+                            <TableHead className="text-right">Udział</TableHead>
+                            <TableHead className="text-right">Km w kółku</TableHead>
+                            <TableHead className="text-right">Koszt</TableHead>
+                          </>
+                        ) : (
+                          <>
+                            <TableHead>Tel / Kontakt</TableHead>
+                            <TableHead>Uwagi</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead></TableHead>
+                            <TableHead></TableHead>
+                          </>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -321,44 +366,67 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
                           <TableCell className="text-right">{p.objetosc_m3 ? Math.round(p.objetosc_m3 * 10) / 10 : '—'}</TableCell>
                           <TableCell className="text-right">{p.ilosc_palet || '—'}</TableCell>
-                          <TableCell className="text-xs max-w-[120px] truncate">{p.tel || '—'}</TableCell>
-                          <TableCell className="text-xs max-w-[120px] truncate">{p.uwagi || '—'}</TableCell>
-                          {isFirst ? (
-                            <TableCell rowSpan={groupSize} className="align-top"><StatusBadge status={p.prz_status} /></TableCell>
-                          ) : null}
-                          <TableCell>
-                            <div className="flex gap-1">
-                            {p.zlecenie_id && (
-                              <Button size="sm" variant="ghost" onClick={() => setEditZlId(p.zlecenie_id)}>
-                                ✏️
-                              </Button>
-                            )}
-                            </div>
-                          </TableCell>
-                          {isFirst ? (
-                            <TableCell rowSpan={groupSize} className="align-top">
-                              <div className="flex gap-1">
-                            {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
-                              <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id.split('_')[0])} disabled={acting}>
-                                ✓
-                              </Button>
-                            )}
-                            {p.zlecenie_id && (
-                              <Button size="sm" variant="ghost" onClick={() => { setPrzepnijPrz({...p, id: p.id.split('_')[0]}); setPrzepnijKurs(kurs); }}>
-                                🔀
-                              </Button>
-                            )}
-                            {p.zlecenie_id && kurs.status !== 'usuniety' && (
-                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
-                                setOdpinZl({ zlId: p.zlecenie_id!, przId: p.id.split('_')[0], numer: p.zl_numer || p.numer_wz || '?' });
-                                setOdpinStep(1);
-                              }}>
-                                ↩️
-                              </Button>
-                            )}
-                              </div>
-                            </TableCell>
-                          ) : null}
+                          {isZakonczony ? (
+                            <>
+                              <TableCell className="text-right text-xs">
+                                {p.km_prosta != null ? p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'}
+                              </TableCell>
+                              {isFirst ? (
+                                <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
+                                  {(() => { const u = udzialProcByKolejnosc.get(p.kolejnosc); return u != null ? (u * 100).toFixed(1) + ' %' : '—'; })()}
+                                </TableCell>
+                              ) : null}
+                              {isFirst ? (
+                                <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
+                                  {(() => { const km = kmPunktuByKolejnosc.get(p.kolejnosc); return km != null ? km.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'; })()}
+                                </TableCell>
+                              ) : null}
+                              <TableCell className="text-right text-xs font-semibold">
+                                {(() => { const k = kosztByWzId.get(p.id); return k != null ? k.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł' : '—'; })()}
+                              </TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell className="text-xs max-w-[120px] truncate">{p.tel || '—'}</TableCell>
+                              <TableCell className="text-xs max-w-[120px] truncate">{p.uwagi || '—'}</TableCell>
+                              {isFirst ? (
+                                <TableCell rowSpan={groupSize} className="align-top"><StatusBadge status={p.prz_status} /></TableCell>
+                              ) : null}
+                              <TableCell>
+                                <div className="flex gap-1">
+                                {p.zlecenie_id && (
+                                  <Button size="sm" variant="ghost" onClick={() => setEditZlId(p.zlecenie_id)}>
+                                    ✏️
+                                  </Button>
+                                )}
+                                </div>
+                              </TableCell>
+                              {isFirst ? (
+                                <TableCell rowSpan={groupSize} className="align-top">
+                                  <div className="flex gap-1">
+                                {p.prz_status === 'oczekuje' && kurs.status === 'aktywny' && (
+                                  <Button size="sm" variant="outline" onClick={() => handlePrzystanek(p.id.split('_')[0])} disabled={acting}>
+                                    ✓
+                                  </Button>
+                                )}
+                                {p.zlecenie_id && (
+                                  <Button size="sm" variant="ghost" onClick={() => { setPrzepnijPrz({...p, id: p.id.split('_')[0]}); setPrzepnijKurs(kurs); }}>
+                                    🔀
+                                  </Button>
+                                )}
+                                {p.zlecenie_id && kurs.status !== 'usuniety' && (
+                                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
+                                    setOdpinZl({ zlId: p.zlecenie_id!, przId: p.id.split('_')[0], numer: p.zl_numer || p.numer_wz || '?' });
+                                    setOdpinStep(1);
+                                  }}>
+                                    ↩️
+                                  </Button>
+                                )}
+                                  </div>
+                                </TableCell>
+                              ) : null}
+                            </>
+                          )}
                         </TableRow>
                         );
                         });
