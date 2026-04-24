@@ -273,6 +273,12 @@ export default function KartaDrogowa() {
               <td className="font-semibold">Ładowność:</td>
               <td>{kurs.ladownosc_kg} kg{kurs.max_palet ? ` · ${kurs.max_palet} pal` : ''}</td>
             </tr>
+            <tr>
+              <td className="font-semibold">Licznik — wyjazd (km):</td>
+              <td className="fill-cell"></td>
+              <td className="font-semibold">Licznik — powrót (km):</td>
+              <td className="fill-cell"></td>
+            </tr>
           </tbody>
         </table>
 
@@ -287,8 +293,6 @@ export default function KartaDrogowa() {
               <th>Adres</th>
               <th className="w-20">Linia prosta (km)</th>
               <th className="w-14">Klasyf.</th>
-              <th className="w-20">Km wyjazd</th>
-              <th className="w-20">Km przyjazd</th>
               <th className="w-12">Kg</th>
               <th className="w-10">Pal</th>
               <th className="w-24">Telefon</th>
@@ -310,8 +314,6 @@ export default function KartaDrogowa() {
                   {p.km_prosta != null ? p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
                 </td>
                 <td className="text-center font-mono font-semibold">{p.klasyfikacja || ''}</td>
-                <td className="fill-cell"></td>
-                <td className="fill-cell"></td>
                 <td className="text-right">{Math.round(p.masa_kg)}</td>
                 <td className="text-right">{p.ilosc_palet || ''}</td>
                 <td className="text-[8pt]">{p.tel}</td>
