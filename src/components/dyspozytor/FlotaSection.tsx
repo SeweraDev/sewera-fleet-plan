@@ -415,41 +415,23 @@ function KalendarzTab({
     );
   });
 
+  const flotaWlasna = flota.filter(f => !f.jest_zewnetrzny);
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">🚛 Pojazdy</h3>
+        <h3 className="text-sm font-semibold text-foreground">🚛 Flota Sewera</h3>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader><TableRow><TableHead className="sticky left-0 bg-background z-10 min-w-[140px]">Pojazd</TableHead>{renderDayHeaders()}</TableRow></TableHeader>
             <TableBody>
-              {flota.map(f => (
+              {flotaWlasna.map(f => (
                 <TableRow key={f.id}>
                   <TableCell className="sticky left-0 bg-background z-10 font-mono text-xs">{f.nr_rej}<span className="text-muted-foreground ml-1 text-[10px]">{f.typ}</span></TableCell>
                   {businessDays.map(d => {
                     const kurs = flotaKursy.get(f.id)?.get(d);
                     const blocked = isBlocked('pojazd', f.id, d);
                     return <TableCell key={d} className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked && !kurs ? 'bg-red-50 dark:bg-red-950/30' : ''}`}><KursCell kurs={kurs} blocked={blocked} onToggle={() => onToggle('pojazd', f.id, d)} /></TableCell>;
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">👤 Kierowcy</h3>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow><TableHead className="sticky left-0 bg-background z-10 min-w-[140px]">Kierowca</TableHead>{renderDayHeaders()}</TableRow></TableHeader>
-            <TableBody>
-              {kierowcy.map(k => (
-                <TableRow key={k.id}>
-                  <TableCell className="sticky left-0 bg-background z-10 text-xs font-medium">{k.imie_nazwisko}</TableCell>
-                  {businessDays.map(d => {
-                    const kurs = kierowcaKursy.get(k.id)?.get(d);
-                    const blocked = isBlocked('kierowca', k.id, d);
-                    return <TableCell key={d} className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked && !kurs ? 'bg-red-50 dark:bg-red-950/30' : ''}`}><KursCell kurs={kurs} blocked={blocked} onToggle={() => onToggle('kierowca', k.id, d)} /></TableCell>;
                   })}
                 </TableRow>
               ))}
@@ -476,6 +458,26 @@ function KalendarzTab({
                         <KursCell kurs={undefined} blocked={blocked} onToggle={() => onToggle('zewnetrzny', f.id, d)} />
                       </TableCell>
                     );
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-foreground">👤 Kierowcy</h3>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow><TableHead className="sticky left-0 bg-background z-10 min-w-[140px]">Kierowca</TableHead>{renderDayHeaders()}</TableRow></TableHeader>
+            <TableBody>
+              {kierowcy.map(k => (
+                <TableRow key={k.id}>
+                  <TableCell className="sticky left-0 bg-background z-10 text-xs font-medium">{k.imie_nazwisko}</TableCell>
+                  {businessDays.map(d => {
+                    const kurs = kierowcaKursy.get(k.id)?.get(d);
+                    const blocked = isBlocked('kierowca', k.id, d);
+                    return <TableCell key={d} className={`text-center p-1 ${d === today ? 'bg-accent/30' : ''} ${blocked && !kurs ? 'bg-red-50 dark:bg-red-950/30' : ''}`}><KursCell kurs={kurs} blocked={blocked} onToggle={() => onToggle('kierowca', k.id, d)} /></TableCell>;
                   })}
                 </TableRow>
               ))}
