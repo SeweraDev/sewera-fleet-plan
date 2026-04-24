@@ -113,13 +113,13 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
     }
 
     // Odcinki techniczne per kurs (serwis, tankowanie itp.)
-    const kursIds = (kursyData || []).map(k => k.id);
+    const kursyIdList = (kursyData || []).map(k => k.id);
     const odcinkiMap = new Map<string, OdcinekTechniczny[]>();
-    if (kursIds.length > 0) {
+    if (kursyIdList.length > 0) {
       const { data: odcinkiData } = await supabase
         .from('kurs_odcinki_techniczne')
         .select('id, kurs_id, opis, km')
-        .in('kurs_id', kursIds)
+        .in('kurs_id', kursyIdList)
         .order('created_at');
       (odcinkiData || []).forEach((o: any) => {
         const list = odcinkiMap.get(o.kurs_id) || [];
