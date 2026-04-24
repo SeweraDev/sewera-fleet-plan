@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { geocodeAddress, getKmProstaFromOddzial } from '@/lib/oddzialy-geo';
 
+export interface OdcinekTechniczny {
+  id: string;
+  opis: string;
+  km: number;
+}
+
 export interface KursDto {
   id: string;
   numer: string | null;
@@ -18,6 +24,10 @@ export interface KursDto {
   max_palet: number | null;
   kierowca_tel: string | null;
   godzina_start: string | null;
+  /** Override km kółka (z drogomierza) — jeśli null, używamy km OSRM */
+  km_rozliczeniowe: number | null;
+  /** Odcinki techniczne (serwis, tankowanie) — dodatkowe km bez punktu rozliczeniowego */
+  odcinki_techniczne: OdcinekTechniczny[];
 }
 
 export interface PrzystanekDto {
@@ -53,7 +63,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
 
     let query = supabase
       .from('kursy')
-      .select('id, numer, status, godzina_start, nr_rej_zewn, kierowca_nazwa, kierowca_id, ts_wyjazd, ts_powrot, flota_id')
+      .select('id, numer, status, godzina_start, nr_rej_zewn, kierowca_nazwa, kierowca_id, ts_wyjazd, ts_powrot, flota_id, km_rozliczeniowe')
       .eq('oddzial_id', oddzialId);
 
     if (dzienDo && dzienDo !== dzien) {
@@ -102,6 +112,22 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
       (kierowcyData || []).forEach(k => kierowcaMap.set(k.id, { tel: k.tel }));
     }
 
+    // Odcinki techniczne per kurs (serwis, tankowanie itp.)
+    const kursIds = (kursyData || []).map(k => k.id);
+    const odcinkiMap = new Map<string, OdcinekTechniczny[]>();
+    if (kursIds.length > 0) {
+      const { data: odcinkiData } = await supabase
+        .from('kurs_odcinki_techniczne')
+        .select('id, kurs_id, opis, km')
+        .in('kurs_id', kursIds)
+        .order('created_at');
+      (odcinkiData || []).forEach((o: any) => {
+        const list = odcinkiMap.get(o.kurs_id) || [];
+        list.push({ id: o.id, opis: o.opis, km: Number(o.km) });
+        odcinkiMap.set(o.kurs_id, list);
+      });
+    }
+
     const mapped: KursDto[] = (kursyData || []).map(k => {
       const f = flotaMap.get((k as any).flota_id || '');
       const fz = k.nr_rej_zewn ? flotaZewMap.get(k.nr_rej_zewn) : null;
@@ -122,6 +148,8 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
         max_palet: f?.max_palet ?? fz?.max_palet ?? null,
         kierowca_tel: kier?.tel ?? null,
         godzina_start: (k as any).godzina_start || null,
+        km_rozliczeniowe: (k as any).km_rozliczeniowe != null ? Number((k as any).km_rozliczeniowe) : null,
+        odcinki_techniczne: odcinkiMap.get(k.id) || [],
       };
     });
     setKursy(mapped);
@@ -251,6 +279,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
       .channel(`dyspozytor-kursy-${Date.now()}-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kursy' }, () => refetch())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kurs_przystanki' }, () => refetch())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'kurs_odcinki_techniczne' }, () => refetch())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [refetch]);

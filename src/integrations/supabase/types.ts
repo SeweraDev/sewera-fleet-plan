@@ -233,6 +233,38 @@ export type Database = {
           },
         ]
       }
+      kurs_odcinki_techniczne: {
+        Row: {
+          id: string
+          kurs_id: string
+          opis: string
+          km: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          kurs_id: string
+          opis: string
+          km: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          kurs_id?: string
+          opis?: string
+          km?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kurs_odcinki_techniczne_kurs_id_fkey"
+            columns: ["kurs_id"]
+            isOneToOne: false
+            referencedRelation: "kursy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kursy: {
         Row: {
           created_at: string
@@ -242,6 +274,7 @@ export type Database = {
           id: string
           kierowca_id: string | null
           kierowca_nazwa: string | null
+          km_rozliczeniowe: number | null
           nr_rej_zewn: string | null
           numer: string | null
           oddzial_id: number | null
@@ -257,6 +290,7 @@ export type Database = {
           id?: string
           kierowca_id?: string | null
           kierowca_nazwa?: string | null
+          km_rozliczeniowe?: number | null
           nr_rej_zewn?: string | null
           numer?: string | null
           oddzial_id?: number | null
@@ -272,6 +306,7 @@ export type Database = {
           id?: string
           kierowca_id?: string | null
           kierowca_nazwa?: string | null
+          km_rozliczeniowe?: number | null
           nr_rej_zewn?: string | null
           numer?: string | null
           oddzial_id?: number | null

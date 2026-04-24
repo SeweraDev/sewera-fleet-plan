@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateRouteTotal } from '@/lib/oddzialy-geo';
 import { rozliczKurs, type WzDoRozliczenia, type RozliczenieKursu } from '@/lib/rozliczenie-kolka';
+import { EdytujKmModal } from '@/components/dyspozytor/EdytujKmModal';
+import { KLASYFIKACJE } from '@/lib/klasyfikacje';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -121,6 +123,28 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
 
   const [editZlId, setEditZlId] = useState<string | null>(null);
   const [editKurs, setEditKurs] = useState<KursDto | null>(null);
+  const [editKmKurs, setEditKmKurs] = useState<KursDto | null>(null);
+
+  /** Zmień klasyfikację dla wszystkich WZ na danym adresie w obrębie kursa. */
+  const handleChangeKlasyfikacjaAdres = async (kursId: string, adres: string, nowaKlasyf: string) => {
+    // Znajdź wszystkie przystanki kursa z tym adresem
+    const norm = (a: string) => (a || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const kPrzKursa = przystanki.filter(p => p.kurs_id === kursId && norm(p.adres) === norm(adres));
+    const zlecenieIds = Array.from(new Set(kPrzKursa.map(p => p.zlecenie_id).filter(Boolean))) as string[];
+    if (zlecenieIds.length === 0) return;
+    // Zmień klasyfikację we wszystkich WZ tych zleceń, pod tym konkretnym adresem
+    const { error } = await supabase
+      .from('zlecenia_wz')
+      .update({ klasyfikacja: nowaKlasyf })
+      .in('zlecenie_id', zlecenieIds)
+      .eq('adres', kPrzKursa[0].adres);
+    if (error) {
+      toast.error('Błąd zmiany klasyfikacji: ' + error.message);
+      return;
+    }
+    toast.success('Zmieniono klasyfikację');
+    refetch();
+  };
   const [przepnijPrz, setPrzepnijPrz] = useState<PrzystanekDto | null>(null);
   const [przepnijKurs, setPrzepnijKurs] = useState<KursDto | null>(null);
 
@@ -202,8 +226,14 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
           const usedKg = kPrz.reduce((s, p) => s + p.masa_kg, 0);
           const usedM3 = kPrz.reduce((s, p) => s + p.objetosc_m3, 0);
           const usedPal = kPrz.reduce((s, p) => s + p.ilosc_palet, 0);
-          // Rozliczenie kosztów — tylko dla kursów zakończonych (km kółka z OSRM)
+          // Rozliczenie kosztów — tylko dla kursów zakończonych
+          // km_kolka_efektywne = km_rozliczeniowe (override drogomierza) ?? (km_osrm + Σ odcinki_techniczne)
           const isZakonczony = kurs.status === 'zakonczony';
+          const odcinkiSuma = (kurs.odcinki_techniczne || []).reduce((s, o) => s + (o.km || 0), 0);
+          const kmOsrm = kursKm[kurs.id] ?? null;
+          const kmEfektywne = kurs.km_rozliczeniowe != null
+            ? kurs.km_rozliczeniowe
+            : ((kmOsrm ?? 0) + odcinkiSuma);
           let rozliczenie: RozliczenieKursu | null = null;
           if (isZakonczony) {
             const wzListRozl: WzDoRozliczenia[] = kPrz.map(p => ({
@@ -211,7 +241,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
               klasyfikacja: p.klasyfikacja, masa_kg: p.masa_kg, wartosc_netto: p.wartosc_netto,
               kolejnosc: p.kolejnosc, km_prosta: p.km_prosta,
             }));
-            rozliczenie = rozliczKurs(kursKm[kurs.id] || 0, wzListRozl);
+            rozliczenie = rozliczKurs(kmEfektywne, wzListRozl);
           }
           // Mapy per adres (grupowanie spójne z algorytmem — ten sam adres = jeden punkt)
           const normAdres = (a: string) => (a || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -277,11 +307,33 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Rozładunki: {done}/{kPrz.length} · {Math.round(usedKg)}/{Math.round(kurs.ladownosc_kg)} kg
-                  {kursKm[kurs.id] != null && <span> · {kursKm[kurs.id]} km trasa</span>}
-                  {kursKm[kurs.id] === undefined && kPrz.length > 0 && <span> · ... km</span>}
+                  {isZakonczony ? (
+                    <span>
+                      {' · '}
+                      {kmEfektywne.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km
+                      {kurs.km_rozliczeniowe != null && <span className="text-[10px]"> (drogomierz)</span>}
+                      {odcinkiSuma > 0 && kurs.km_rozliczeniowe == null && <span className="text-[10px]"> (OSRM + {odcinkiSuma.toFixed(1)} tech.)</span>}
+                      {' '}
+                      <button
+                        onClick={() => setEditKmKurs(kurs)}
+                        className="text-primary hover:underline text-[10px] ml-1"
+                        title="Edytuj km / odcinki techniczne"
+                      >✏️ edytuj km</button>
+                    </span>
+                  ) : (
+                    <>
+                      {kursKm[kurs.id] != null && <span> · {kursKm[kurs.id]} km trasa</span>}
+                      {kursKm[kurs.id] === undefined && kPrz.length > 0 && <span> · ... km</span>}
+                    </>
+                  )}
                   {kurs.max_palet != null && <> · 📦 {usedPal}/{kurs.max_palet} pal</>}
                   {rozliczenie && <span className="font-semibold text-foreground"> · 💰 {rozliczenie.koszt_calkowity.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł</span>}
                 </p>
+                {isZakonczony && kurs.odcinki_techniczne && kurs.odcinki_techniczne.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Odcinki techniczne: {kurs.odcinki_techniczne.map(o => `${o.opis} (${o.km.toFixed(1)} km)`).join(' · ')}
+                  </p>
+                )}
                 {rozliczenie && rozliczenie.ostrzezenia.length > 0 && (
                   <div className="mt-2 rounded border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-900 px-2 py-1">
                     <ul className="text-[11px] text-yellow-800 dark:text-yellow-200 list-disc pl-4">
@@ -321,6 +373,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                             <TableHead className="text-right">Udział</TableHead>
                             <TableHead className="text-right">Km w kółku</TableHead>
                             <TableHead className="text-right">Koszt</TableHead>
+                            <TableHead className="w-8"></TableHead>
                           </>
                         ) : (
                           <>
@@ -387,11 +440,33 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                               </div>
                             )}
                           </TableCell>
-                          <TableCell>
-                            {p.klasyfikacja ? (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">{p.klasyfikacja}</Badge>
-                            ) : <span className="text-muted-foreground text-xs">—</span>}
-                          </TableCell>
+                          {isZakonczony ? (
+                            isFirst ? (
+                              <TableCell rowSpan={groupSize} className="align-top">
+                                <Select
+                                  value={p.klasyfikacja || ''}
+                                  onValueChange={(v) => handleChangeKlasyfikacjaAdres(kurs.id, p.adres, v)}
+                                >
+                                  <SelectTrigger className="h-7 w-16 text-[10px] px-2 font-mono">
+                                    <SelectValue placeholder="—" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {KLASYFIKACJE.map(k => (
+                                      <SelectItem key={k.kod} value={k.kod} className="text-xs">
+                                        <span className="font-mono">{k.kod}</span> — {k.opis}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                            ) : null
+                          ) : (
+                            <TableCell>
+                              {p.klasyfikacja ? (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">{p.klasyfikacja}</Badge>
+                              ) : <span className="text-muted-foreground text-xs">—</span>}
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
                           <TableCell className="text-right">{p.objetosc_m3 ? Math.round(p.objetosc_m3 * 10) / 10 : '—'}</TableCell>
                           <TableCell className="text-right">{p.ilosc_palet || '—'}</TableCell>
@@ -412,6 +487,13 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                               ) : null}
                               <TableCell className="text-right text-xs font-semibold">
                                 {(() => { const k = kosztByWzId.get(p.id); return k != null ? k.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł' : '—'; })()}
+                              </TableCell>
+                              <TableCell className="w-8 p-1">
+                                {p.zlecenie_id && (
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditZlId(p.zlecenie_id)} title="Edytuj zlecenie / WZ">
+                                    ✏️
+                                  </Button>
+                                )}
                               </TableCell>
                             </>
                           ) : (
@@ -473,6 +555,16 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
         zlecenieId={editZlId}
         open={!!editZlId}
         onClose={() => setEditZlId(null)}
+        onSaved={refetch}
+      />
+
+      <EdytujKmModal
+        kursId={editKmKurs?.id || null}
+        open={!!editKmKurs}
+        onClose={() => setEditKmKurs(null)}
+        kmOsrm={editKmKurs ? (kursKm[editKmKurs.id] ?? null) : null}
+        kmRozliczeniowe={editKmKurs?.km_rozliczeniowe ?? null}
+        odcinkiTech={editKmKurs?.odcinki_techniczne || []}
         onSaved={refetch}
       />
 
