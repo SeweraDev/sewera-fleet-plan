@@ -381,7 +381,13 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           ) : zlecenie && ['dostarczona', 'w_trasie', 'anulowana'].includes(zlecenie.status) ? (
             <div className="py-8 text-center space-y-3">
               <p className="text-sm font-medium">Zlecenie ma status: <strong>{zlecenie.status === 'dostarczona' ? 'Dostarczone' : zlecenie.status === 'w_trasie' ? 'W trasie' : 'Anulowane'}</strong></p>
-              <p className="text-sm text-muted-foreground">Zrealizowanych zleceń nie można edytować.</p>
+              <p className="text-sm text-muted-foreground">
+                {zlecenie.status === 'anulowana'
+                  ? 'Anulowanych zleceń nie można edytować.'
+                  : zlecenie.status === 'w_trasie'
+                  ? 'Zleceń w trasie nie można edytować.'
+                  : 'Zrealizowanych zleceń nie można edytować.'}
+              </p>
               <Button variant="outline" onClick={onClose}>Zamknij</Button>
             </div>
           ) : (
@@ -552,17 +558,17 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
             );
           })()}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>Anuluj</Button>
-            {zlecenie && !['dostarczona', 'w_trasie', 'anulowana'].includes(zlecenie.status) && (
+          {zlecenie && !['dostarczona', 'w_trasie', 'anulowana'].includes(zlecenie.status) && (
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Anuluj</Button>
               <Button variant="secondary" onClick={() => setShowPrzekaz(true)} disabled={saving || loading}>
                 ↗ Przekaż do oddziału
               </Button>
-            )}
-            <Button onClick={handleSaveClick} disabled={saving || loading || showResztaChoice} variant={isOverloaded ? 'destructive' : 'default'}>
-              {saving ? 'Zapisywanie...' : isOverloaded ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)` : `Zapisz zmiany (${wzList.length} WZ)`}
-            </Button>
-          </DialogFooter>
+              <Button onClick={handleSaveClick} disabled={saving || loading || showResztaChoice} variant={isOverloaded ? 'destructive' : 'default'}>
+                {saving ? 'Zapisywanie...' : isOverloaded ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)` : `Zapisz zmiany (${wzList.length} WZ)`}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -680,7 +680,15 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
           if (!odpinZl) return;
           // Usuń przystanek z kursu (po zlecenie_id żeby złapać wszystkie WZ)
           await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', odpinZl.zlId);
-          await supabase.from('zlecenia').update({ status: 'robocza', kurs_id: null } as any).eq('id', odpinZl.zlId);
+          // Sprawdź obecny status — terminalnym (anulowana/dostarczona) zostaw status,
+          // pozostałym przywróć 'robocza'.
+          const { data: zlSt } = await supabase.from('zlecenia').select('status').eq('id', odpinZl.zlId).single();
+          const terminal = zlSt && ['anulowana', 'dostarczona'].includes(zlSt.status);
+          if (terminal) {
+            await supabase.from('zlecenia').update({ kurs_id: null } as any).eq('id', odpinZl.zlId);
+          } else {
+            await supabase.from('zlecenia').update({ status: 'robocza', kurs_id: null } as any).eq('id', odpinZl.zlId);
+          }
           setOdpinStep(0);
           setOdpinZl(null);
           refetch();
@@ -705,7 +713,16 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
             const zlIds = kPrz.map(p => p.zlecenie_id).filter(Boolean) as string[];
             await supabase.from('kurs_przystanki').delete().eq('kurs_id', deleteKursId);
             if (zlIds.length > 0) {
-              await supabase.from('zlecenia').update({ status: 'robocza', kurs_id: null } as any).in('id', zlIds);
+              // Pobierz statusy żeby terminalnych (anulowana/dostarczona) nie wrzucać z powrotem do 'robocza'
+              const { data: zlStatuses } = await supabase.from('zlecenia').select('id, status').in('id', zlIds);
+              const terminalIds = (zlStatuses || []).filter(z => ['anulowana', 'dostarczona'].includes(z.status)).map(z => z.id);
+              const niefinalIds = zlIds.filter(id => !terminalIds.includes(id));
+              if (terminalIds.length > 0) {
+                await supabase.from('zlecenia').update({ kurs_id: null } as any).in('id', terminalIds);
+              }
+              if (niefinalIds.length > 0) {
+                await supabase.from('zlecenia').update({ status: 'robocza', kurs_id: null } as any).in('id', niefinalIds);
+              }
             }
           }
           await supabase.from('kursy').update({ status: 'usuniety' } as any).eq('id', deleteKursId);
