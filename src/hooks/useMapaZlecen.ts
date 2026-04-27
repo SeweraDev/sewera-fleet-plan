@@ -63,14 +63,8 @@ export function useMapaZlecen(dzien: string) {
 
     // 1b. Zlecenia: (dzien == wybrany dzień)
     //          LUB (przypisane do kursu z wybranego dnia)
-    //          LUB (zaległe bez kursu — TYLKO dla widoku dzisiejszego)
-    // Zaległe pokazują się tylko gdy oglądamy dzień dzisiejszy — żeby
-    // dyspozytor zobaczył co trzeba szybko zaplanować. W widoku przyszłym
-    // zaległe nie mają tam miejsca (to nie ich dzień). W widoku przeszłym
-    // traktujemy jako zapis historyczny z dokładnie tego dnia.
-    const todayIso = new Date().toISOString().split('T')[0];
-    const isTodayView = dzien === todayIso;
-
+    // Mapa pokazuje wyłącznie zlecenia z wybranego dnia oraz te, które
+    // zostały przypisane do kursów tego dnia (mogą mieć inny dzien).
     let query = supabase
       .from('zlecenia')
       .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id')
@@ -80,9 +74,6 @@ export function useMapaZlecen(dzien: string) {
     const orParts = [`dzien.eq.${dzien}`];
     if (kursIdsZDnia.length > 0) {
       orParts.push(`kurs_id.in.(${kursIdsZDnia.join(',')})`);
-    }
-    if (isTodayView) {
-      orParts.push(`and(kurs_id.is.null,dzien.lt.${todayIso})`);
     }
     query = query.or(orParts.join(','));
 
