@@ -242,14 +242,17 @@ export function ZleceniaTab({
   dzien,
   pastOnly = false,
   onOpenKursModal,
+  onZlChange,
 }: {
   oddzialId: number;
   oddzialNazwa?: string;
   dzien?: string;
   pastOnly?: boolean;
   onOpenKursModal?: (zlecenieIds: string[]) => void;
+  onZlChange?: () => void;
 }) {
-  const { zlecenia, loading, refetch } = useZleceniaOddzialu(oddzialId, pastOnly, dzien);
+  const { zlecenia, loading, refetch: refetchInner } = useZleceniaOddzialu(oddzialId, pastOnly, dzien);
+  const refetch = () => { refetchInner(); onZlChange?.(); };
   const { flota } = useFlotaOddzialu(oddzialId);
   const availableTypes = useMemo(() => [...new Set(flota.map(f => f.typ))], [flota]);
   const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('bez_kursu');

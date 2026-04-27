@@ -1080,6 +1080,7 @@ export default function DyspozytorDashboard() {
                   oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
                   dzien={dzien}
                   onOpenKursModal={(zlIds) => { setPreSelectedZlIds(zlIds); setShowModal(true); }}
+                  onZlChange={() => { refetchZlBezKursu(); refetch(); }}
                 />
               )}
               {activeId === 'kolejka' && (
