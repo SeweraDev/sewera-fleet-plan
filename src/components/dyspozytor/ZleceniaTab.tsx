@@ -320,7 +320,10 @@ export function ZleceniaTab({
 
   const confirmDelete = async () => {
     if (!deleteZlId) return;
-    await supabase.from('zlecenia').update({ status: 'anulowana' } as any).eq('id', deleteZlId);
+    // Odepnij z kursu (usun przystanki + wyczysc kurs_id) zeby anulowane zlecenia
+    // nie zostawaly w kursach
+    await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', deleteZlId);
+    await supabase.from('zlecenia').update({ status: 'anulowana', kurs_id: null } as any).eq('id', deleteZlId);
     toast.success('Zlecenie usunięte');
     setDeleteZlId(null);
     refetch();
@@ -330,7 +333,8 @@ export function ZleceniaTab({
     if (checkedIds.size === 0) return;
     setBulkDeleting(true);
     const ids = Array.from(checkedIds);
-    await supabase.from('zlecenia').update({ status: 'anulowana' } as any).in('id', ids);
+    await supabase.from('kurs_przystanki').delete().in('zlecenie_id', ids);
+    await supabase.from('zlecenia').update({ status: 'anulowana', kurs_id: null } as any).in('id', ids);
     toast.success(`Anulowano ${ids.length} zleceń`);
     setCheckedIds(new Set());
     setShowBulkDelete(false);
@@ -339,9 +343,10 @@ export function ZleceniaTab({
   };
 
   const handleAnuluj = async (zl: ZlecenieOddzialuDto) => {
+    await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', zl.id);
     await supabase
       .from('zlecenia')
-      .update({ status: 'anulowana' } as any)
+      .update({ status: 'anulowana', kurs_id: null } as any)
       .eq('id', zl.id);
 
     // Notify sender
