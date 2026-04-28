@@ -834,13 +834,29 @@ export function parseWZText(rawText: string): WZImportData {
           odbiorca = line;
         }
       }
-      // Linia 2: adres Sewery + adres siedziby Odbiorcy → po odcieciu prefiksu Sewery zostaje adres Odbiorcy
-      if (!odbiornikAdres && sewIdx + 1 < lines.length) {
-        let line2 = lines[sewIdx + 1];
-        for (const p of PROMAK_SEWERA_PREFIXES) line2 = line2.replace(p, "").trim();
-        // Sprawdz czy reszta wyglada jak adres (ul./al./kod pocztowy)
-        if (line2.length > 5 && (/(?:ul|al|os|pl)\.\s/i.test(line2) || /\d{2}-?\d{3}\s/.test(line2))) {
-          odbiornikAdres = line2;
+      // Linie sewIdx+1, sewIdx+2 — moga zawierac adres siedziby Odbiorcy (po odcieciu
+      // prefiksu Sewery) lub kontynuacje nazwy firmy (np. "ERFARB" w cudzyslowach na osobnej linii).
+      for (let li = sewIdx + 1; li <= Math.min(sewIdx + 3, lines.length - 1); li++) {
+        let lineN = lines[li];
+        for (const p of PROMAK_SEWERA_PREFIXES) lineN = lineN.replace(p, "").trim();
+        if (lineN.length < 2) continue;
+        // Stop na blokach lewej kolumny ktore nie maja prawej (REDYSTRYBUCJA, ODDZIAL)
+        if (/^(REDYSTRYBUCJA|ODDZIAŁ|Magazyn|Termin|Forma\s+płatn|Wydano)/i.test(lineN)) break;
+        // Adres odbiorcy: ulica lub kod pocztowy
+        if (!odbiornikAdres && (/(?:ul|al|os|pl)\.\s/i.test(lineN) || /\d{2}-?\d{3}\s/.test(lineN))) {
+          odbiornikAdres = lineN;
+          continue;
+        }
+        // Kontynuacja nazwy firmy (np. cudzyslow "ERFARB" na osobnej linii) — dolacz do odbiorca
+        // Heurystyki: krotka linia z duza iloscia capsow, w cudzyslowie, lub kontynuacja "FIRMA HANDLOWO-..."
+        const isContinuation =
+          /^["'][^"']+["']\s*$/.test(lineN) || // "ERFARB" / 'ERFARB'
+          (lineN.length < 50 && /^[A-ZĄĆĘŁŃÓŚŹŻ\s\-"'.,]+$/.test(lineN)); // czysto wielkimi literami
+        if (odbiorca && isContinuation && !odbiorca.includes(lineN)) {
+          // Dopiero gdy nie zawiera juz tego fragmentu i nie jest to NIP/BDO
+          if (!/^(NIP:|N[RH]\s*BDO:|Nr\s+ewid)/i.test(lineN)) {
+            odbiorca = `${odbiorca} ${lineN}`.trim();
+          }
         }
       }
     }
@@ -998,30 +1014,43 @@ export function parseWZText(rawText: string): WZImportData {
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
     // Priority 4 (Promak/Bxotech): ekstraktuj adres z linii sklejonych z lewa kolumna.
-    // OCR ramek zostawia np. "Wydano na podst. dok.: Z [Nr zam: B2B/...] ul. WOLNOŚCI 1288"
-    // gdzie po nawiasie zamykajacym `]` jest faktyczny adres dostawy.
-    if (!adres && adresIdx >= 0) {
+    // Uruchamiamy gdy adres jest pusty LUB ma tylko kod pocztowy+miasto bez ulicy
+    // (typowy efekt gdy Priority 1 dostal tylko fragment).
+    const adresHasStreet = adres ? /(?:ul|al|os|pl)\.\s/i.test(adres) : false;
+    if ((!adres || !adresHasStreet) && adresIdx >= 0) {
       const addrParts: string[] = [];
       for (let i = adresIdx; i < Math.min(adresIdx + 10, lines.length); i++) {
         const l = lines[i];
         // Stop na sekcji kontaktowej/towarach
         if (/^(Os\.\s*kontaktowa|Tel\.\s*:|Lp\.|Nazwa\s+towaru|Sposób\s+dostawy|Uwagi)/i.test(l)) break;
-        // Wzorzec: po `]` jest "ul. ..." (Wydano na ... [Nr zam: ...] ul. ...)
+        // Wzorzec 1: po `]` jest "ul. ..." (Wydano na ... [Nr zam: ...] ul. ...)
         const afterBracket = l.match(/\][^\]]*?((?:ul|al|os|pl)\.\s+[^,\n]+)$/i);
-        if (afterBracket) addrParts.push(afterBracket[1].trim());
-        // Wzorzec: kod pocztowy z miastem (z myslnikiem lub bez — OCR gubi myslnik)
-        else if (/^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(l)) {
+        if (afterBracket) {
+          addrParts.push(afterBracket[1].trim());
+          continue;
+        }
+        // Wzorzec 2: linia samo "ul. ..." (bez sklejenia z lewa kolumna)
+        if (/^(?:ul|al|os|pl)\.\s/i.test(l)) {
+          addrParts.push(l.trim());
+          continue;
+        }
+        // Wzorzec 3: kod pocztowy z miastem (z myslnikiem lub bez — OCR gubi myslnik)
+        if (/^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(l)) {
           // Normalizuj: "42460 Miasto" → "42-460 Miasto"
           const norm = l.replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
           addrParts.push(norm.trim());
+          continue;
         }
-        // Wzorzec: linia sklejona "Forma platnosci: Gotówka F.H.NAZWA" — wez nazwe firmy po "Gotówka"
-        else if (!odbiorca) {
-          const afterGotowka = l.match(/Got[oó]wka\s+([A-Z][A-Za-z0-9.,\s"\-]+)$/i);
-          if (afterGotowka) odbiorca = afterGotowka[1].trim();
+        // Wzorzec 4: linia sklejona "Forma platnosci: Gotowka/Przelew NAZWA" — nazwa firmy po formie platnosci
+        if (!odbiorca) {
+          const afterPlatn = l.match(/(?:Got[oó]wka|Przelew|Karta|Got|Pobr)\s+([A-Z][A-Za-z0-9.,\s"\-]+)$/i);
+          if (afterPlatn) odbiorca = afterPlatn[1].trim();
         }
       }
-      if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
+      if (addrParts.length) {
+        // Jesli mielismy juz fragment (np. tylko kod+miasto z Priority 1), nadpisujemy go pelnym
+        adres = addrParts.join(", ").replace(/,\s*,/g, ",");
+      }
     }
     // Final guard: if adres duplicates odbiorca address, clear it
     if (adres && odbiorca && odbiorca.includes(adres)) {
@@ -1119,19 +1148,31 @@ export function parseWZText(rawText: string): WZImportData {
   let masa_kg = 0;
   const razemIdx = lines.findIndex((l) => /^RAZEM/i.test(l));
 
-  // Strategy A (priorytet): "Waga netto razem:" — najbardziej precyzyjne pole
-  // Tolerancyjny pattern dla OCR: 'Waga netto', 'Waga neto', 'Wag@ nettto'
-  const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d][\d\s,.]*)/i);
-  if (wagaM) {
-    let raw = wagaM[1].replace(/\s/g, "");
-    // OCR często gubi przecinek dziesiętny ("426,759" → "426755"/"426759")
-    if (/^\d+$/.test(raw) && raw.length >= 5) {
-      raw = raw.slice(0, raw.length - 3) + "." + raw.slice(raw.length - 3);
-    } else {
-      raw = raw.replace(",", ".");
-    }
-    const val = parseFloat(raw);
+  // Strategy A1 (priorytet): "Waga netto razem: X,YY" — explicit separator dziesietny.
+  // Najbardziej precyzyjne. Pattern lapie: "7,42", "1 200,00", "426,759", "1200.00"
+  // (z opcjonalnym tysiacznikiem-spacja w czesci calkowitej).
+  const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d\s]+)[,.](\d{1,3})\b/i);
+  if (wagaExplicit) {
+    const intPart = wagaExplicit[1].replace(/\s/g, "");
+    const decPart = wagaExplicit[2];
+    const val = parseFloat(`${intPart}.${decPart}`);
     if (val > 0) masa_kg = Math.ceil(val);
+  }
+
+  // Strategy A2 (fallback): liczba bez separatora — heurystyka kropki przed 3 ostatnimi cyframi
+  // dla duzych wagi typu "426759" → "426.759". Tolerancyjny pattern dla OCR.
+  if (masa_kg === 0) {
+    const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d][\d\s,.]*)/i);
+    if (wagaM) {
+      let raw = wagaM[1].replace(/\s/g, "");
+      if (/^\d+$/.test(raw) && raw.length >= 5) {
+        raw = raw.slice(0, raw.length - 3) + "." + raw.slice(raw.length - 3);
+      } else {
+        raw = raw.replace(",", ".");
+      }
+      const val = parseFloat(raw);
+      if (val > 0) masa_kg = Math.ceil(val);
+    }
   }
 
   // Strategy B (fallback): liczba przed "RAZEM:" — ale z filtrem EAN/kosmicznych liczb.
