@@ -479,6 +479,15 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [pasteFlash, setPasteFlash] = useState(false);
   // Obraz zrodlowy zachowujemy do archiwum (po accept — kompresja JPEG + upload do Storage)
   const [imageBlob, setImageBlob] = useState<File | Blob | null>(null);
+  // Object URL do podgladu obok formularza w step 'preview' (sprzedawca widzi oryginal
+  // przy poprawianiu pol — kluczowe gdy OCR pomyli sie z 'B'/'8', diakrytyki, cudzyslowy)
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!imageBlob) { setImageUrl(null); return; }
+    const url = URL.createObjectURL(imageBlob);
+    setImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageBlob]);
 
   const handleImage = async (file: File) => {
     if (file.size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
@@ -642,8 +651,24 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
       {step === 'preview' && preview && (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">Sprawdź i popraw dane:</p>
-          <PreviewFields preview={preview} setPreview={setPreview} />
+          <p className="text-xs text-muted-foreground">Sprawdź i popraw dane (oryginał obok dla porównania):</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <PreviewFields preview={preview} setPreview={setPreview} />
+            </div>
+            {imageUrl && (
+              <div className="border rounded-md p-2 bg-muted/20 sticky top-2 self-start max-h-[70vh] overflow-auto">
+                <p className="text-xs text-muted-foreground mb-1.5">📄 Oryginał (kliknij aby powiększyć):</p>
+                <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="block">
+                  <img
+                    src={imageUrl}
+                    alt="Oryginał WZ"
+                    className="w-full h-auto rounded shadow-sm hover:shadow-md transition-shadow"
+                  />
+                </a>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
             <Button size="sm" variant="outline" onClick={() => setStep('text')}>Popraw tekst</Button>
