@@ -733,30 +733,81 @@ const PREVIEW_FIELDS: { key: keyof ParsePreview; label: string; type?: string }[
 ];
 
 function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPreview: (fn: (p: ParsePreview | null) => ParsePreview | null) => void }) {
+  // Walidacja adresu (geocoding) — kluczowe dla wyliczen kosztow i linii prostej.
+  // Status: idle = jeszcze nie sprawdzono, checking = w trakcie, ok = znaleziona ulica,
+  // approximate = znaleziono tylko miasto (OCR pewnie zniszczyl ulice — wymaga korekty),
+  // fail = w ogole nie znaleziono.
+  type AdresStatus = 'idle' | 'checking' | 'ok' | 'approximate' | 'fail';
+  const [adresStatus, setAdresStatus] = useState<AdresStatus>('idle');
+
+  const sprawdzAdres = useCallback(async (adres: string) => {
+    if (!adres || adres.trim().length < 5) {
+      setAdresStatus('idle');
+      return;
+    }
+    setAdresStatus('checking');
+    const { geocodeAddressWithFallback } = await import('@/lib/oddzialy-geo');
+    const r = await geocodeAddressWithFallback(adres);
+    if (!r) setAdresStatus('fail');
+    else if (r.exact) setAdresStatus('ok');
+    else setAdresStatus('approximate');
+  }, []);
+
+  // Auto-walidacja gdy preview sie zaladuje (po OCR/parsowaniu) — uruchamiamy raz
+  // dla aktualnej wartosci adresu przy pierwszym renderze tego komponentu
+  useEffect(() => {
+    sprawdzAdres(preview.adres);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-2">
       {PREVIEW_FIELDS.map(f => {
         const val = preview[f.key];
         const isM3 = f.key === 'objetosc_m3';
         const isPal = f.key === 'ilosc_palet';
+        const isAdres = f.key === 'adres';
         const disabled = (isM3 && preview.luzne_karton) || (isPal && preview.bez_palet);
         const found = val !== '' && val !== 0 && !disabled;
+        // Adres ma wlasna walidacje przez geocoding — nadpisuje found
+        const adresFail = isAdres && adresStatus === 'fail';
+        const adresApprox = isAdres && adresStatus === 'approximate';
         return (
           <div key={f.key}>
             <div className="flex items-center gap-2">
-              <span className="text-sm w-4">{found ? '✓' : '⚠️'}</span>
+              <span className="text-sm w-4">
+                {isAdres ? (
+                  adresStatus === 'ok' ? '✓' :
+                  adresStatus === 'checking' ? '⏳' :
+                  adresStatus === 'fail' ? '❌' :
+                  adresStatus === 'approximate' ? '⚠️' :
+                  (found ? '✓' : '⚠️')
+                ) : (found ? '✓' : '⚠️')}
+              </span>
               <Label className="text-xs w-32 shrink-0">{f.label}{isM3 && !preview.luzne_karton ? ' *' : ''}{isPal && !preview.bez_palet ? ' *' : ''}</Label>
               <Input
-                className="h-8 text-sm flex-1"
+                className={`h-8 text-sm flex-1 ${adresFail ? 'border-red-500 focus-visible:ring-red-500' : adresApprox ? 'border-yellow-500 focus-visible:ring-yellow-500' : ''}`}
                 type={f.type || 'text'}
                 disabled={disabled}
                 value={disabled ? '0' : (val?.toString() ?? '')}
                 onChange={e => {
                   const raw = e.target.value;
                   setPreview(prev => prev ? { ...prev, [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw } : prev);
+                  if (isAdres && adresStatus !== 'idle') setAdresStatus('idle');
                 }}
+                onBlur={isAdres ? () => sprawdzAdres(val?.toString() || '') : undefined}
               />
             </div>
+            {isAdres && adresStatus === 'fail' && (
+              <p className="ml-10 mt-0.5 text-[11px] text-red-600">
+                ❌ Adres nie znaleziony — popraw ulicę/kod/miasto (sprawdź oryginał obok)
+              </p>
+            )}
+            {isAdres && adresStatus === 'approximate' && (
+              <p className="ml-10 mt-0.5 text-[11px] text-yellow-700">
+                ⚠️ Znaleziono tylko miasto — popraw nazwę ulicy dla dokładnej odległości i kosztów
+              </p>
+            )}
             {isM3 && (
               <div className="ml-10 mt-1">
                 <label className="flex items-center gap-1.5 cursor-pointer">
