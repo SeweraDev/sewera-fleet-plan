@@ -121,6 +121,8 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ParsePreview | null>(null);
+  // Plik PDF zachowujemy do archiwum (po zatwierdzeniu WZ — upload JPEG do Storage)
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     const name = file.name.toLowerCase();
@@ -135,6 +137,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setParsing(true);
     setError(null);
     setPreview(null);
+    setPdfFile(file);
 
     try {
       const pdfjs = await import('pdfjs-dist');
@@ -200,13 +203,15 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null };
+    // _pdfFile = oryginalny PDF do archiwum (transient, useCreateZlecenie zarchiwizuje go po INSERT WZ)
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _pdfFile: pdfFile };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
       setWzList([...wzList, newWz]);
     }
     setPreview(null);
+    setPdfFile(null);
   };
 
   return (

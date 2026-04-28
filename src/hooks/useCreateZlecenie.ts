@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { wyslijDoDyspozytorów } from '@/lib/powiadomienia';
+import { archiwizujWZ } from '@/lib/archiwumWZ';
 
 export interface WzInput {
   numer_wz: string | null;
@@ -21,6 +22,8 @@ export interface WzInput {
   klasyfikacja: string;
   /** Wartość netto dokumentu WZ (zł) — opcjonalna, używana przy rozdziale kosztów */
   wartosc_netto: number | null;
+  /** Plik PDF źródłowy (transient — nie idzie do DB, używany do archiwum) */
+  _pdfFile?: File | null;
 }
 
 export interface ZlecenieInput {
@@ -81,12 +84,38 @@ export function useCreateZlecenie(onSuccess?: () => void) {
         wartosc_netto: wz.wartosc_netto,
       }));
 
-      const { error: err2 } = await supabase.from('zlecenia_wz').insert(wzRows);
+      const { data: insertedWz, error: err2 } = await supabase
+        .from('zlecenia_wz')
+        .insert(wzRows)
+        .select('id');
       if (err2) {
         setError(err2.message);
         toast.error('Błąd zapisu WZ: ' + err2.message);
         setSubmitting(false);
         return;
+      }
+
+      // Archiwum WZ — fire-and-forget, nie blokuje toastu sukcesu.
+      // Dla każdego WZ z plikiem PDF: render strony 1 do JPEG + upload + UPDATE archiwum_path.
+      if (insertedWz && insertedWz.length === input.wz_list.length) {
+        input.wz_list.forEach((wz, idx) => {
+          const file = wz._pdfFile;
+          const wzId = insertedWz[idx]?.id;
+          if (!file || !wzId) return;
+          archiwizujWZ(wzId, file)
+            .then((path) => {
+              if (path) {
+                supabase
+                  .from('zlecenia_wz')
+                  .update({ archiwum_path: path })
+                  .eq('id', wzId)
+                  .then(({ error }) => {
+                    if (error) console.warn('[archiwumWZ] update path failed:', error.message);
+                  });
+              }
+            })
+            .catch((e) => console.warn('[archiwumWZ] background fail:', e));
+        });
       }
     }
 
