@@ -922,13 +922,13 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
   const { create, submitting, error } = useCreateZlecenie(onSuccess);
 
   const handleGoToCheck = () => {
+    // Klasyfikacja transportu jest OPCJONALNA — mozna uzupelnic pozniej
     const invalid = wzList.find(w => {
       if (!w.odbiorca || !w.masa_kg) return true;
       if (!w.adres || w.adres.trim().length < 5) return true;
       if (!w.tel || w.tel.trim().length < 5) return true;
       if (!w.luzne_karton && (!w.objetosc_m3 || w.objetosc_m3 <= 0)) return true;
       if (!w.bez_palet && (!w.ilosc_palet || w.ilosc_palet <= 0)) return true;
-      if (!w.klasyfikacja) return true;
       return false;
     });
     if (invalid) {
@@ -939,7 +939,6 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
       if (!invalid.masa_kg) missing.push('masa kg');
       if (!invalid.luzne_karton && (!invalid.objetosc_m3 || invalid.objetosc_m3 <= 0)) missing.push('objętość m³');
       if (!invalid.bez_palet && (!invalid.ilosc_palet || invalid.ilosc_palet <= 0)) missing.push('ilość palet');
-      if (!invalid.klasyfikacja) missing.push('klasyfikacja transportu');
       toast.error(`Uzupełnij: ${missing.join(', ')}`);
       return;
     }

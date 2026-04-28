@@ -518,7 +518,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                       onChange={e => updateWz(idx, 'wartosc_netto', e.target.value === '' ? null : Number(e.target.value))} />
                   </div>
                   <div>
-                    <Label className="text-xs">Klasyfikacja transportu *</Label>
+                    <Label className="text-xs">Klasyfikacja transportu</Label>
                     <Select value={w.klasyfikacja || ''} onValueChange={(v) => updateWz(idx, 'klasyfikacja', v)}>
                       <SelectTrigger className="h-8 text-sm">
                         <SelectValue placeholder="Wybierz klasyfikację…" />
