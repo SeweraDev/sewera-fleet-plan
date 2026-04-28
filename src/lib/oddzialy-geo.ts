@@ -94,6 +94,50 @@ export async function geocodeAddress(adres: string): Promise<{ lat: number; lng:
   return null;
 }
 
+/**
+ * Geocoding z fallbackami — uzyteczne gdy adres ma artefakty OCR (np. "WOLNOSG"
+ * zamiast "WOLNOSCI"). Probujemy w kolejnosci:
+ *   1. Pelny adres → najdokladniejsze
+ *   2. Tylko kod pocztowy + miasto (np. "42-460 Mierzecice") → centroid miasta
+ *
+ * Zwraca tez flage `exact: true` gdy znalezlismy ulice, `false` gdy spadlismy
+ * do centroidu miasta — wtedy UI moze wymagac od user reki korekty.
+ */
+export interface GeocodeFallbackResult {
+  lat: number;
+  lng: number;
+  exact: boolean;
+}
+
+export async function geocodeAddressWithFallback(
+  adres: string,
+): Promise<GeocodeFallbackResult | null> {
+  if (!adres || adres.length < 3) return null;
+
+  // 1. Pelny adres
+  const exact = await geocodeAddress(adres);
+  if (exact) return { ...exact, exact: true };
+
+  // 2. Fallback — wyciagnij kod pocztowy + miasto, sprobuj zlokalizowac sam ten fragment.
+  // Wzorzec: "12-345 Miasto" lub "12345 Miasto" (OCR czesto gubi mysiknik)
+  const cityM = adres.match(/(\d{2}-?\d{3})\s+([A-ZĄĆĘŁŃÓŚŹŻ][\w\sĄĆĘŁŃÓŚŹŻąćęłńóśźż\-]+)/);
+  if (cityM) {
+    const kod = cityM[1].includes("-") ? cityM[1] : `${cityM[1].slice(0, 2)}-${cityM[1].slice(2)}`;
+    const miasto = cityM[2].trim().split(/[,\s]+/)[0]; // pierwsze slowo (najczesciej miasto)
+    const fallback = await geocodeAddress(`${kod} ${miasto}`);
+    if (fallback) return { ...fallback, exact: false };
+  }
+
+  // 3. Sam miasto bez kodu (jesli OCR zniszczyl kod)
+  const justCity = adres.match(/[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{3,}$/);
+  if (justCity) {
+    const fallback = await geocodeAddress(justCity[0]);
+    if (fallback) return { ...fallback, exact: false };
+  }
+
+  return null;
+}
+
 // Wyszukiwanie adresów → Photon (autocomplete)
 export interface SearchResult {
   name: string;
