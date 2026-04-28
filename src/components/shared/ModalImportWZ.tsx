@@ -1090,7 +1090,7 @@ export function parseWZText(rawText: string): WZImportData {
       const l = lines[i];
       // Wariant 3 (NAJSILNIEJSZY): linia "ul. Tadeusza ... Katowice ul. NAZWA NR, kod MIASTO"
       // OCR czesto skleja adres Sewery + adres dostawy w jednej linii. Wycinamy drugie "ul.".
-      const sewMerged = l.match(/Tadeusza\s+Ko\w+\s+\d+\s*,?\s*\d{2}-?\d{3}\s+Katowice\s+((?:ul|al|pl)\.\s+[^,\n]+(?:,\s*\d{2}-?\d{3}\s+[A-Z][A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\-]+)?)/i);
+      const sewMerged = l.match(/Tadeusza\s+Ko\w+\s+\d+\s*,?\s*\d{2}-?\d{3}\s+Katowice\s+((?:ul|uł|u1|al|pl)\.\s+[^,\n]+(?:,\s*\d{2}-?\d{3}\s+[A-Z][A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\-]+)?)/i);
       if (sewMerged) {
         let addr = sewMerged[1].trim();
         addr = addr.replace(/\b(\d{2})(\d{3})(\s)/, "$1-$2$3");
@@ -1098,7 +1098,7 @@ export function parseWZText(rawText: string): WZImportData {
         break;
       }
       // Wariant 1: linia sklejona "... ] ul. NAZWA NR" (Wydano na ... [Nr zam: ...] ul. ...)
-      const afterBracket = l.match(/\][^\]]*?((?:ul|al|pl)\.\s+[^,\n]+)$/i);
+      const afterBracket = l.match(/\][^\]]*?((?:ul|uł|u1|al|pl)\.\s+[^,\n]+)$/i);
       if (afterBracket && !SEWERA_ADDR_FILTER.test(afterBracket[1])) {
         addrParts.push(afterBracket[1].trim());
         if (i + 1 < lines.length && /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(lines[i + 1])) {
@@ -1109,7 +1109,7 @@ export function parseWZText(rawText: string): WZImportData {
       }
       // Wariant 2: samodzielna linia "ul./al./pl. NAZWA NR" + nastepna linia kod pocztowy
       // (BEZ "os." — bo OCR czesto tu psuje "Os. kontaktowa")
-      if (/^(?:ul|al|pl)\.\s/i.test(l) && !SEWERA_ADDR_FILTER.test(l) && !NOT_ADDR.test(l)) {
+      if (/^(?:ul|uł|u1|al|pl)\.\s/i.test(l) && !SEWERA_ADDR_FILTER.test(l) && !NOT_ADDR.test(l)) {
         addrParts.push(l.trim());
         if (i + 1 < lines.length && /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(lines[i + 1])) {
           const norm = lines[i + 1].replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
@@ -1122,29 +1122,28 @@ export function parseWZText(rawText: string): WZImportData {
   }
 
   // Promak fallback Wariant 4: "Os. kontaktowa" jest ZAWSZE na koncu sekcji adresu
-  // dostawy (po niej idzie "Tel.:" i tabela towarow). Wez 1-4 linie PRZED nia
+  // dostawy (po niej idzie "Tel.:" i tabela towarow). Wez 1-6 linii PRZED nia
   // jako kandydatow na adres, filtrujac adresy Sewery i znane labele.
   if (!adres) {
     const osIdx = lines.findIndex((l) => /^Os\.\s*kontaktowa/i.test(l));
     if (osIdx >= 2) {
       const candidates: string[] = [];
-      for (let i = osIdx - 1; i >= Math.max(0, osIdx - 5); i--) {
+      for (let i = osIdx - 1; i >= Math.max(0, osIdx - 7); i--) {
         const l = lines[i];
         // Stop na granicy sekcji
         if (/^(Adres\s+dostawy|Wydano\s+na|Magazyn|Forma\s+płatn|Termin|RAZEM|Lp\.|Nr\s+zam|Sprzedawca|Nabywca|Odbiorca|NIP:|NR\s*BDO:)/i.test(l)) break;
         // Filtruj adres Sewery
         if (/Tadeusza\s+Ko\w+|Ko[śs]ciuszki|^ul\.\s+KO[ŚS]CIUSZKI|40-?608\s+Katowice/i.test(l)) continue;
-        // Akceptuj: ulica, kod pocztowy, lub linia tekstowa (nazwa firmy/osoba odbierajaca)
-        const isStreet = /^(?:ul|al|pl)\.\s/i.test(l);
+        // Akceptuj: ulica (ul./uł./al./pl.), kod pocztowy, lub linia tekstowa
+        const isStreet = /^(?:ul|uł|u1|al|pl)\.\s/i.test(l);
         const isPostcode = /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(l);
         const isText = /^[A-ZĄĆĘŁŃÓŚŹŻ][\w\sĄĆĘŁŃÓŚŹŻąćęłńóśźż\-".,]{2,}$/.test(l) && l.length < 60;
         if (isStreet || isPostcode || (candidates.length > 0 && isText)) {
-          // Normalizuj kod pocztowy
           const norm = isPostcode ? l.replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3") : l;
           candidates.unshift(norm.trim());
-        } else if (candidates.length > 0) {
-          break; // Niepasujaca linia po juz znalezionych — koniec sekcji
         }
+        // POMIJAMY (nie break) niepasujace linie — OCR czesto wstawia garbage typu '5 BH',
+        // 'omnie dry' miedzy nazwa firmy a ulica. Break tylko na rozpoznanej granicy sekcji.
       }
       if (candidates.length) {
         adres = candidates.join(", ").replace(/,\s*,/g, ",");
