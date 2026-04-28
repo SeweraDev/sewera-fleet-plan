@@ -827,7 +827,8 @@ export function parseWZText(rawText: string): WZImportData {
   if (!odbiorca || !odbiornikAdres) {
     const PROMAK_SEWERA_PREFIXES: RegExp[] = [
       /^SEWERA\s+POLSKA\s+CHEMIA\s+IRENEUSZ\s+WOLAK\b[\s,.]*/i,
-      /^ul\.\s+Tadeusza\s+Ko[śs]ciuszki\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice[\s,.]*/i,
+      // Toleruj OCR mutacje "Kościuszki": Ko\w+ lapie 'Koś?ciuszki', 'Kosciuszki', 'Koścuszki'
+      /^ul\.\s+Tadeusza\s+Ko\w+\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice[\s,.]*/i,
       /^NIP:\s*\d{10}\b\s*/i,
       /^N[RH]\s*BDO:\s*\d+\b\s*/i,
     ];
@@ -850,7 +851,16 @@ export function parseWZText(rawText: string): WZImportData {
         if (lineN.length < 2) continue;
         // Stop na blokach lewej kolumny ktore nie maja prawej (REDYSTRYBUCJA, ODDZIAL)
         if (/^(REDYSTRYBUCJA|ODDZIAŁ|Magazyn|Termin|Forma\s+płatn|Wydano)/i.test(lineN)) break;
-        // Adres odbiorcy: ulica lub kod pocztowy
+        // Filtr: adres Sewery (gdy prefix-strip nie zadzialal z OCR powodu, np. "Koscuszki")
+        const isSeweraAddr = /Tadeusza\s+Ko[a-zśŚćĆ]+|Ko[śs]ciuszki|REDYSTRYBUCJA|^ODDZIAŁ/i.test(lineN);
+        if (isSeweraAddr) continue; // pomin, ale szukaj dalej
+        // Adres odbiorcy: ulica lub kod pocztowy. Aktualizujemy nawet gdy juz mamy odbiornikAdres
+        // ale poprzedni byl niepelny (bez "ul." lub bez kodu pocztowego)
+        const isFullAddr = /(?:ul|al|os|pl)\.\s/i.test(lineN) && /\d{2}-?\d{3}\s/.test(lineN);
+        if (isFullAddr) {
+          odbiornikAdres = lineN; // Pelny adres — nadpisujemy
+          continue;
+        }
         if (!odbiornikAdres && (/(?:ul|al|os|pl)\.\s/i.test(lineN) || /\d{2}-?\d{3}\s/.test(lineN))) {
           odbiornikAdres = lineN;
           continue;
@@ -1064,6 +1074,31 @@ export function parseWZText(rawText: string): WZImportData {
     if (adres && odbiorca && odbiorca.includes(adres)) {
       adres = null;
     }
+  }
+
+  // Promak/Bxotech fallback: gdy OCR zgubil label "Adres dostawy" calkowicie,
+  // adres czesto jest sklejony w linii "Wydano na podst. dok.: Z [Nr zam: ...] ul. NAZWA NR"
+  // + nastepna linia "kod-pocztowy MIASTO". Skanujemy caly tekst za tym wzorcem.
+  if (!adres && adresIdx < 0) {
+    const addrParts: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      // Wzorzec: po `]` jest "ul. ..." (Wydano na ... [Nr zam: ...] ul. ...)
+      const afterBracket = l.match(/\][^\]]*?((?:ul|al|os|pl)\.\s+[^,\n]+)$/i);
+      if (afterBracket) {
+        addrParts.push(afterBracket[1].trim());
+        // Sprobuj dolaczyc kod pocztowy z nastepnej linii
+        if (i + 1 < lines.length) {
+          const next = lines[i + 1];
+          if (/^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(next)) {
+            const norm = next.replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
+            addrParts.push(norm.trim());
+          }
+        }
+        break; // Mamy adres, koniec
+      }
+    }
+    if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
   }
 
   // Fallback: brak sekcji "Adres dostawy" — użyj adresu z sekcji odbiorcy
