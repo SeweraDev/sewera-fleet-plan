@@ -488,6 +488,7 @@ export type Database = {
       zlecenia_wz: {
         Row: {
           adres: string | null
+          archiwum_path: string | null
           created_at: string
           id: string
           ilosc_palet: number | null
@@ -505,6 +506,7 @@ export type Database = {
         }
         Insert: {
           adres?: string | null
+          archiwum_path?: string | null
           created_at?: string
           id?: string
           ilosc_palet?: number | null
@@ -522,6 +524,7 @@ export type Database = {
         }
         Update: {
           adres?: string | null
+          archiwum_path?: string | null
           created_at?: string
           id?: string
           ilosc_palet?: number | null
