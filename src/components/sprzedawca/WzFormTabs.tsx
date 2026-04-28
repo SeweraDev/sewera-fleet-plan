@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong } from '@/lib/klasyfikacje';
+import { SnipOverlay } from '@/components/shared/SnipOverlay';
 
 interface WzFormTabsProps {
   wzList: WzInput[];
@@ -480,6 +481,8 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   // Strony dokumentu — wielostronicowe WZ wymagaja sklejenia przed OCR.
   // Pierwszy paste/upload tworzy strone 1, kolejne dodaja strony 2, 3, ...
   const [pages, setPages] = useState<(File | Blob)[]>([]);
+  // Snip — przechwycona klatka ekranu, czeka na zaznaczenie obszaru
+  const [snipBitmap, setSnipBitmap] = useState<ImageBitmap | null>(null);
   // Obraz zrodlowy zachowujemy do archiwum (po accept — kompresja JPEG + upload do Storage)
   const [imageBlob, setImageBlob] = useState<File | Blob | null>(null);
   // Object URL do podgladu obok formularza w step 'preview' (sprzedawca widzi oryginal
@@ -504,6 +507,33 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   // Usuwanie strony z kolejki
   const removePage = (idx: number) => {
     setPages((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Przechwycenie ekranu + zaznaczenie fragmentu (jak Win+Shift+S w aplikacji)
+  const handleSnip = async () => {
+    setError(null);
+    try {
+      const { captureScreen } = await import("@/lib/screenSnip");
+      const captured = await captureScreen();
+      if (!captured) return;
+      setSnipBitmap(captured.bitmap);
+    } catch (e: any) {
+      // User odmowil udostepnienia — to nie blad krytyczny
+      if (e?.name === "NotAllowedError") return;
+      setError("Nie udało się przechwycić ekranu: " + (e?.message || "nieznany błąd"));
+    }
+  };
+
+  const handleSnipCrop = async (x: number, y: number, w: number, h: number) => {
+    if (!snipBitmap) return;
+    const { cropToBlob } = await import("@/lib/screenSnip");
+    const blob = await cropToBlob(snipBitmap, x, y, w, h);
+    setSnipBitmap(null);
+    if (blob) handleImage(blob);
+  };
+
+  const handleSnipCancel = () => {
+    setSnipBitmap(null);
   };
 
   // Uruchomienie OCR: scal strony pionowo, preprocess, Tesseract → text
@@ -662,7 +692,14 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div
+              className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={handleSnip}
+            >
+              <div className="text-3xl mb-2">✂️</div>
+              <p className="text-sm font-medium text-muted-foreground">Wytnij z ekranu</p>
+            </div>
             <div
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
               onClick={() => cameraRef.current?.click()}
@@ -670,7 +707,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
               <div className="text-3xl mb-2">📷</div>
-              <p className="text-sm font-medium text-muted-foreground">{pages.length > 0 ? 'Dodaj kolejną stronę (zdjęcie)' : 'Zrób zdjęcie'}</p>
+              <p className="text-sm font-medium text-muted-foreground">{pages.length > 0 ? 'Dodaj zdjęcie' : 'Zrób zdjęcie'}</p>
             </div>
             <div
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -681,11 +718,16 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/heic,image/webp" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
               <div className="text-3xl mb-2">🖼️</div>
-              <p className="text-sm font-medium text-muted-foreground">{pages.length > 0 ? 'Dodaj kolejną stronę (plik)' : 'Wybierz plik'}</p>
+              <p className="text-sm font-medium text-muted-foreground">{pages.length > 0 ? 'Dodaj plik' : 'Wybierz plik'}</p>
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </>
+      )}
+
+      {/* SnipOverlay — fullscreen rysowanie prostokata na przechwyconym ekranie */}
+      {snipBitmap && (
+        <SnipOverlay bitmap={snipBitmap} onCrop={handleSnipCrop} onCancel={handleSnipCancel} />
       )}
 
       {parsing && (
