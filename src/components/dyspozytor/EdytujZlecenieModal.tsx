@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImportWZ';
+import { PodgladWZDialog } from '@/components/shared/PodgladWZDialog';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
 import { KLASYFIKACJE } from '@/lib/klasyfikacje';
@@ -67,6 +68,7 @@ interface WzData {
   nr_zamowienia: string;
   klasyfikacja: string;
   wartosc_netto: number | null;
+  archiwum_path: string | null;
 }
 
 export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Props) {
@@ -82,6 +84,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [showImport, setShowImport] = useState(false);
   const [showResztaChoice, setShowResztaChoice] = useState(false);
   const [showPrzekaz, setShowPrzekaz] = useState(false);
+  const [podgladWZ, setPodgladWZ] = useState<{ path: string; numer: string } | null>(null);
   const originalWzRef = useRef<WzData[]>([]);
 
   // Walidacja adresu (geocoding on blur): per index WZ
@@ -108,7 +111,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
     Promise.all([
       supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, typ_pojazdu, nadawca_id, oddzial_id').eq('id', zlecenieId).single(),
-      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja, wartosc_netto').eq('zlecenie_id', zlecenieId),
+      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja, wartosc_netto, archiwum_path').eq('zlecenie_id', zlecenieId),
     ]).then(async ([zlRes, wzRes]) => {
       const zl = zlRes.data;
       if (zl) {
@@ -137,6 +140,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         nr_zamowienia: w.nr_zamowienia || '',
         klasyfikacja: w.klasyfikacja || '',
         wartosc_netto: w.wartosc_netto != null ? Number(w.wartosc_netto) : null,
+        archiwum_path: w.archiwum_path || null,
       }));
       setWzList(wzData);
       originalWzRef.current = wzData.map(w => ({ ...w }));
@@ -442,8 +446,18 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
               {wzList.map((w, idx) => (
                 <Card key={w.id} className="p-3 space-y-2 bg-muted/30">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">
+                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                       WZ #{idx + 1} {w.numer_wz && <span className="font-mono">({w.numer_wz})</span>}
+                      {w.archiwum_path && (
+                        <button
+                          type="button"
+                          onClick={() => setPodgladWZ({ path: w.archiwum_path!, numer: w.numer_wz })}
+                          className="text-blue-600 hover:text-blue-800 text-base leading-none"
+                          title="Podgląd dokumentu WZ"
+                        >
+                          📄
+                        </button>
+                      )}
                     </span>
                     {w.nr_zamowienia && <span className="text-xs text-muted-foreground">Zam: {w.nr_zamowienia}</span>}
                   </div>
@@ -576,6 +590,13 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         isOpen={showImport}
         onClose={() => setShowImport(false)}
         onImport={handleImportWz}
+      />
+
+      <PodgladWZDialog
+        archiwumPath={podgladWZ?.path ?? null}
+        numerWz={podgladWZ?.numer ?? null}
+        isOpen={!!podgladWZ}
+        onClose={() => setPodgladWZ(null)}
       />
 
       <PrzekazDoOddzialuModal
