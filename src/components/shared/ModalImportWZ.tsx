@@ -1149,9 +1149,8 @@ export function parseWZText(rawText: string): WZImportData {
   const razemIdx = lines.findIndex((l) => /^RAZEM/i.test(l));
 
   // Strategy A1 (priorytet): "Waga netto razem: X,YY" — explicit separator dziesietny.
-  // Najbardziej precyzyjne. Pattern lapie: "7,42", "1 200,00", "426,759", "1200.00"
-  // (z opcjonalnym tysiacznikiem-spacja w czesci calkowitej).
-  const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d\s]+)[,.](\d{1,3})\b/i);
+  // Akceptujemy , . ; ' ' " (typowe pomyłki OCR dla przecinka)
+  const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d\s]+)[,.;'`"](\d{1,3})\b/i);
   if (wagaExplicit) {
     const intPart = wagaExplicit[1].replace(/\s/g, "");
     const decPart = wagaExplicit[2];
@@ -1159,14 +1158,32 @@ export function parseWZText(rawText: string): WZImportData {
     if (val > 0) masa_kg = Math.ceil(val);
   }
 
-  // Strategy A2 (fallback): liczba bez separatora — heurystyka kropki przed 3 ostatnimi cyframi
-  // dla duzych wagi typu "426759" → "426.759". Tolerancyjny pattern dla OCR.
+  // Strategy A1b: OCR zgubil separator i zostala spacja → "7 42" zamiast "7,42".
+  // Tylko gdy czesc calkowita ma 1-2 cyfry (zeby nie kolidowac z tysiacznikiem PL "1 200,00").
+  if (masa_kg === 0) {
+    const wagaSpc = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*(\d{1,2})\s+(\d{2})\b/i);
+    if (wagaSpc) {
+      const val = parseFloat(`${wagaSpc[1]}.${wagaSpc[2]}`);
+      if (val > 0) masa_kg = Math.ceil(val);
+    }
+  }
+
+  // Strategy A2 (fallback): liczba bez separatora — OCR pominal przecinek calkowicie.
+  // Heurystyki na podstawie dlugosci:
+  //   3 cyfry "742" → "7.42" (typowy zapis X,YZ kg)
+  //   5+ cyfr "426759" → "426.759" (duza liczba — prawdopodobnie zgubiony separator tysiecy/dziesietny)
+  //   4 cyfry "1200" → bez zmian (czesto faktycznie 1200 kg)
   if (masa_kg === 0) {
     const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d][\d\s,.]*)/i);
     if (wagaM) {
       let raw = wagaM[1].replace(/\s/g, "");
-      if (/^\d+$/.test(raw) && raw.length >= 5) {
-        raw = raw.slice(0, raw.length - 3) + "." + raw.slice(raw.length - 3);
+      if (/^\d+$/.test(raw)) {
+        if (raw.length === 3) {
+          raw = raw.slice(0, 1) + "." + raw.slice(1);
+        } else if (raw.length >= 5) {
+          raw = raw.slice(0, raw.length - 3) + "." + raw.slice(raw.length - 3);
+        }
+        // 1-2 cyfr lub 4 cyfr: pozostaw bez zmian
       } else {
         raw = raw.replace(",", ".");
       }
