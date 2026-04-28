@@ -477,9 +477,12 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pasteFlash, setPasteFlash] = useState(false);
+  // Obraz zrodlowy zachowujemy do archiwum (po accept — kompresja JPEG + upload do Storage)
+  const [imageBlob, setImageBlob] = useState<File | Blob | null>(null);
 
   const handleImage = async (file: File) => {
     if (file.size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
+    setImageBlob(file);
     setParsing(true);
     setError(null);
     setProgress(0);
@@ -540,7 +543,8 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null };
+    // _imageBlob = oryginalny obraz do archiwum (transient, useCreateZlecenie po INSERT zarchiwizuje)
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _imageBlob: imageBlob };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -549,6 +553,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setStep('upload');
     setPreview(null);
     setOcrText("");
+    setImageBlob(null);
   };
 
   // Paste ze schowka (Ctrl+V po Narzędziu do wycinania Windows) — aktywny tylko
@@ -630,7 +635,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           />
           <div className="flex gap-2">
             <Button size="sm" onClick={handleParse}>Parsuj dane</Button>
-            <Button size="sm" variant="outline" onClick={() => { setStep('upload'); setOcrText(""); }}>Nowe zdjęcie</Button>
+            <Button size="sm" variant="outline" onClick={() => { setStep('upload'); setOcrText(""); setImageBlob(null); }}>Nowe zdjęcie</Button>
           </div>
         </div>
       )}
