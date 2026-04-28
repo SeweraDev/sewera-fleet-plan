@@ -706,10 +706,18 @@ export function parseWZText(rawText: string): WZImportData {
     numer_wz = `${wzM[1]} ${wzM[2]}`;
   }
 
-  // 2. nr_zamowienia — label first, then pattern, then "Potwierdzenie zamówienia nr:"
+  // 2. nr_zamowienia — zbieramy WSZYSTKIE kandydaty i preferujemy ten z cyfra
+  // w pierwszej czesci (np. 'R7/RE/...' nad OCR-pomylonym 'RZ/RE/...').
+  // Typowy OCR error: '7' rozpoznane jako 'Z' lub 'I' w niektorych czcionkach.
   let nr_zamowienia: string | null = null;
-  const zamLabel = text.match(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/i);
-  if (zamLabel) nr_zamowienia = zamLabel[1];
+  const allZam = Array.from(text.matchAll(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/gi))
+    .map((m) => m[1])
+    .filter((v, i, a) => a.indexOf(v) === i); // dedup
+  if (allZam.length > 0) {
+    // Preferuj numer ktory ma cyfre w pierwszej czesci (przed pierwszym /)
+    const withDigit = allZam.find((c) => /^[A-Z]+\d/.test(c));
+    nr_zamowienia = withDigit || allZam[0];
+  }
   if (!nr_zamowienia) {
     const zamPattern = text.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
     if (zamPattern) nr_zamowienia = zamPattern[1];
