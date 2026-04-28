@@ -989,6 +989,20 @@ export default function DyspozytorDashboard() {
     const match = oddzialy.find(o => o.nazwa === profile.branch);
     if (match) setOddzialId(match.id);
   }, [profile, oddzialy, oddzialId]);
+
+  // Sprzatanie archiwum WZ — raz dziennie (sessionStorage flag).
+  // Usuwa pliki z folderow starszych niz biezacy_miesiac - 1, czyli np. w kwietniu trzymamy
+  // kwiecien + marzec, a marzec znika dopiero gdy zmieni sie miesiac.
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (sessionStorage.getItem('wz-archiwum-cleanup') === today) return;
+    sessionStorage.setItem('wz-archiwum-cleanup', today);
+    import('@/lib/archiwumWZ').then(({ sprzatnijArchiwumWZ }) => {
+      sprzatnijArchiwumWZ().then(n => {
+        if (n && n > 0) console.log(`[archiwumWZ] sprzatniete ${n} starych dokumentow`);
+      });
+    });
+  }, []);
   const [showModal, setShowModal] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
   const [preSelectedZlIds, setPreSelectedZlIds] = useState<string[]>([]);

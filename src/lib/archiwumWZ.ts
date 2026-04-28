@@ -139,3 +139,55 @@ export function staleFolders(allFolders: string[], now: Date = new Date()): stri
     return y * 12 + mo < limit;
   });
 }
+
+/**
+ * Sprzata bucket: usuwa pliki z folderow starszych niz currentMonth - 1.
+ * Wywolywane raz dziennie z Dashboardu dyspozytora (sessionStorage flag).
+ * Zwraca liczbe usunietych plikow lub null przy bledzie.
+ */
+export async function sprzatnijArchiwumWZ(): Promise<number | null> {
+  try {
+    // Listuj folder root - dostaniemy podfoldery YYYY-MM
+    const { data: rootEntries, error: rootErr } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list("", { limit: 100 });
+    if (rootErr) {
+      console.warn("[archiwumWZ cleanup] list root failed:", rootErr.message);
+      return null;
+    }
+
+    // Storage list zwraca pliki I foldery — folder jest gdy id == null
+    const folders = (rootEntries || [])
+      .filter((e: any) => !e.metadata && /^\d{4}-\d{2}$/.test(e.name))
+      .map((e: any) => e.name);
+
+    const stale = staleFolders(folders);
+    if (stale.length === 0) return 0;
+
+    let totalRemoved = 0;
+    for (const folder of stale) {
+      // Listuj pliki w folderze
+      const { data: files, error: lsErr } = await supabase.storage
+        .from(BUCKET_NAME)
+        .list(folder, { limit: 1000 });
+      if (lsErr) {
+        console.warn(`[archiwumWZ cleanup] list ${folder} failed:`, lsErr.message);
+        continue;
+      }
+      const paths = (files || []).map((f: any) => `${folder}/${f.name}`);
+      if (paths.length === 0) continue;
+
+      const { error: rmErr } = await supabase.storage.from(BUCKET_NAME).remove(paths);
+      if (rmErr) {
+        console.warn(`[archiwumWZ cleanup] remove ${folder} failed:`, rmErr.message);
+        continue;
+      }
+      totalRemoved += paths.length;
+      console.log(`[archiwumWZ cleanup] usunieto ${paths.length} plikow z ${folder}`);
+    }
+    return totalRemoved;
+  } catch (err) {
+    console.warn("[archiwumWZ cleanup] exception:", err);
+    return null;
+  }
+}
