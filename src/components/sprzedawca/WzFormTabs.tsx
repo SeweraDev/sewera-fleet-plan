@@ -606,6 +606,11 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           <div className={`text-xs text-center p-2 rounded-md border border-dashed transition-colors ${pasteFlash ? 'bg-green-100 border-green-500 text-green-900' : 'bg-muted/40 border-muted-foreground/30 text-muted-foreground'}`}>
             {pasteFlash ? '✅ Obraz wklejony — przetwarzanie…' : '📋 Możesz też wkleić zrzut ekranu ze schowka — naciśnij Ctrl+V (np. po użyciu Narzędzia do wycinania)'}
           </div>
+          {!pasteFlash && (
+            <div className="text-[11px] text-center text-muted-foreground/80 px-2">
+              💡 Dokument wielostronicowy? Sklej strony w Paint (Ctrl+V jedna pod drugą) i wklej jako jeden obraz.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
