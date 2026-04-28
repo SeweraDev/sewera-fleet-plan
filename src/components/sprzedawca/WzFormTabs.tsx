@@ -491,13 +491,23 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
   const handleImage = async (file: File) => {
     if (file.size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
+    // ORYGINAL zapisujemy do archiwum (przed pre-processingiem) — zeby user mial
+    // ten sam obraz ktory widzial w preview, i zeby archiwum nie bylo zmodyfikowane
     setImageBlob(file);
     setParsing(true);
     setError(null);
     setProgress(0);
-    setProgressMsg("Ładowanie modelu OCR...");
+    setProgressMsg("Przygotowanie obrazu...");
 
     try {
+      // Pre-processing: skala 2x + grayscale + contrast stretch (lepsze OCR drobnych
+      // liter/cyfr typu B/8, polskich znakow diakrytycznych). Fallback do oryginalu
+      // gdy pre-processing zawiedzie.
+      const { preprocessForOCR } = await import("@/lib/ocrPreprocess");
+      const preprocessed = await preprocessForOCR(file);
+      const ocrInput: File | Blob = preprocessed || file;
+
+      setProgressMsg("Ładowanie modelu OCR...");
       const TesseractModule = await import("tesseract.js");
       // PSM 4 = kolumnowe rozpoznawanie — lepiej rozdziela kolumny tabel
       const worker = await TesseractModule.default.createWorker("pol", undefined, {
@@ -513,7 +523,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         },
       });
       await worker.setParameters({ tessedit_pageseg_mode: '6' as any });
-      const { data: { text } } = await worker.recognize(file);
+      const { data: { text } } = await worker.recognize(ocrInput as any);
       await worker.terminate();
 
       setParsing(false);
