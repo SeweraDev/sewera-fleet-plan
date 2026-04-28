@@ -1281,7 +1281,7 @@ export function parseWZText(rawText: string): WZImportData {
 
   // Strategy A1 (priorytet): "Waga netto razem: X,YY" — explicit separator dziesietny.
   // Akceptujemy , . ; ' ' " (typowe pomyłki OCR dla przecinka)
-  const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze[mn]t?[:\s]*([\d\s]+)[,.;'`"](\d{1,3})\b/i);
+  const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze\w*[:\s]*([\d\s]+)[,.;'`"](\d{1,3})\b/i);
   if (wagaExplicit) {
     const intPart = wagaExplicit[1].replace(/\s/g, "");
     const decPart = wagaExplicit[2];
@@ -1292,7 +1292,7 @@ export function parseWZText(rawText: string): WZImportData {
   // Strategy A1b: OCR zgubil separator i zostala spacja → "7 42" zamiast "7,42".
   // Tylko gdy czesc calkowita ma 1-2 cyfry (zeby nie kolidowac z tysiacznikiem PL "1 200,00").
   if (masa_kg === 0) {
-    const wagaSpc = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze[mn]t?[:\s]*(\d{1,2})\s+(\d{2})\b/i);
+    const wagaSpc = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze\w*[:\s]*(\d{1,2})\s+(\d{2})\b/i);
     if (wagaSpc) {
       const val = parseFloat(`${wagaSpc[1]}.${wagaSpc[2]}`);
       if (val > 0) masa_kg = Math.ceil(val);
@@ -1305,7 +1305,7 @@ export function parseWZText(rawText: string): WZImportData {
   //   5+ cyfr "426759" → "426.759" (duza liczba — prawdopodobnie zgubiony separator tysiecy/dziesietny)
   //   4 cyfry "1200" → bez zmian (czesto faktycznie 1200 kg)
   if (masa_kg === 0) {
-    const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze[mn]t?[:\s]*([\d][\d\s,.]*)/i);
+    const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze\w*[:\s]*([\d][\d\s,.]*)/i);
     if (wagaM) {
       let raw = wagaM[1].replace(/\s/g, "");
       if (/^\d+$/.test(raw)) {
