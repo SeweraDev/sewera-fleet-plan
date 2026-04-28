@@ -1085,6 +1085,15 @@ export function parseWZText(rawText: string): WZImportData {
     const SEWERA_ADDR_FILTER = /Tadeusza\s+Ko\w+|Ko[śs]ciuszki|40-?608\s+Katowice/i;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
+      // Wariant 3 (NAJSILNIEJSZY): linia "ul. Tadeusza ... Katowice ul. NAZWA NR, kod MIASTO"
+      // OCR czesto skleja adres Sewery + adres dostawy w jednej linii. Wycinamy drugie "ul.".
+      const sewMerged = l.match(/Tadeusza\s+Ko\w+\s+\d+\s*,?\s*\d{2}-?\d{3}\s+Katowice\s+((?:ul|al|os|pl)\.\s+[^,\n]+(?:,\s*\d{2}-?\d{3}\s+[A-Z][A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\-]+)?)/i);
+      if (sewMerged) {
+        let addr = sewMerged[1].trim();
+        addr = addr.replace(/\b(\d{2})(\d{3})(\s)/, "$1-$2$3");
+        addrParts.push(addr);
+        break;
+      }
       // Wariant 1: linia sklejona "... ] ul. NAZWA NR" (Wydano na ... [Nr zam: ...] ul. ...)
       const afterBracket = l.match(/\][^\]]*?((?:ul|al|os|pl)\.\s+[^,\n]+)$/i);
       if (afterBracket && !SEWERA_ADDR_FILTER.test(afterBracket[1])) {
@@ -1097,7 +1106,6 @@ export function parseWZText(rawText: string): WZImportData {
       }
       // Wariant 2: samodzielna linia "ul. NAZWA NR" + nastepna linia kod pocztowy
       if (/^(?:ul|al|os|pl)\.\s/i.test(l) && !SEWERA_ADDR_FILTER.test(l)) {
-        // Pomin gdy adres siedziby Sewery (np. "ul. KOSCIUSZKI 326 , 40-608 KATOWICE")
         addrParts.push(l.trim());
         if (i + 1 < lines.length && /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(lines[i + 1])) {
           const norm = lines[i + 1].replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
