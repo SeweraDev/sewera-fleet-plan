@@ -1076,26 +1076,34 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // Promak/Bxotech fallback: gdy OCR zgubil label "Adres dostawy" calkowicie,
-  // adres czesto jest sklejony w linii "Wydano na podst. dok.: Z [Nr zam: ...] ul. NAZWA NR"
-  // + nastepna linia "kod-pocztowy MIASTO". Skanujemy caly tekst za tym wzorcem.
-  if (!adres && adresIdx < 0) {
+  // Promak/Bxotech fallback: gdy OCR zgubil label "Adres dostawy" calkowicie LUB
+  // priority 1-3 nie znalazly nic uzytecznego. Skanujemy caly tekst za parami
+  // "ul. NAZWA NR" + "kod-pocztowy MIASTO" (w sasiedztwie max 2 linii), wykluczajac
+  // adresy Sewery (Tadeusza Kosciuszki, Katowice z kodem 40-608).
+  if (!adres) {
     const addrParts: string[] = [];
+    const SEWERA_ADDR_FILTER = /Tadeusza\s+Ko\w+|Ko[śs]ciuszki|40-?608\s+Katowice/i;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
-      // Wzorzec: po `]` jest "ul. ..." (Wydano na ... [Nr zam: ...] ul. ...)
+      // Wariant 1: linia sklejona "... ] ul. NAZWA NR" (Wydano na ... [Nr zam: ...] ul. ...)
       const afterBracket = l.match(/\][^\]]*?((?:ul|al|os|pl)\.\s+[^,\n]+)$/i);
-      if (afterBracket) {
+      if (afterBracket && !SEWERA_ADDR_FILTER.test(afterBracket[1])) {
         addrParts.push(afterBracket[1].trim());
-        // Sprobuj dolaczyc kod pocztowy z nastepnej linii
-        if (i + 1 < lines.length) {
-          const next = lines[i + 1];
-          if (/^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(next)) {
-            const norm = next.replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
-            addrParts.push(norm.trim());
-          }
+        if (i + 1 < lines.length && /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(lines[i + 1])) {
+          const norm = lines[i + 1].replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
+          addrParts.push(norm.trim());
         }
-        break; // Mamy adres, koniec
+        break;
+      }
+      // Wariant 2: samodzielna linia "ul. NAZWA NR" + nastepna linia kod pocztowy
+      if (/^(?:ul|al|os|pl)\.\s/i.test(l) && !SEWERA_ADDR_FILTER.test(l)) {
+        // Pomin gdy adres siedziby Sewery (np. "ul. KOSCIUSZKI 326 , 40-608 KATOWICE")
+        addrParts.push(l.trim());
+        if (i + 1 < lines.length && /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(lines[i + 1])) {
+          const norm = lines[i + 1].replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
+          if (!SEWERA_ADDR_FILTER.test(norm)) addrParts.push(norm.trim());
+        }
+        break;
       }
     }
     if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
