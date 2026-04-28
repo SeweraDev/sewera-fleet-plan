@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { wyslijDoDyspozytorów } from '@/lib/powiadomienia';
-import { archiwizujWZ } from '@/lib/archiwumWZ';
+import { archiwizujWZ, archiwizujWZObraz } from '@/lib/archiwumWZ';
 
 export interface WzInput {
   numer_wz: string | null;
@@ -24,6 +24,8 @@ export interface WzInput {
   wartosc_netto: number | null;
   /** Plik PDF źródłowy (transient — nie idzie do DB, używany do archiwum) */
   _pdfFile?: File | null;
+  /** Obraz źródłowy z OCR/wklejenia (transient — alternatywa dla _pdfFile) */
+  _imageBlob?: File | Blob | null;
 }
 
 export interface ZlecenieInput {
@@ -96,13 +98,19 @@ export function useCreateZlecenie(onSuccess?: () => void) {
       }
 
       // Archiwum WZ — fire-and-forget, nie blokuje toastu sukcesu.
-      // Dla każdego WZ z plikiem PDF: render strony 1 do JPEG + upload + UPDATE archiwum_path.
+      // Dla każdego WZ: jeśli PDF → render strony 1, jeśli obraz → resize+kompresja JPEG.
       if (insertedWz && insertedWz.length === input.wz_list.length) {
         input.wz_list.forEach((wz, idx) => {
-          const file = wz._pdfFile;
           const wzId = insertedWz[idx]?.id;
-          if (!file || !wzId) return;
-          archiwizujWZ(wzId, file)
+          if (!wzId) return;
+          let archiwumPromise: Promise<string | null> | null = null;
+          if (wz._pdfFile) {
+            archiwumPromise = archiwizujWZ(wzId, wz._pdfFile);
+          } else if (wz._imageBlob) {
+            archiwumPromise = archiwizujWZObraz(wzId, wz._imageBlob);
+          }
+          if (!archiwumPromise) return;
+          archiwumPromise
             .then((path) => {
               if (path) {
                 supabase

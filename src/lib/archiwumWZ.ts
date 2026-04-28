@@ -54,6 +54,51 @@ export async function pdfToJpegBlob(file: File): Promise<Blob | null> {
 }
 
 /**
+ * Konwertuje obraz (File lub Blob: PNG/JPG/WebP) do skompresowanego JPEG.
+ * - Skaluje do max 1200px szerokosci (zachowujac proporcje)
+ * - JPEG quality 0.6
+ * - Bialy background dla obrazkow z przezroczystoscia (PNG)
+ *
+ * Uzywane przy archiwizacji WZ z OCR (skan/screenshot/wklejenie ze schowka).
+ */
+export async function imageToJpegBlob(input: File | Blob): Promise<Blob | null> {
+  try {
+    const url = URL.createObjectURL(input);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = (e) => reject(e);
+        el.src = url;
+      });
+
+      const MAX_W = 1200;
+      const scale = img.width > MAX_W ? MAX_W / img.width : 1;
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+
+      return await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.6);
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch (err) {
+    console.error("[archiwumWZ] imageToJpegBlob failed:", err);
+    return null;
+  }
+}
+
+/**
  * Generuje sciezke archiwum: YYYY-MM/{wz_id}.jpg
  */
 export function buildArchiwumPath(wzId: string, date: Date = new Date()): string {
@@ -110,6 +155,16 @@ export async function getArchiwumSignedUrl(path: string): Promise<string | null>
  */
 export async function archiwizujWZ(wzId: string, file: File): Promise<string | null> {
   const blob = await pdfToJpegBlob(file);
+  if (!blob) return null;
+  return await uploadArchiwumJpeg(wzId, blob);
+}
+
+/**
+ * Helper: archiwum z obrazu (OCR ze skanu/screenshota/wklejenia ze schowka).
+ * Wejscie: File (drag-drop, kamera) lub Blob (clipboard paste).
+ */
+export async function archiwizujWZObraz(wzId: string, input: File | Blob): Promise<string | null> {
+  const blob = await imageToJpegBlob(input);
   if (!blob) return null;
   return await uploadArchiwumJpeg(wzId, blob);
 }
