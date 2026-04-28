@@ -709,11 +709,15 @@ export function parseWZText(rawText: string): WZImportData {
   // 2. nr_zamowienia — zbieramy WSZYSTKIE kandydaty. Jesli sa rozne warianty tego
   // samego numeru (np. 'RZ/RE/2026/04/00784' vs 'R7/RE/20' uciete), bierzemy
   // NAJDLUZSZY (kompletny) + KORYGUJEMY prefix z wariantu z cyfra (R7).
-  // Typowy OCR error: '7' rozpoznane jako 'Z' lub 'I' w niektorych czcionkach.
   let nr_zamowienia: string | null = null;
   const allZam = Array.from(text.matchAll(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/gi))
     .map((m) => m[1])
     .filter((v, i, a) => a.indexOf(v) === i); // dedup
+
+  if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
+    console.log("[parseWZText] nr_zamowienia candidates:", allZam);
+  }
+
   if (allZam.length > 0) {
     const longest = allZam.reduce((a, b) => (a.length > b.length ? a : b));
     const withDigit = allZam.find((c) => /^[A-Z]+\d/.test(c));
@@ -730,6 +734,18 @@ export function parseWZText(rawText: string): WZImportData {
     } else {
       nr_zamowienia = longest;
     }
+  }
+
+  // Korekta typowego OCR error: 'Z' rozpoznane zamiast '7' w prefiksie kodu
+  // oddzialu Sewery. Charakterystyczne wzorce: 'RZ/RE/...', 'KZ/RE/...', 'OZ/RE/...'
+  // — Sewera ma kody oddzialow z cyfrą 7 (R7, K7, O7), litera Z w drugim miejscu
+  // przed '/RE/' to prawie na pewno OCR mutacja '7'.
+  if (nr_zamowienia && /^[A-Z]Z\/(?:RE|FA|FZ|PZ|WZ)\//.test(nr_zamowienia)) {
+    const corrected = nr_zamowienia.replace(/^([A-Z])Z(\/)/, "$17$2");
+    if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
+      console.log(`[parseWZText] OCR Z→7 correction: ${nr_zamowienia} → ${corrected}`);
+    }
+    nr_zamowienia = corrected;
   }
   if (!nr_zamowienia) {
     const zamPattern = text.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
