@@ -1196,6 +1196,22 @@ export function parseWZText(rawText: string): WZImportData {
       }
     }
   }
+
+  // Line-by-line scan: w liniach zawierajacych prefiksy telefonowe wyciagaj WSZYSTKIE
+  // numery (np. "Tel.: 697 102 050 / 032 456 57" → 2 numery, "tel. 605 425 632"
+  // jako osobna linia). Lapie tez 'Tel.' z malej litery i bez dwukropka.
+  const telPrefixLine = /(?:Tel\.|tel\.|Os\.\s*kontaktowa|telefon)/i;
+  for (const line of lines) {
+    if (!telPrefixLine.test(line)) continue;
+    const matches = line.matchAll(/([\d][\d\s\-]{7,14}\d)/g);
+    for (const m of matches) {
+      const cand = m[1].replace(/[\s\-]+$/, "").trim();
+      const digits = cand.replace(/[\s\-]/g, "");
+      if (digits.length >= 9 && digits.length <= 11) {
+        phoneFound.push(cand);
+      }
+    }
+  }
   // Dedup po samych cyfrach (rozne formaty tego samego numeru)
   if (phoneFound.length > 0) {
     const seen = new Set<string>();
@@ -1243,7 +1259,7 @@ export function parseWZText(rawText: string): WZImportData {
 
   // Strategy A1 (priorytet): "Waga netto razem: X,YY" — explicit separator dziesietny.
   // Akceptujemy , . ; ' ' " (typowe pomyłki OCR dla przecinka)
-  const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d\s]+)[,.;'`"](\d{1,3})\b/i);
+  const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze[mn]t?[:\s]*([\d\s]+)[,.;'`"](\d{1,3})\b/i);
   if (wagaExplicit) {
     const intPart = wagaExplicit[1].replace(/\s/g, "");
     const decPart = wagaExplicit[2];
@@ -1254,7 +1270,7 @@ export function parseWZText(rawText: string): WZImportData {
   // Strategy A1b: OCR zgubil separator i zostala spacja → "7 42" zamiast "7,42".
   // Tylko gdy czesc calkowita ma 1-2 cyfry (zeby nie kolidowac z tysiacznikiem PL "1 200,00").
   if (masa_kg === 0) {
-    const wagaSpc = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*(\d{1,2})\s+(\d{2})\b/i);
+    const wagaSpc = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze[mn]t?[:\s]*(\d{1,2})\s+(\d{2})\b/i);
     if (wagaSpc) {
       const val = parseFloat(`${wagaSpc[1]}.${wagaSpc[2]}`);
       if (val > 0) masa_kg = Math.ceil(val);
@@ -1267,7 +1283,7 @@ export function parseWZText(rawText: string): WZImportData {
   //   5+ cyfr "426759" → "426.759" (duza liczba — prawdopodobnie zgubiony separator tysiecy/dziesietny)
   //   4 cyfry "1200" → bez zmian (czesto faktycznie 1200 kg)
   if (masa_kg === 0) {
-    const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d][\d\s,.]*)/i);
+    const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze[mn]t?[:\s]*([\d][\d\s,.]*)/i);
     if (wagaM) {
       let raw = wagaM[1].replace(/\s/g, "");
       if (/^\d+$/.test(raw)) {
@@ -1311,11 +1327,18 @@ export function parseWZText(rawText: string): WZImportData {
   }
 
   // Strategy D: number on RAZEM line itself (e.g. "RAZEM 1700,00 kg" or "RAZEM: 63,60")
+  // Filtr: liczby >50000 bez separatora dziesietnego = prawie na pewno suma
+  // ilosci pozycji ('RAZEM: 351 351'), nie waga w kg.
   if (masa_kg === 0 && razemIdx >= 0) {
     const razemLine = lines[razemIdx];
     const razemNum = razemLine.match(/RAZEM[:\s]*([\d\s]+[\d,.]+)\s*(?:kg)?/i);
     if (razemNum) {
-      masa_kg = Math.ceil(parseFloat(razemNum[1].replace(/\s/g, "").replace(",", ".")) || 0);
+      const raw = razemNum[1].replace(/\s/g, "");
+      const candidate = parseFloat(raw.replace(",", ".")) || 0;
+      // Odrzuc kosmiczne liczby (>50k) bez separatora — to suma sztuk, nie waga
+      if (candidate > 0 && !(candidate > 50000 && !/[,.]/.test(raw))) {
+        masa_kg = Math.ceil(candidate);
+      }
     }
   }
 
