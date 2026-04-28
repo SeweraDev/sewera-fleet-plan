@@ -1121,6 +1121,37 @@ export function parseWZText(rawText: string): WZImportData {
     if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
   }
 
+  // Promak fallback Wariant 4: "Os. kontaktowa" jest ZAWSZE na koncu sekcji adresu
+  // dostawy (po niej idzie "Tel.:" i tabela towarow). Wez 1-4 linie PRZED nia
+  // jako kandydatow na adres, filtrujac adresy Sewery i znane labele.
+  if (!adres) {
+    const osIdx = lines.findIndex((l) => /^Os\.\s*kontaktowa/i.test(l));
+    if (osIdx >= 2) {
+      const candidates: string[] = [];
+      for (let i = osIdx - 1; i >= Math.max(0, osIdx - 5); i--) {
+        const l = lines[i];
+        // Stop na granicy sekcji
+        if (/^(Adres\s+dostawy|Wydano\s+na|Magazyn|Forma\s+płatn|Termin|RAZEM|Lp\.|Nr\s+zam|Sprzedawca|Nabywca|Odbiorca|NIP:|NR\s*BDO:)/i.test(l)) break;
+        // Filtruj adres Sewery
+        if (/Tadeusza\s+Ko\w+|Ko[śs]ciuszki|^ul\.\s+KO[ŚS]CIUSZKI|40-?608\s+Katowice/i.test(l)) continue;
+        // Akceptuj: ulica, kod pocztowy, lub linia tekstowa (nazwa firmy/osoba odbierajaca)
+        const isStreet = /^(?:ul|al|pl)\.\s/i.test(l);
+        const isPostcode = /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(l);
+        const isText = /^[A-ZĄĆĘŁŃÓŚŹŻ][\w\sĄĆĘŁŃÓŚŹŻąćęłńóśźż\-".,]{2,}$/.test(l) && l.length < 60;
+        if (isStreet || isPostcode || (candidates.length > 0 && isText)) {
+          // Normalizuj kod pocztowy
+          const norm = isPostcode ? l.replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3") : l;
+          candidates.unshift(norm.trim());
+        } else if (candidates.length > 0) {
+          break; // Niepasujaca linia po juz znalezionych — koniec sekcji
+        }
+      }
+      if (candidates.length) {
+        adres = candidates.join(", ").replace(/,\s*,/g, ",");
+      }
+    }
+  }
+
   // Fallback: brak sekcji "Adres dostawy" — użyj adresu z sekcji odbiorcy
   if (!adres && odbiornikAdres) {
     adres = odbiornikAdres;
