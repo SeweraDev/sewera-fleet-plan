@@ -1045,13 +1045,52 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // 5. tel — search near delivery section ONLY when document has explicit delivery address
+  // 5. tel — zbieramy WSZYSTKIE numery z dokumentu (Promak/Bxotech ma 3 zrodla:
+  // "Os. kontaktowa", "Tel.:", "telefon komorkowy") i laczymy w jedno pole.
+  // Dyspozytor/sprzedawca wola miec pelny zestaw kontaktow niz pojedynczy numer.
   let tel: string | null = null;
   const wystawilIdx = lines.findIndex((l) => /Wystawił/i.test(l));
   const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
   const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
-  if (hasDeliverySection && deliveryAnchor > 0) {
-    // Search backward from anchor (PDF column layout: Tel. before Adres dostawy)
+
+  const phoneFound: string[] = [];
+  // Patterny dla precyzyjnego matchu (g flag - znajdz wszystkie wystapienia)
+  // Limit dlugosci 8-15 znakow lapie nr telefonu z separatorami (601 521 859, 32-391-01-05)
+  const phonePatterns: RegExp[] = [
+    /Os\.\s*kontaktowa[^\d\n]{0,30}([\d][\d\s\-]{8,15})/gi,
+    /Tel\.\s*:\s*(?:tel\.?\s*)?([\d][\d\s\-]{8,15})/gi,
+    /telefon\s+kom[oó]rkowy[:\s]*([\d][\d\s\-]{8,15})/gi,
+  ];
+  for (const pat of phonePatterns) {
+    pat.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pat.exec(text)) !== null) {
+      const cand = m[1].replace(/[\s\-]+$/, "").trim();
+      const digits = cand.replace(/[\s\-]/g, "");
+      // Filtr: 9-11 cyfr (komorkowy 9, stacjonarny + miasto 9-11), odrzucamy NIP (10) ktory
+      // pojawia sie w wielu kontekstach, ale tylko jesli numer ma separatory (NIP zwykle ma)
+      if (digits.length >= 9 && digits.length <= 11) {
+        phoneFound.push(cand);
+      }
+    }
+  }
+  // Dedup po samych cyfrach (rozne formaty tego samego numeru)
+  if (phoneFound.length > 0) {
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const p of phoneFound) {
+      const d = p.replace(/[\s\-]/g, "");
+      if (!seen.has(d)) {
+        seen.add(d);
+        unique.push(p);
+      }
+    }
+    tel = unique.join(", ");
+  }
+
+  // Fallback: stary algorytm dla formatow ktore nie maja Promak prefiksow (search
+  // backward/forward od deliveryAnchor po prostym "Tel.")
+  if (!tel && hasDeliverySection && deliveryAnchor > 0) {
     for (let i = deliveryAnchor - 1; i >= Math.max(0, deliveryAnchor - 6); i--) {
       if (/NIP:|NR BDO:|SEWERA|ODDZIAŁ|Nr\s+ewid/i.test(lines[i])) break;
       const telM = lines[i].match(/Tel\.?:?\s*([\d\s\-]{9,})/i);
@@ -1060,7 +1099,6 @@ export function parseWZText(rawText: string): WZImportData {
         break;
       }
     }
-    // Search forward from anchor
     if (!tel) {
       const telEndIdx = lines.findIndex((l, i) => i > deliveryAnchor && /Nr\s+zam|Uwagi|PALETA|Waga|Lp\./i.test(l));
       const effectiveEnd = Math.min(
@@ -1075,21 +1113,6 @@ export function parseWZText(rawText: string): WZImportData {
         }
       }
     }
-  }
-
-  // Promak/Bxotech tel fallbacks: "telefon komórkowy:", "Os. kontaktowa: tel.", "Tel.: tel."
-  if (!tel) {
-    const telKom = text.match(/telefon\s+kom[oó]rkowy[:\s]*([\d][\d\s\-]{8,})/i);
-    if (telKom) tel = telKom[1].replace(/[\s\-]+$/, "").trim();
-  }
-  if (!tel) {
-    const osKont = text.match(/Os\.\s*kontaktowa[^\d\n]{0,30}([\d][\d\s\-]{8,})/i);
-    if (osKont) tel = osKont[1].replace(/[\s\-]+$/, "").trim();
-  }
-  if (!tel) {
-    // OCR czesto: "Tel.: tel. 32 391 01 05" — dwukrotnie "tel"
-    const dblTel = text.match(/Tel\.\s*:\s*tel\.?\s*([\d][\d\s\-]{8,})/i);
-    if (dblTel) tel = dblTel[1].replace(/[\s\-]+$/, "").trim();
   }
 
   // 6. masa_kg — multiple strategies
