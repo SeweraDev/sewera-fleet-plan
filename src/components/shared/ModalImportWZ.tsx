@@ -698,12 +698,21 @@ export function parseWZText(rawText: string): WZImportData {
     console.groupEnd();
   }
 
-  // 1. nr_wz — ONLY match WZ, WZS, or PZ prefixed document numbers
+  // 1. nr_wz — match WZ, WZS, or PZ prefixed document numbers
   // OCR (Promak/Bxotech) czesto zleja "WZ" + "RE/..." → \s* zamiast \s+
   let numer_wz: string | null = null;
   const wzM = text.match(/(WZS?|PZ)\s*([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
   if (wzM) {
     numer_wz = `${wzM[1]} ${wzM[2]}`;
+  }
+  // Fallback: OCR czasem psuje prefix "WZ" (W→V, Z→I/2). Szukamy SAMEGO formatu
+  // dokumentu WZ Promak: 'RE/112/26/04/0002236' lub podobnego (3+ /-rozdzielonych
+  // segmentow zaczynajacych sie od 2 wielkich liter). Domyslnie zakladamy 'WZ' jako prefix.
+  if (!numer_wz) {
+    const formatM = text.match(/\b([A-Z]{2}\/\d{2,4}\/\d{2}\/\d{2}\/\d{4,8})\b/);
+    if (formatM) {
+      numer_wz = `WZ ${formatM[1]}`;
+    }
   }
 
   // 2. nr_zamowienia — zbieramy WSZYSTKIE kandydaty. Jesli sa rozne warianty tego
