@@ -827,8 +827,8 @@ export function parseWZText(rawText: string): WZImportData {
   if (!odbiorca || !odbiornikAdres) {
     const PROMAK_SEWERA_PREFIXES: RegExp[] = [
       /^SEWERA\s+POLSKA\s+CHEMIA\s+IRENEUSZ\s+WOLAK\b[\s,.]*/i,
-      // Toleruj OCR mutacje "Kościuszki": Ko\w+ lapie 'Koś?ciuszki', 'Kosciuszki', 'Koścuszki'
-      /^ul\.\s+Tadeusza\s+Ko\w+\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice[\s,.]*/i,
+      // Toleruj OCR mutacje "Kościuszki": Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+ lapie 'Koś?ciuszki', 'Kosciuszki', 'Koścuszki'
+      /^ul\.\s+Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice[\s,.]*/i,
       /^NIP:\s*\d{10}\b\s*/i,
       /^N[RH]\s*BDO:\s*\d+\b\s*/i,
     ];
@@ -1082,7 +1082,7 @@ export function parseWZText(rawText: string): WZImportData {
   // adresy Sewery (Tadeusza Kosciuszki, Katowice z kodem 40-608).
   if (!adres) {
     const addrParts: string[] = [];
-    const SEWERA_ADDR_FILTER = /Tadeusza\s+Ko\w+|Ko[śs]ciuszki|40-?608\s+Katowice/i;
+    const SEWERA_ADDR_FILTER = /Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|Ko[śs]ciuszki|40-?608\s+Katowice/i;
     // BARDZO WAZNE: regex (?:ul|al|os|pl)\. lapie tez "Os. kontaktowa", "Os. upowaznione"
     // (skroty od "osoba" a nie "osiedle"). Wykluczamy te linie z patternow adresu.
     const NOT_ADDR = /^Os\.\s*(kontaktowa|upoważnione|odpowiedzialna|odpowiedzialny|do\s+odbioru|os\.|osob)/i;
@@ -1090,7 +1090,7 @@ export function parseWZText(rawText: string): WZImportData {
       const l = lines[i];
       // Wariant 3 (NAJSILNIEJSZY): linia "ul. Tadeusza ... Katowice ul. NAZWA NR, kod MIASTO"
       // OCR czesto skleja adres Sewery + adres dostawy w jednej linii. Wycinamy drugie "ul.".
-      const sewMerged = l.match(/Tadeusza\s+Ko\w+\s+\d+\s*,?\s*\d{2}-?\d{3}\s+Katowice\s+((?:ul|uł|u1|al|pl)\.\s+[^,\n]+(?:,\s*\d{2}-?\d{3}\s+[A-Z][A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\-]+)?)/i);
+      const sewMerged = l.match(/Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\s+\d+\s*,?\s*\d{2}-?\d{3}\s+Katowice\s+((?:ul|uł|u1|al|pl)\.\s+[^,\n]+(?:,\s*\d{2}-?\d{3}\s+[A-Z][A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż\-]+)?)/i);
       if (sewMerged) {
         let addr = sewMerged[1].trim();
         addr = addr.replace(/\b(\d{2})(\d{3})(\s)/, "$1-$2$3");
@@ -1133,7 +1133,7 @@ export function parseWZText(rawText: string): WZImportData {
         // Stop na granicy sekcji
         if (/^(Adres\s+dostawy|Wydano\s+na|Magazyn|Forma\s+płatn|Termin|RAZEM|Lp\.|Nr\s+zam|Sprzedawca|Nabywca|Odbiorca|NIP:|NR\s*BDO:)/i.test(l)) break;
         // Filtruj adres Sewery
-        if (/Tadeusza\s+Ko\w+|Ko[śs]ciuszki|^ul\.\s+KO[ŚS]CIUSZKI|40-?608\s+Katowice/i.test(l)) continue;
+        if (/Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|Ko[śs]ciuszki|^ul\.\s+KO[ŚS]CIUSZKI|40-?608\s+Katowice/i.test(l)) continue;
         // Akceptuj: ulica (ul./uł./al./pl.), kod pocztowy, lub linia tekstowa
         const isStreet = /^(?:ul|uł|u1|al|pl)\.\s/i.test(l);
         const isPostcode = /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(l);
