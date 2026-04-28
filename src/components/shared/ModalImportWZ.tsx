@@ -690,6 +690,14 @@ export function parseWZText(rawText: string): WZImportData {
     .map((l) => l.trim())
     .filter(Boolean);
 
+  // DEBUG: zaloguj raw text + linie do konsoli (F12 → Console) — pomocne przy diagnozie
+  // OCR-owych bug-ów. Zostawiam permanentnie, koszt 0 (tylko console.log).
+  if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
+    console.groupCollapsed("[parseWZText] raw input");
+    console.log("Lines:", lines);
+    console.groupEnd();
+  }
+
   // 1. nr_wz — ONLY match WZ, WZS, or PZ prefixed document numbers
   // OCR (Promak/Bxotech) czesto zleja "WZ" + "RE/..." → \s* zamiast \s+
   let numer_wz: string | null = null;
@@ -1388,6 +1396,13 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
   // Uwagi — ZAWSZE zachowuj (nigdy nie zeruj)
+
+  // DEBUG: zaloguj wynik parsowania (F12 Console) — pomocne do diagnozy bug-ow OCR
+  if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
+    console.groupCollapsed("[parseWZText] result");
+    console.log({ numer_wz, nr_zamowienia, odbiorca, adres, odbiornikAdres, tel, masa_kg });
+    console.groupEnd();
+  }
 
   return {
     numer_wz,
