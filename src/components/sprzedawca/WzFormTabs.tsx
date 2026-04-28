@@ -477,6 +477,9 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pasteFlash, setPasteFlash] = useState(false);
+  // Strony dokumentu — wielostronicowe WZ wymagaja sklejenia przed OCR.
+  // Pierwszy paste/upload tworzy strone 1, kolejne dodaja strony 2, 3, ...
+  const [pages, setPages] = useState<(File | Blob)[]>([]);
   // Obraz zrodlowy zachowujemy do archiwum (po accept — kompresja JPEG + upload do Storage)
   const [imageBlob, setImageBlob] = useState<File | Blob | null>(null);
   // Object URL do podgladu obok formularza w step 'preview' (sprzedawca widzi oryginal
@@ -489,23 +492,48 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     return () => URL.revokeObjectURL(url);
   }, [imageBlob]);
 
-  const handleImage = async (file: File) => {
-    if (file.size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
-    // ORYGINAL zapisujemy do archiwum (przed pre-processingiem) — zeby user mial
-    // ten sam obraz ktory widzial w preview, i zeby archiwum nie bylo zmodyfikowane
-    setImageBlob(file);
+  // Dodanie strony do kolejki (paste / upload / kamera). NIE uruchamia OCR od razu —
+  // user moze dodac kolejne strony i potem kliknac "Rozpocznij OCR".
+  const handleImage = (file: File | Blob) => {
+    const size = (file as File).size ?? (file as Blob).size ?? 0;
+    if (size > 15 * 1024 * 1024) { setError("Plik za duży (max 15 MB)"); return; }
+    setError(null);
+    setPages((prev) => [...prev, file]);
+  };
+
+  // Usuwanie strony z kolejki
+  const removePage = (idx: number) => {
+    setPages((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Uruchomienie OCR: scal strony pionowo, preprocess, Tesseract → text
+  const startOCR = async () => {
+    if (pages.length === 0) return;
     setParsing(true);
     setError(null);
     setProgress(0);
-    setProgressMsg("Przygotowanie obrazu...");
 
     try {
-      // Pre-processing: skala 2x + grayscale + contrast stretch (lepsze OCR drobnych
-      // liter/cyfr typu B/8, polskich znakow diakrytycznych). Fallback do oryginalu
-      // gdy pre-processing zawiedzie.
-      const { preprocessForOCR } = await import("@/lib/ocrPreprocess");
-      const preprocessed = await preprocessForOCR(file);
-      const ocrInput: File | Blob = preprocessed || file;
+      // Sklej strony pionowo (lub zwroc 1 strone jako jest)
+      const { mergePagesVertically, preprocessForOCR } = await import("@/lib/ocrPreprocess");
+      let combined: File | Blob | null;
+      if (pages.length === 1) {
+        combined = pages[0];
+      } else {
+        setProgressMsg(`Sklejanie ${pages.length} stron...`);
+        combined = await mergePagesVertically(pages);
+      }
+      if (!combined) {
+        setParsing(false);
+        setError("Nie udało się sklejić stron");
+        return;
+      }
+      // ORYGINAL (sklejony) do archiwum
+      setImageBlob(combined);
+
+      setProgressMsg("Przygotowanie obrazu...");
+      const preprocessed = await preprocessForOCR(combined);
+      const ocrInput: File | Blob = preprocessed || combined;
 
       setProgressMsg("Ładowanie modelu OCR...");
       const TesseractModule = await import("tesseract.js");
@@ -573,6 +601,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setPreview(null);
     setOcrText("");
     setImageBlob(null);
+    setPages([]);
   };
 
   // Paste ze schowka (Ctrl+V po Narzędziu do wycinania Windows) — aktywny tylko
@@ -604,13 +633,35 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       {step === 'upload' && !parsing && (
         <>
           <div className={`text-xs text-center p-2 rounded-md border border-dashed transition-colors ${pasteFlash ? 'bg-green-100 border-green-500 text-green-900' : 'bg-muted/40 border-muted-foreground/30 text-muted-foreground'}`}>
-            {pasteFlash ? '✅ Obraz wklejony — przetwarzanie…' : '📋 Możesz też wkleić zrzut ekranu ze schowka — naciśnij Ctrl+V (np. po użyciu Narzędzia do wycinania)'}
+            {pasteFlash ? `✅ Strona ${pages.length} dodana` : pages.length > 0
+              ? `📄 ${pages.length} ${pages.length === 1 ? 'strona dodana' : 'strony dodane'} — możesz dodać kolejną lub kliknąć "Rozpocznij OCR"`
+              : '📋 Wklej zrzut ekranu ze schowka — Ctrl+V (np. po użyciu Win+Shift+S)'}
           </div>
-          {!pasteFlash && (
+          {pages.length === 0 && (
             <div className="text-[11px] text-center text-muted-foreground/80 px-2">
-              💡 Dokument wielostronicowy? Sklej strony w Paint (Ctrl+V jedna pod drugą) i wklej jako jeden obraz.
+              💡 Dokument wielostronicowy? Wklej kolejne strony jedna po drugiej — aplikacja sama je sklei.
             </div>
           )}
+
+          {/* Lista dodanych stron */}
+          {pages.length > 0 && (
+            <div className="space-y-2">
+              <div className="space-y-1">
+                {pages.map((page, idx) => (
+                  <PageThumb key={idx} blob={page} idx={idx} onRemove={() => removePage(idx)} />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={startOCR} className="flex-1 min-w-[150px]">
+                  ▶ Rozpocznij OCR ({pages.length} {pages.length === 1 ? 'strona' : 'strony'})
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setPages([])}>
+                  Wyczyść
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -619,7 +670,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
               <div className="text-3xl mb-2">📷</div>
-              <p className="text-sm font-medium text-muted-foreground">Zrób zdjęcie</p>
+              <p className="text-sm font-medium text-muted-foreground">{pages.length > 0 ? 'Dodaj kolejną stronę (zdjęcie)' : 'Zrób zdjęcie'}</p>
             </div>
             <div
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -630,7 +681,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/heic,image/webp" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImage(f); }} />
               <div className="text-3xl mb-2">🖼️</div>
-              <p className="text-sm font-medium text-muted-foreground">Wybierz plik</p>
+              <p className="text-sm font-medium text-muted-foreground">{pages.length > 0 ? 'Dodaj kolejną stronę (plik)' : 'Wybierz plik'}</p>
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -659,7 +710,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           />
           <div className="flex gap-2">
             <Button size="sm" onClick={handleParse}>Parsuj dane</Button>
-            <Button size="sm" variant="outline" onClick={() => { setStep('upload'); setOcrText(""); setImageBlob(null); }}>Nowe zdjęcie</Button>
+            <Button size="sm" variant="outline" onClick={() => { setStep('upload'); setOcrText(""); setImageBlob(null); setPages([]); }}>Nowe zdjęcie</Button>
           </div>
         </div>
       )}
@@ -687,7 +738,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
             <Button size="sm" variant="outline" onClick={() => setStep('text')}>Popraw tekst</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setStep('upload'); setPreview(null); setOcrText(""); }}>Nowe zdjęcie</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setStep('upload'); setPreview(null); setOcrText(""); setImageBlob(null); setPages([]); }}>Nowe zdjęcie</Button>
           </div>
         </div>
       )}
@@ -736,6 +787,30 @@ const PREVIEW_FIELDS: { key: keyof ParsePreview; label: string; type?: string }[
   { key: 'ilosc_palet', label: 'Palety (szt)', type: 'number' },
   { key: 'uwagi', label: 'Uwagi' },
 ];
+
+/* ─── PageThumb — miniaturka strony w kolejce OCR (z przyciskiem usun) ─── */
+function PageThumb({ blob, idx, onRemove }: { blob: File | Blob; idx: number; onRemove: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(blob);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [blob]);
+  return (
+    <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/20">
+      {url && <img src={url} alt={`Strona ${idx + 1}`} className="h-12 w-12 object-cover rounded" />}
+      <span className="text-xs flex-1">Strona {idx + 1}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-xs text-red-600 hover:text-red-800 px-2"
+        title="Usuń stronę"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
 
 function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPreview: (fn: (p: ParsePreview | null) => ParsePreview | null) => void }) {
   // Walidacja adresu (geocoding) — kluczowe dla wyliczen kosztow i linii prostej.

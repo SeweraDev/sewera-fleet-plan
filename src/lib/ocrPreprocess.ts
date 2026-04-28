@@ -15,6 +15,67 @@
 
 const MAX_W = 2400;
 
+/**
+ * Skleja kilka obrazow pionowo (jeden pod drugim) na jednym canvas.
+ * Uzywane dla wielostronicowych dokumentow WZ — sprzedawca wkleja kolejne strony,
+ * my je scalamy zanim wyslemy do OCR.
+ *
+ * Zwraca JPEG quality 0.85 (wyzsze niz archiwum bo to idzie do OCR + archiwum).
+ */
+export async function mergePagesVertically(pages: (File | Blob)[]): Promise<Blob | null> {
+  if (pages.length === 0) return null;
+  if (pages.length === 1) {
+    // Single page — zwroc jako jest (oszczednosc CPU)
+    return pages[0] instanceof Blob ? pages[0] : null;
+  }
+  try {
+    const urls = pages.map((p) => URL.createObjectURL(p));
+    try {
+      const images = await Promise.all(
+        urls.map(
+          (url) =>
+            new Promise<HTMLImageElement>((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = (e) => reject(e);
+              img.src = url;
+            }),
+        ),
+      );
+
+      const maxWidth = Math.max(...images.map((img) => img.width));
+      const totalHeight = images.reduce((sum, img) => sum + img.height, 0);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = maxWidth;
+      canvas.height = totalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+
+      // Bialy background (gdyby strona miala przezroczystosc)
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+      // Rysuj kazdy obraz pod spodem, wycentruj poziomo
+      let y = 0;
+      for (const img of images) {
+        const x = Math.floor((maxWidth - img.width) / 2);
+        ctx.drawImage(img, x, y);
+        y += img.height;
+      }
+
+      return await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.85);
+      });
+    } finally {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    }
+  } catch (err) {
+    console.warn("[mergePagesVertically] failed:", err);
+    return null;
+  }
+}
+
 export async function preprocessForOCR(input: File | Blob): Promise<Blob | null> {
   try {
     const url = URL.createObjectURL(input);
