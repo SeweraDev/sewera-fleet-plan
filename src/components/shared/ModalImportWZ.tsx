@@ -1094,37 +1094,37 @@ export function parseWZText(rawText: string): WZImportData {
 
   // 6. masa_kg — multiple strategies
   let masa_kg = 0;
-
-  // Strategy A: last standalone number before "RAZEM:" line
   const razemIdx = lines.findIndex((l) => /^RAZEM/i.test(l));
-  if (razemIdx > 0) {
+
+  // Strategy A (priorytet): "Waga netto razem:" — najbardziej precyzyjne pole
+  // Tolerancyjny pattern dla OCR: 'Waga netto', 'Waga neto', 'Wag@ nettto'
+  const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d][\d\s,.]*)/i);
+  if (wagaM) {
+    let raw = wagaM[1].replace(/\s/g, "");
+    // OCR często gubi przecinek dziesiętny ("426,759" → "426755"/"426759")
+    if (/^\d+$/.test(raw) && raw.length >= 5) {
+      raw = raw.slice(0, raw.length - 3) + "." + raw.slice(raw.length - 3);
+    } else {
+      raw = raw.replace(",", ".");
+    }
+    const val = parseFloat(raw);
+    if (val > 0) masa_kg = Math.ceil(val);
+  }
+
+  // Strategy B (fallback): liczba przed "RAZEM:" — ale z filtrem EAN/kosmicznych liczb.
+  // EAN ma zwykle 13 cyfr, masa pojedynczego WZ rzadko > 50 ton (50000 kg).
+  if (masa_kg === 0 && razemIdx > 0) {
     for (let i = razemIdx - 1; i >= Math.max(0, razemIdx - 5); i--) {
       const s = lines[i].replace(/\s/g, "");
       const m = s.match(/^([\d,.]+)$/);
-      if (m) {
-        masa_kg = Math.ceil(parseFloat(m[1].replace(",", ".")));
+      if (!m) continue;
+      const candidate = parseFloat(m[1].replace(",", "."));
+      // Filtr: liczby >100000 i bez separatora dziesietnego = prawie na pewno EAN/kod kreskowy
+      if (candidate >= 100000 && !/[,.]/.test(m[1])) continue;
+      if (candidate > 0) {
+        masa_kg = Math.ceil(candidate);
         break;
       }
-    }
-  }
-
-  // Strategy B: "Waga netto razem:" inline — tolerancja OCR (brak spacji, bez przecinka)
-  // OCR (Promak/Bxotech) czesto: "Waga neto razem" (bez podwojnego t), "Wag@ netto"
-  if (masa_kg === 0) {
-    // Tolerancyjny pattern: 'Wag[a4]?\s*ne[t]+o' lapie 'Waga netto', 'Waga neto', 'Wag4 nettto'
-    const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d][\d\s,.]*)/i);
-    if (wagaM) {
-      let raw = wagaM[1].replace(/\s/g, "");
-      // OCR często gubi przecinek dziesiętny ("426,759" → "426755"/"426759").
-      // Heurystyka: liczba > 10000 w kontekście wagi pojedynczego WZ = prawdopodobnie brakuje przecinka
-      // (wstawiamy go przed trzema ostatnimi cyframi: 426759 → 426.759)
-      if (/^\d+$/.test(raw) && raw.length >= 5) {
-        raw = raw.slice(0, raw.length - 3) + "." + raw.slice(raw.length - 3);
-      } else {
-        raw = raw.replace(",", ".");
-      }
-      const val = parseFloat(raw);
-      if (val > 0) masa_kg = Math.ceil(val);
     }
   }
 
