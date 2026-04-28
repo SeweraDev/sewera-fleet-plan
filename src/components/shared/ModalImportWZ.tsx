@@ -706,17 +706,30 @@ export function parseWZText(rawText: string): WZImportData {
     numer_wz = `${wzM[1]} ${wzM[2]}`;
   }
 
-  // 2. nr_zamowienia — zbieramy WSZYSTKIE kandydaty i preferujemy ten z cyfra
-  // w pierwszej czesci (np. 'R7/RE/...' nad OCR-pomylonym 'RZ/RE/...').
+  // 2. nr_zamowienia — zbieramy WSZYSTKIE kandydaty. Jesli sa rozne warianty tego
+  // samego numeru (np. 'RZ/RE/2026/04/00784' vs 'R7/RE/20' uciete), bierzemy
+  // NAJDLUZSZY (kompletny) + KORYGUJEMY prefix z wariantu z cyfra (R7).
   // Typowy OCR error: '7' rozpoznane jako 'Z' lub 'I' w niektorych czcionkach.
   let nr_zamowienia: string | null = null;
   const allZam = Array.from(text.matchAll(/Nr\s+zam(?:ówienia)?(?:\s*\(systemowy\))?[:\s\]]+([A-Z0-9\/]+)/gi))
     .map((m) => m[1])
     .filter((v, i, a) => a.indexOf(v) === i); // dedup
   if (allZam.length > 0) {
-    // Preferuj numer ktory ma cyfre w pierwszej czesci (przed pierwszym /)
+    const longest = allZam.reduce((a, b) => (a.length > b.length ? a : b));
     const withDigit = allZam.find((c) => /^[A-Z]+\d/.test(c));
-    nr_zamowienia = withDigit || allZam[0];
+    if (withDigit && longest !== withDigit) {
+      // Skoryguj prefix najdluzszego prefiksem z cyfra
+      const digitPrefix = withDigit.split("/")[0];
+      const longestParts = longest.split("/");
+      if (longestParts.length > 1) {
+        longestParts[0] = digitPrefix;
+        nr_zamowienia = longestParts.join("/");
+      } else {
+        nr_zamowienia = longest;
+      }
+    } else {
+      nr_zamowienia = longest;
+    }
   }
   if (!nr_zamowienia) {
     const zamPattern = text.match(/([A-Z]{1,2}\d?\/[A-Z]{2}\/\d{4}\/\d{2}\/\d+)/);
@@ -1208,14 +1221,15 @@ export function parseWZText(rawText: string): WZImportData {
   // Line-by-line scan: w liniach zawierajacych prefiksy telefonowe wyciagaj WSZYSTKIE
   // numery (np. "Tel.: 697 102 050 / 032 456 57" → 2 numery, "tel. 605 425 632"
   // jako osobna linia). Lapie tez 'Tel.' z malej litery i bez dwukropka.
+  // Filtr 8-11 cyfr — OCR czasem urywa koncowa cyfre, akceptujemy nieco krotsze.
   const telPrefixLine = /(?:Tel\.|tel\.|Os\.\s*kontaktowa|telefon)/i;
   for (const line of lines) {
     if (!telPrefixLine.test(line)) continue;
-    const matches = line.matchAll(/([\d][\d\s\-]{7,14}\d)/g);
+    const matches = line.matchAll(/([\d][\d\s\-]{6,14}\d)/g);
     for (const m of matches) {
       const cand = m[1].replace(/[\s\-]+$/, "").trim();
       const digits = cand.replace(/[\s\-]/g, "");
-      if (digits.length >= 9 && digits.length <= 11) {
+      if (digits.length >= 8 && digits.length <= 11) {
         phoneFound.push(cand);
       }
     }
