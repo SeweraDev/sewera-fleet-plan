@@ -660,7 +660,20 @@ function cleanText(text: string): string {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u215F\n\r\t]/g, "")
     .replace(/[ \t]{2,}/g, " ")
-    .replace(/(\n\s*){3,}/g, "\n\n");
+    .replace(/(\n\s*){3,}/g, "\n\n")
+    // Filtr OCR-barcode: linie typu "FL MK ŁY ETL ULU LULU)" — krótkie (2-4 znaki)
+    // tokeny ALL CAPS bez spójnego sensu, czesto z koncowym ")" lub bez interpunkcji.
+    // Heurystyka: linia ma >=4 tokeny i wszystkie tokeny <=4 znakow ALL CAPS.
+    .split("\n")
+    .filter((line) => {
+      const tokens = line.trim().split(/\s+/);
+      if (tokens.length < 4) return true;
+      const shortCapsTokens = tokens.filter(
+        (t) => t.length <= 4 && /^[A-ZĄĆĘŁŃÓŚŹŻ]+\)?$/i.test(t),
+      );
+      return shortCapsTokens.length / tokens.length < 0.8;
+    })
+    .join("\n");
 }
 
 /* ─── formatMasaKg — display with Polish thousands separator ─── */
@@ -678,8 +691,9 @@ export function parseWZText(rawText: string): WZImportData {
     .filter(Boolean);
 
   // 1. nr_wz — ONLY match WZ, WZS, or PZ prefixed document numbers
+  // OCR (Promak/Bxotech) czesto zleja "WZ" + "RE/..." → \s* zamiast \s+
   let numer_wz: string | null = null;
-  const wzM = text.match(/(WZS?|PZ)\s+([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  const wzM = text.match(/(WZS?|PZ)\s*([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
   if (wzM) {
     numer_wz = `${wzM[1]} ${wzM[2]}`;
   }
@@ -1021,9 +1035,10 @@ export function parseWZText(rawText: string): WZImportData {
   }
 
   // Strategy B: "Waga netto razem:" inline — tolerancja OCR (brak spacji, bez przecinka)
+  // OCR (Promak/Bxotech) czesto: "Waga neto razem" (bez podwojnego t), "Wag@ netto"
   if (masa_kg === 0) {
-    // \s* zamiast \s+ → łap też "Waganetto razem" (OCR zlewa spację)
-    const wagaM = text.match(/Waga\s*netto\s+razem[:\s]*([\d][\d\s,.]*)/i);
+    // Tolerancyjny pattern: 'Wag[a4]?\s*ne[t]+o' lapie 'Waga netto', 'Waga neto', 'Wag4 nettto'
+    const wagaM = text.match(/Wag[a4]?\s*ne[t]+o?\s*razem[:\s]*([\d][\d\s,.]*)/i);
     if (wagaM) {
       let raw = wagaM[1].replace(/\s/g, "");
       // OCR często gubi przecinek dziesiętny ("426,759" → "426755"/"426759").
