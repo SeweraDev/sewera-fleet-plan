@@ -813,6 +813,39 @@ export function parseWZText(rawText: string): WZImportData {
     if (addrParts.length) odbiornikAdres = addrParts.join(", ");
   }
 
+  // Promak/Bxotech fallback: OCR ramek czesto gubi naglowki "Sprzedawca"/"Odbiorca",
+  // ale zachowuje uklad dwukolumnowy. Wykrywamy linie zaczynajaca od "SEWERA POLSKA
+  // CHEMIA" dluzsza niz sam prefix — reszta to dane Odbiorcy (sklejone z prawej kolumny).
+  if (!odbiorca || !odbiornikAdres) {
+    const PROMAK_SEWERA_PREFIXES: RegExp[] = [
+      /^SEWERA\s+POLSKA\s+CHEMIA\s+IRENEUSZ\s+WOLAK\b[\s,.]*/i,
+      /^ul\.\s+Tadeusza\s+Ko[śs]ciuszki\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice[\s,.]*/i,
+      /^NIP:\s*\d{10}\b\s*/i,
+      /^N[RH]\s*BDO:\s*\d+\b\s*/i,
+    ];
+    const sewIdx = lines.findIndex((l) => /^SEWERA\s+POLSKA\s+CHEMIA/i.test(l));
+    if (sewIdx >= 0) {
+      // Linia 1: SEWERA + Odbiorca → po odcieciu prefiksu zostaje nazwa odbiorcy
+      if (!odbiorca) {
+        let line = lines[sewIdx];
+        for (const p of PROMAK_SEWERA_PREFIXES) line = line.replace(p, "").trim();
+        // Filtr: ma sens jako nazwa firmy (ma litery, nie jest jednoznakowy)
+        if (line.length > 4 && /[A-ZĄĆĘŁŃÓŚŹŻ]{2,}/i.test(line)) {
+          odbiorca = line;
+        }
+      }
+      // Linia 2: adres Sewery + adres siedziby Odbiorcy → po odcieciu prefiksu Sewery zostaje adres Odbiorcy
+      if (!odbiornikAdres && sewIdx + 1 < lines.length) {
+        let line2 = lines[sewIdx + 1];
+        for (const p of PROMAK_SEWERA_PREFIXES) line2 = line2.replace(p, "").trim();
+        // Sprawdz czy reszta wyglada jak adres (ul./al./kod pocztowy)
+        if (line2.length > 5 && (/(?:ul|al|os|pl)\.\s/i.test(line2) || /\d{2}-?\d{3}\s/.test(line2))) {
+          odbiornikAdres = line2;
+        }
+      }
+    }
+  }
+
   // Fallback: skip SEWERA block, find company by legal form / caps
   if (!odbiorca) {
   const SELLER_MARKERS = /SEWERA|KOŚCIUSZKI\s*326|NR\s*BDO:\s*000044503/i;
@@ -964,6 +997,32 @@ export function parseWZText(rawText: string): WZImportData {
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
     }
+    // Priority 4 (Promak/Bxotech): ekstraktuj adres z linii sklejonych z lewa kolumna.
+    // OCR ramek zostawia np. "Wydano na podst. dok.: Z [Nr zam: B2B/...] ul. WOLNOŚCI 1288"
+    // gdzie po nawiasie zamykajacym `]` jest faktyczny adres dostawy.
+    if (!adres && adresIdx >= 0) {
+      const addrParts: string[] = [];
+      for (let i = adresIdx; i < Math.min(adresIdx + 10, lines.length); i++) {
+        const l = lines[i];
+        // Stop na sekcji kontaktowej/towarach
+        if (/^(Os\.\s*kontaktowa|Tel\.\s*:|Lp\.|Nazwa\s+towaru|Sposób\s+dostawy|Uwagi)/i.test(l)) break;
+        // Wzorzec: po `]` jest "ul. ..." (Wydano na ... [Nr zam: ...] ul. ...)
+        const afterBracket = l.match(/\][^\]]*?((?:ul|al|os|pl)\.\s+[^,\n]+)$/i);
+        if (afterBracket) addrParts.push(afterBracket[1].trim());
+        // Wzorzec: kod pocztowy z miastem (z myslnikiem lub bez — OCR gubi myslnik)
+        else if (/^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(l)) {
+          // Normalizuj: "42460 Miasto" → "42-460 Miasto"
+          const norm = l.replace(/^(\d{2})(\d{3})(\s)/, "$1-$2$3");
+          addrParts.push(norm.trim());
+        }
+        // Wzorzec: linia sklejona "Forma platnosci: Gotówka F.H.NAZWA" — wez nazwe firmy po "Gotówka"
+        else if (!odbiorca) {
+          const afterGotowka = l.match(/Got[oó]wka\s+([A-Z][A-Za-z0-9.,\s"\-]+)$/i);
+          if (afterGotowka) odbiorca = afterGotowka[1].trim();
+        }
+      }
+      if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
+    }
     // Final guard: if adres duplicates odbiorca address, clear it
     if (adres && odbiorca && odbiorca.includes(adres)) {
       adres = null;
@@ -1016,6 +1075,21 @@ export function parseWZText(rawText: string): WZImportData {
         }
       }
     }
+  }
+
+  // Promak/Bxotech tel fallbacks: "telefon komórkowy:", "Os. kontaktowa: tel.", "Tel.: tel."
+  if (!tel) {
+    const telKom = text.match(/telefon\s+kom[oó]rkowy[:\s]*([\d][\d\s\-]{8,})/i);
+    if (telKom) tel = telKom[1].replace(/[\s\-]+$/, "").trim();
+  }
+  if (!tel) {
+    const osKont = text.match(/Os\.\s*kontaktowa[^\d\n]{0,30}([\d][\d\s\-]{8,})/i);
+    if (osKont) tel = osKont[1].replace(/[\s\-]+$/, "").trim();
+  }
+  if (!tel) {
+    // OCR czesto: "Tel.: tel. 32 391 01 05" — dwukrotnie "tel"
+    const dblTel = text.match(/Tel\.\s*:\s*tel\.?\s*([\d][\d\s\-]{8,})/i);
+    if (dblTel) tel = dblTel[1].replace(/[\s\-]+$/, "").trim();
   }
 
   // 6. masa_kg — multiple strategies
