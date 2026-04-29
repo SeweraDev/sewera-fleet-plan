@@ -75,16 +75,19 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
               }, 6000);
             }
           });
-          try {
-            await v.play();
-          } catch (e) {
-            console.warn("[SnipLive] play() warn:", e);
-          }
-          // Jesli wymiary 0 po timeout — pokaz konkretny komunikat
+          // play() z timeout 3s — czasem wisi dla streamu okna apki desktopowej
+          await Promise.race([
+            v.play().catch((e) => { console.warn("[SnipLive] play() warn:", e); }),
+            new Promise<void>((resolve) => setTimeout(() => {
+              console.warn("[SnipLive] play() timeout 3s — kontynuuje bez czekania");
+              resolve();
+            }, 3000)),
+          ]);
+          // Po wszystkim sprawdz wymiary — jesli 0, capture jest niemozliwy
           if (v.videoWidth === 0 || v.videoHeight === 0) {
             console.warn("[SnipLive] videoWidth/Height = 0 — capture niemozliwy");
             if (!cancelled) {
-              setError("Firefox nie potrafi przechwycic tego okna (aplikacja desktopowa z hardware acceleration). Anuluj i wybierz 'Caly ekran' / 'Ekran 2' zamiast okna apki. Alternatywa: Win+Shift+S i Ctrl+V w aplikacji.");
+              setError("Firefox nie przechwycil tego okna. WYBIERZ 'CALY EKRAN' / 'Ekran 2' zamiast okna aplikacji desktopowej. Alternatywa: zamknij to i uzyj Win+Shift+S, potem Ctrl+V w aplikacji.");
             }
             return;
           }

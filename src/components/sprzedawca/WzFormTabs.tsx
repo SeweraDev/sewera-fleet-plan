@@ -688,6 +688,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
             >
               <div className="text-3xl mb-2">✂️</div>
               <p className="text-sm font-medium text-muted-foreground">Wytnij z ekranu</p>
+              <p className="text-[11px] text-muted-foreground/70 mt-1">Wybierz <b>Cały ekran</b>, nie okno apki</p>
             </div>
             <div
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
