@@ -31,6 +31,14 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
           setError("Twoja przegladarka nie wspiera Screen Capture API");
           return;
         }
+        // Detekcja iframe — Lovable preview jest w iframe, getDisplayMedia
+        // wymaga allow='display-capture'. Bez tego stream nie zwraca klatek.
+        const inIframe = window.self !== window.top;
+        const host = window.location.hostname;
+        console.log("[SnipLive] host:", host, "iframe:", inIframe);
+        if (inIframe) {
+          console.warn("[SnipLive] aplikacja w iframe — getDisplayMedia moze byc zablokowany");
+        }
         console.log("[SnipLive] getDisplayMedia start");
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
