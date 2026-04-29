@@ -21,29 +21,57 @@ export interface CapturedFrame {
  * Throw error gdy user odmowi udostepnienia.
  */
 export async function captureScreen(): Promise<CapturedFrame | null> {
+  console.log("[screenSnip] start");
   if (!navigator.mediaDevices?.getDisplayMedia) {
     throw new Error("Twoja przeglądarka nie wspiera Screen Capture API");
   }
+  // Detekcja iframe — Lovable preview ma aplikacje w iframe, w ktorym getDisplayMedia
+  // moze nie dzialac jesli iframe nie ma allow="display-capture".
+  const inIframe = window.self !== window.top;
+  if (inIframe) {
+    console.warn("[screenSnip] aplikacja jest w iframe — getDisplayMedia moze byc zablokowany. Otworz w nowej karcie.");
+  }
+  console.log("[screenSnip] wywoluje getDisplayMedia...");
   // displaySurface jako preferencja (advanced) — Firefox nie zawsze radzi sobie z mandatory.
   // Bez tego user widzi pelny picker (Caly ekran / Okno / Karta) i sam wybiera.
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
-    audio: false,
-  });
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
+  } catch (e: any) {
+    console.error("[screenSnip] getDisplayMedia rzucil:", e?.name, e?.message);
+    if (inIframe && e?.name !== "NotAllowedError") {
+      throw new Error("Nie udalo sie udostepnic ekranu. Aplikacja jest w iframe (Lovable preview) — otworz w nowej karcie (przycisk ↗).");
+    }
+    throw e;
+  }
+  console.log("[screenSnip] stream OK, tracks:", stream.getVideoTracks().length);
   try {
     const track = stream.getVideoTracks()[0];
+    if (!track) {
+      throw new Error("Stream bez video tracks (przegladarka odmowila lub iframe blokuje)");
+    }
+    const settings = track.getSettings?.() ?? {};
+    console.log("[screenSnip] track settings:", settings);
     // ImageCapture API jest dostepne w Chrome/Edge; w Firefox brak — fallback przez video element.
     const ICAP = (window as any).ImageCapture;
     if (ICAP) {
       try {
+        console.log("[screenSnip] proba ImageCapture.grabFrame()");
         const imgCapture = new ICAP(track);
         const bitmap: ImageBitmap = await imgCapture.grabFrame();
+        console.log("[screenSnip] grabFrame OK:", bitmap.width, "x", bitmap.height);
         if (bitmap.width > 0 && bitmap.height > 0) {
           return { bitmap, width: bitmap.width, height: bitmap.height };
         }
-      } catch {
-        // Padaj w fallback gdy ImageCapture rzuci (czasem w Edge)
+        console.warn("[screenSnip] ImageCapture zwrocil pusta klatke, fallback do video");
+      } catch (e) {
+        console.warn("[screenSnip] ImageCapture rzucil, fallback do video:", e);
       }
+    } else {
+      console.log("[screenSnip] brak ImageCapture API — fallback do video element");
     }
     // Fallback: video element + drawImage do canvas → ImageBitmap
     const video = document.createElement("video");
@@ -60,9 +88,10 @@ export async function captureScreen(): Promise<CapturedFrame | null> {
     document.body.appendChild(video);
     try {
       // Poczekaj na metadata, zeby videoWidth/Height byly != 0
+      console.log("[screenSnip] readyState before metadata wait:", video.readyState);
       if (video.readyState < 1) {
         await new Promise<void>((resolve, reject) => {
-          const onLoaded = () => { cleanup(); resolve(); };
+          const onLoaded = () => { console.log("[screenSnip] loadedmetadata"); cleanup(); resolve(); };
           const onError = () => { cleanup(); reject(new Error("Blad ladowania metadanych video")); };
           const cleanup = () => {
             video.removeEventListener("loadedmetadata", onLoaded);
@@ -71,10 +100,12 @@ export async function captureScreen(): Promise<CapturedFrame | null> {
           video.addEventListener("loadedmetadata", onLoaded, { once: true });
           video.addEventListener("error", onError, { once: true });
           // Bezpieczny timeout
-          setTimeout(() => { cleanup(); reject(new Error("Timeout (metadata)")); }, 5000);
+          setTimeout(() => { cleanup(); reject(new Error("Timeout (metadata 5s)")); }, 5000);
         });
       }
+      console.log("[screenSnip] play()");
       await video.play();
+      console.log("[screenSnip] czekam na pierwsza klatke...");
       // Poczekaj na pierwsza realna klatke (rVFC) lub fallback krotki delay
       await new Promise<void>((resolve) => {
         const v: any = video;
@@ -88,8 +119,9 @@ export async function captureScreen(): Promise<CapturedFrame | null> {
       });
       const w = video.videoWidth;
       const h = video.videoHeight;
+      console.log("[screenSnip] videoWidth/Height:", w, "x", h);
       if (w === 0 || h === 0) {
-        throw new Error("Pusta klatka video (videoWidth/Height = 0)");
+        throw new Error("Pusta klatka video (videoWidth/Height = 0). Mozliwa przyczyna: aplikacja desktopowa z hardware acceleration nie jest capture'owalna przez Firefox. Sprobuj wybrac 'Caly ekran' zamiast okna.");
       }
       const canvas = document.createElement("canvas");
       canvas.width = w;
@@ -98,6 +130,7 @@ export async function captureScreen(): Promise<CapturedFrame | null> {
       if (!ctx) return null;
       ctx.drawImage(video, 0, 0);
       const bitmap = await createImageBitmap(canvas);
+      console.log("[screenSnip] OK:", bitmap.width, "x", bitmap.height);
       return { bitmap, width: bitmap.width, height: bitmap.height };
     } finally {
       try { video.pause(); } catch { /* noop */ }
