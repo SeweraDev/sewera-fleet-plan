@@ -23,6 +23,9 @@ import { TYP_CAPACITY } from '@/lib/suggestRoutes';
 import { SuggestionPanel } from '@/components/dyspozytor/SuggestionPanel';
 import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
 import { isPrzekazane, parseKodZNumer } from '@/lib/przekazanieZlecenia';
+import { usePrzekazZlecenie } from '@/hooks/usePrzekazZlecenie';
+import { useOddzialy } from '@/hooks/useOddzialy';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { lazy, Suspense } from 'react';
 const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView'));
@@ -316,6 +319,11 @@ export function ZleceniaTab({
   const przekazZl = zlecenia.find(z => z.id === przekazZlId);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showBulkPrzekaz, setShowBulkPrzekaz] = useState(false);
+  const [bulkTargetOddzialId, setBulkTargetOddzialId] = useState<number | null>(null);
+  const [bulkPrzekazujac, setBulkPrzekazujac] = useState(false);
+  const { oddzialy: wszystkieOddzialy } = useOddzialy();
+  const { przekaz: przekazPojedyncze } = usePrzekazZlecenie();
 
   const handleDelete = (id: string) => {
     setDeleteZlId(id);
@@ -342,6 +350,31 @@ export function ZleceniaTab({
     setCheckedIds(new Set());
     setShowBulkDelete(false);
     setBulkDeleting(false);
+    refetch();
+  };
+
+  const confirmBulkPrzekaz = async () => {
+    if (checkedIds.size === 0 || !bulkTargetOddzialId) return;
+    setBulkPrzekazujac(true);
+    const ids = Array.from(checkedIds);
+    let ok = 0;
+    let fail = 0;
+    // Sequencyjnie zeby zachowac audit trail per zlecenie (uwagi + powiadomienie)
+    for (const id of ids) {
+      try {
+        await przekazPojedyncze(id, bulkTargetOddzialId);
+        ok++;
+      } catch (e) {
+        console.error('[BulkPrzekaz] error:', id, e);
+        fail++;
+      }
+    }
+    if (ok > 0) toast.success(`Przekazano ${ok} zleceń`);
+    if (fail > 0) toast.error(`${fail} zleceń nie udało się przekazać`);
+    setCheckedIds(new Set());
+    setShowBulkPrzekaz(false);
+    setBulkTargetOddzialId(null);
+    setBulkPrzekazujac(false);
     refetch();
   };
 
@@ -464,6 +497,9 @@ export function ZleceniaTab({
             }}
           >
             Przypisz do kursu →
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setShowBulkPrzekaz(true)}>
+            ↗ Przekaż do oddziału
           </Button>
           <Button size="sm" variant="destructive" onClick={() => setShowBulkDelete(true)}>
             Usuń zaznaczone
@@ -642,6 +678,55 @@ export function ZleceniaTab({
         destructive
         onConfirm={confirmBulkDelete}
       />
+
+      <Dialog open={showBulkPrzekaz} onOpenChange={(o) => !o && !bulkPrzekazujac && setShowBulkPrzekaz(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>↗ Przekaż {checkedIds.size} zleceń do innego oddziału</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Wszystkie zaznaczone zlecenia ({Math.round(checkedKg).toLocaleString('pl-PL')} kg) zostaną przekazane do wybranego oddziału. Audit trail zostanie zapisany w uwagach każdego zlecenia.
+            </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Oddział docelowy</label>
+              <Select
+                value={bulkTargetOddzialId?.toString() ?? ''}
+                onValueChange={(v) => setBulkTargetOddzialId(parseInt(v))}
+                disabled={bulkPrzekazujac}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Wybierz oddział..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {wszystkieOddzialy
+                    .filter((o) => o.id !== oddzialId)
+                    .map((o) => (
+                      <SelectItem key={o.id} value={o.id.toString()}>
+                        {o.nazwa}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkPrzekaz(false)}
+              disabled={bulkPrzekazujac}
+            >
+              Anuluj
+            </Button>
+            <Button
+              onClick={confirmBulkPrzekaz}
+              disabled={!bulkTargetOddzialId || bulkPrzekazujac}
+            >
+              {bulkPrzekazujac ? `Przekazywanie...` : `↗ Przekaż ${checkedIds.size} zleceń`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
