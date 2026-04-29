@@ -9,6 +9,8 @@ import { geocodeAddress, NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo
 import { ZMIANY, ZMIANA_DEFAULT, type ZmianaKod } from '@/lib/planConfig';
 import { planTras, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult, type KursPropozycja } from '@/lib/planTras';
 import { suggestCrossBranch, type InnyOddzialFloty } from '@/lib/crossBranchSuggest';
+import { proponujDorzucenie, type SugestiaDorzucenia, type PaczkaObca } from '@/lib/proponujDorzucenie';
+import { scalAdresy } from '@/lib/planTras';
 import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 
 interface Props {
@@ -44,6 +46,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
   const [loadingDane, setLoadingDane] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
+  const [sugestieDorzucenia, setSugestieDorzucenia] = useState<SugestiaDorzucenia[]>([]);
   const [progressMsg, setProgressMsg] = useState('');
   /** Set kurs_id_tmp ktore zostaly zaakceptowane (zapisane do DB). */
   const [zaakceptowane, setZaakceptowane] = useState<Set<string>>(new Set());
@@ -56,6 +59,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
     if (!open) {
       setStep('config');
       setPlanResult(null);
+      setSugestieDorzucenia([]);
       setError(null);
       setProgressMsg('');
       setZaakceptowane(new Set());
@@ -444,6 +448,102 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         innyOddzialFloty,
       });
 
+      // 10. Sugestie dorzucenia obcych zlecen do kursow R
+      // Pobieramy niezaplanowane zlecenia z innych oddzialow (glownie KAT przy R i odwrotnie),
+      // sprawdzamy czy pasuja na trasy planowanych kursow (cheapest insertion).
+      setProgressMsg('Sprawdzanie zleceń z innych oddziałów...');
+      const inneOddzIds = (oddzialy || []).map((o) => o.id);
+      let dorzucenia: SugestiaDorzucenia[] = [];
+      if (inneOddzIds.length > 0 && wynik.kursy.length > 0) {
+        // Niezaplanowane zlecenia z innych oddzialow na ten dzien
+        const { data: zlObce } = await supabase
+          .from('zlecenia')
+          .select('id, numer, oddzial_id, typ_pojazdu, preferowana_godzina, kurs_id, status')
+          .in('oddzial_id', inneOddzIds)
+          .eq('dzien', dzien)
+          .is('kurs_id', null)
+          .in('status', ['robocza', 'do_weryfikacji']);
+        const obceIds = (zlObce || []).map((z) => z.id);
+        if (obceIds.length > 0) {
+          const { data: wzObce } = await supabase
+            .from('zlecenia_wz')
+            .select('id, zlecenie_id, odbiorca, adres, masa_kg, objetosc_m3, ilosc_palet, klasyfikacja, uwagi')
+            .in('zlecenie_id', obceIds);
+
+          // Geocoduj adresy obce (te niezgokodowane jeszcze)
+          const adresyObceUniq = Array.from(new Set((wzObce || []).map((w) => w.adres).filter(Boolean)));
+          for (const adres of adresyObceUniq) {
+            if (!wzZGeo.has(adres)) {
+              const coords = await geocodeAddress(adres);
+              wzZGeo.set(adres, coords);
+            }
+          }
+
+          // Buduj ZlecenieDoPlanu dla obcych
+          const zleceniaObce: ZlecenieDoPlanu[] = (zlObce || []).map((z) => {
+            const wzL: WzDoPlanu[] = (wzObce || [])
+              .filter((w) => w.zlecenie_id === z.id)
+              .map((w) => {
+                const geo = wzZGeo.get(w.adres) || null;
+                return {
+                  wz_id: w.id,
+                  odbiorca: w.odbiorca || '',
+                  adres: w.adres || '',
+                  lat: geo?.lat ?? 0,
+                  lng: geo?.lng ?? 0,
+                  masa_kg: Number(w.masa_kg) || 0,
+                  objetosc_m3: w.objetosc_m3 != null ? Number(w.objetosc_m3) : null,
+                  ilosc_palet: w.ilosc_palet != null ? Number(w.ilosc_palet) : null,
+                  klasyfikacja: w.klasyfikacja,
+                  uwagi: w.uwagi,
+                };
+              })
+              .filter((w) => w.lat !== 0 && w.lng !== 0);
+            return {
+              zlecenie_id: z.id,
+              numer: z.numer,
+              oddzial_id: z.oddzial_id,
+              typ_pojazdu: z.typ_pojazdu,
+              preferowana_godzina: z.preferowana_godzina,
+              wz_list: wzL,
+            };
+          }).filter((z) => z.wz_list.length > 0);
+
+          // Mapuj oddzial_id -> nazwa
+          const oddzMap = new Map<number, string>();
+          (oddzialy || []).forEach((o) => oddzMap.set(o.id, o.nazwa));
+
+          // Scal obce zlecenia w paczki (per oddzial zrodlowy)
+          const paczkiObce: PaczkaObca[] = [];
+          // Grupuj obce po oddzial_id
+          const perOddzial = new Map<number, ZlecenieDoPlanu[]>();
+          for (const zl of zleceniaObce) {
+            if (!perOddzial.has(zl.oddzial_id)) perOddzial.set(zl.oddzial_id, []);
+            perOddzial.get(zl.oddzial_id)!.push(zl);
+          }
+          for (const [oddId, zl] of perOddzial.entries()) {
+            const paczki = scalAdresy(zl);
+            for (const p of paczki) {
+              paczkiObce.push({
+                ...p,
+                oddzial_zrodlowy_id: oddId,
+                oddzial_zrodlowy_nazwa: oddzMap.get(oddId) ?? '?',
+              });
+            }
+          }
+
+          if (paczkiObce.length > 0) {
+            dorzucenia = await proponujDorzucenie(
+              wynik.kursy,
+              paczkiObce,
+              { lat: baza.lat, lng: baza.lng }
+            );
+            console.log(`[AutoPlan] sugestii dorzucenia: ${dorzucenia.length}`);
+          }
+        }
+      }
+      setSugestieDorzucenia(dorzucenia);
+
       setPlanResult({
         ...wynik,
         crossBranch,
@@ -525,6 +625,9 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               ✅ Zaplanowano {planResult.kursy.length} kurs(ów),
               {' '}{planResult.niezaplanowane.length} niezaplanowanych,
               {' '}{planResult.crossBranch.length} sugestii przekazania
+              {sugestieDorzucenia.length > 0 && (
+                <span>, {sugestieDorzucenia.length} sugestii dorzucenia z innych oddziałów</span>
+              )}
               {planResult.liczba_z_proxy > 0 && (
                 <span className="ml-2 text-orange-600">
                   ⚠ {planResult.liczba_z_proxy} paczek bez m³/palet — szacowanie z wagi
@@ -540,6 +643,9 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                   {planResult.kursy.map((k, i) => {
                     const isZapisany = zaakceptowane.has(k.kurs_id_tmp);
                     const isSaving = savingKurs === k.kurs_id_tmp;
+                    const dorzucDoTegoKursu = sugestieDorzucenia.filter(
+                      (s) => s.kurs_id_tmp === k.kurs_id_tmp
+                    );
                     return (
                       <Card key={k.kurs_id_tmp} className={`p-3 ${isZapisany ? 'bg-green-50 border-green-200' : ''}`}>
                         <div className="flex justify-between items-start gap-3">
@@ -594,6 +700,38 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                             )}
                           </div>
                         </div>
+
+                        {/* Sugestie dorzucenia obcych zlecen do tego kursu */}
+                        {dorzucDoTegoKursu.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-blue-200">
+                            <div className="text-xs font-medium text-blue-700 mb-1">
+                              💡 Można dorzucić z innych oddziałów ({dorzucDoTegoKursu.length}):
+                            </div>
+                            <div className="space-y-1">
+                              {dorzucDoTegoKursu.map((s) => (
+                                <div
+                                  key={s.paczka_obca.klucz_adresu}
+                                  className="text-xs bg-blue-50 border border-blue-200 rounded p-2"
+                                >
+                                  <div>
+                                    <span className="font-medium">{s.paczka_obca.odbiorca}</span>
+                                    {' '}— {s.paczka_obca.adres}
+                                    {' '}<span className="text-muted-foreground">
+                                      ({s.paczka_obca.oddzial_zrodlowy_nazwa})
+                                    </span>
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {Math.round(s.paczka_obca.suma_kg)} kg
+                                    {s.paczka_obca.wymagany_typ && ` • [${s.paczka_obca.wymagany_typ}]`}
+                                    {' '}• pozycja {s.pozycja_insercji}
+                                    {' '}• <b>+{s.przyrost_km} km</b>
+                                    {' '}• +{s.przyrost_min} min
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </Card>
                     );
                   })}
