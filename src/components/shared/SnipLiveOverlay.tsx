@@ -21,12 +21,8 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
   const [streamReady, setStreamReady] = useState(false);
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [end, setEnd] = useState<{ x: number; y: number } | null>(null);
-  // Visual debug log — pokazujemy w UI gdy F12 zwiniete
-  const [debugLog, setDebugLog] = useState<string[]>([]);
-  const dbg = (msg: string) => {
-    console.log("[SnipLive]", msg);
-    setDebugLog((prev) => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`]);
-  };
+  // Pomocnik logujacy do console (do dignostyki gdyby cos znow padlo)
+  const dbg = (msg: string) => console.log("[SnipLive]", msg);
 
   // 1. Otworz getDisplayMedia po mount
   useEffect(() => {
@@ -270,12 +266,6 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
         </button>
       </div>
 
-      {/* Visual debug log — widoczny zawsze, na czas diagnostyki */}
-      {debugLog.length > 0 && (
-        <div className="absolute bottom-2 left-2 right-2 max-h-32 overflow-y-auto bg-black/70 text-green-300 text-[10px] font-mono p-2 rounded border border-green-700/40">
-          {debugLog.map((l, i) => <div key={i}>{l}</div>)}
-        </div>
-      )}
     </div>
   );
 }
