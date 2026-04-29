@@ -714,121 +714,128 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
   const uzyciPojazdCzas = new Map<string, number>();
   const uzytePaczki = new Set<number>(); // indeksy w paczki[]
 
-  // 4. Dla kazdego pojazdu sprob zaplanowac trase z paczek nieuzytych
+  const POJAZD_LIMIT_MIN = 720; // 12h dla pojazdu (2 zmiany rożnych kierowców)
+
+  // 4. Dla kazdego pojazdu zbuduj WIELE kursow (kierowca może zrobić 4-5 kursów dziennie)
+  //    Pętla wewnętrzna `while` — buduje kolejne kursy aż:
+  //      - skończy się czas pojazdu (12h) LUB kierowcy (9h)
+  //      - skończą się dostępne zlecenia
+  //      - nie da się zbudować sensownej trasy
   for (const pojazd of pojazdySorted) {
-    const dostepnePaczki = paczki
-      .map((p, i) => ({ p, i }))
-      .filter(({ i }) => !uzytePaczki.has(i))
-      .map(({ p }) => p);
-
-    if (dostepnePaczki.length === 0) break;
-
-    // Pojazd: limit 12h (720 min) bo na 2 zmianach. Czas zajety = z DB + z tej sesji.
     const pojazdKey = pojazd.flota_id || pojazd.nr_rej;
-    const pojazdCzasZajety = (pojazd.czas_zajety_min ?? 0) + (uzyciPojazdCzas.get(pojazdKey) ?? 0);
-    const POJAZD_LIMIT_MIN = 720; // 12h dla pojazdu (2 zmiany x 6h jazdy + przerwy)
-    if (pojazdCzasZajety >= POJAZD_LIMIT_MIN) continue;
-    const pojazdMaxCzas = POJAZD_LIMIT_MIN - pojazdCzasZajety;
 
-    // Trasa: zwykle 8h, max 9h fallback. Plus nie wiecej niz pozostaly czas pojazdu.
-    const maxCzasMin = Math.min(PLAN_CONFIG.max_pracy_min, pojazdMaxCzas);
+    while (true) {
+      // Sprawdz dostępny czas pojazdu (z DB + użyty w tej sesji)
+      const pojazdCzasZajety = (pojazd.czas_zajety_min ?? 0) + (uzyciPojazdCzas.get(pojazdKey) ?? 0);
+      if (pojazdCzasZajety >= POJAZD_LIMIT_MIN) break;
+      const pojazdMaxCzas = POJAZD_LIMIT_MIN - pojazdCzasZajety;
 
-    // Mapowanie globalnych indeksow paczek -> lokalnych dla savings
-    const globalIdxPerLocalIdx: number[] = [];
-    paczki.forEach((p, gi) => {
-      if (!uzytePaczki.has(gi)) globalIdxPerLocalIdx.push(gi);
-    });
+      // Dostępne zlecenia (nieużyte do tej pory)
+      const dostepnePaczki = paczki
+        .map((p, i) => ({ p, i }))
+        .filter(({ i }) => !uzytePaczki.has(i))
+        .map(({ p }) => p);
 
-    // Budujemy lokalne paczki + lokalna distance matrix dla savings (slice z global)
-    const localPunkty: GeoPoint[] = [input.oddzial_baza, ...dostepnePaczki.map((p) => ({ lat: p.lat, lng: p.lng }))];
-    const localDistKm: number[][] = Array.from({ length: localPunkty.length }, () =>
-      Array(localPunkty.length).fill(0)
-    );
-    const localDistMin: number[][] = Array.from({ length: localPunkty.length }, () =>
-      Array(localPunkty.length).fill(0)
-    );
-    // Mapuj 0=baza, 1..k = lokalne paczki
-    const lookup = (li: number) => (li === 0 ? 0 : globalIdxPerLocalIdx[li - 1] + 1);
-    for (let i = 0; i < localPunkty.length; i++) {
-      for (let j = 0; j < localPunkty.length; j++) {
-        localDistKm[i][j] = distKm[lookup(i)][lookup(j)];
-        localDistMin[i][j] = distMin[lookup(i)][lookup(j)];
+      if (dostepnePaczki.length === 0) break;
+
+      // Trasa: zwykle 8h normy, max 9h. Plus nie więcej niz pozostały czas pojazdu.
+      const maxCzasMin = Math.min(PLAN_CONFIG.max_pracy_min, pojazdMaxCzas);
+
+      // Mapowanie globalnych indeksow paczek -> lokalnych dla savings
+      const globalIdxPerLocalIdx: number[] = [];
+      paczki.forEach((p, gi) => {
+        if (!uzytePaczki.has(gi)) globalIdxPerLocalIdx.push(gi);
+      });
+
+      // Budujemy lokalne punkty + lokalna distance matrix dla savings
+      const localPunkty: GeoPoint[] = [input.oddzial_baza, ...dostepnePaczki.map((p) => ({ lat: p.lat, lng: p.lng }))];
+      const localDistKm: number[][] = Array.from({ length: localPunkty.length }, () =>
+        Array(localPunkty.length).fill(0)
+      );
+      const localDistMin: number[][] = Array.from({ length: localPunkty.length }, () =>
+        Array(localPunkty.length).fill(0)
+      );
+      const lookup = (li: number) => (li === 0 ? 0 : globalIdxPerLocalIdx[li - 1] + 1);
+      for (let i = 0; i < localPunkty.length; i++) {
+        for (let j = 0; j < localPunkty.length; j++) {
+          localDistKm[i][j] = distKm[lookup(i)][lookup(j)];
+          localDistMin[i][j] = distMin[lookup(i)][lookup(j)];
+        }
       }
+
+      const trasy = savingsAlgorithm(
+        dostepnePaczki,
+        pojazd,
+        localDistKm,
+        localDistMin,
+        maxCzasMin,
+        PLAN_CONFIG.auto_wraca_do_bazy
+      );
+
+      if (trasy.length === 0) break;
+
+      // Wez najlepsza trase pod kątem WAGI (sumaryczna kg).
+      trasy.sort((a, b) => {
+        const wagaA = a.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
+        const wagaB = b.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
+        if (wagaB !== wagaA) return wagaB - wagaA;
+        return b.paczki.length - a.paczki.length;
+      });
+      const najlepsza = trasy[0];
+
+      // 2-opt
+      const optKolejnosc = twoOpt(najlepsza.paczki, localDistKm);
+      const km = obliczKmKursu(optKolejnosc, localDistKm, PLAN_CONFIG.auto_wraca_do_bazy);
+      const czasMin = obliczCzasKursu(optKolejnosc, localDistMin, PLAN_CONFIG.auto_wraca_do_bazy);
+
+      // Kierowca — preferuj juz uzytego z tym pojazdem (kontynuacja zmiany)
+      const kierowca = przydzielKierowce(czasMin, pojazd, input.kierowcy, uzyciKierowcyCzas);
+      if (!kierowca) {
+        // Brak dostępnego kierowcy → koniec dla tego pojazdu
+        break;
+      }
+
+      // Czas startu = czas zmiany kierowcy + czas już użyty (poprzednie kursy)
+      const zmianaKierowcy = getZmiana(kierowca.zmiana);
+      const obecnyCzasKierowcy = uzyciKierowcyCzas.get(kierowca.kierowca_id) ?? 0;
+      const startMin = timeStrToMin(zmianaKierowcy.start) + (kierowca.czas_zajety_min ?? 0) + obecnyCzasKierowcy;
+      const startCzas = `${String(Math.floor(startMin / 60)).padStart(2, '0')}:${String(startMin % 60).padStart(2, '0')}`;
+
+      // Zapamietaj zajety czas kierowcy/pojazdu (uwzglednia kolejne iteracje while)
+      uzyciKierowcyCzas.set(kierowca.kierowca_id, obecnyCzasKierowcy + czasMin);
+      uzyciPojazdCzas.set(pojazdKey, (uzyciPojazdCzas.get(pojazdKey) ?? 0) + czasMin);
+
+      // Oznacz uzyte paczki
+      const przystanki: PaczkaPrzystankowa[] = optKolejnosc.map((li) => {
+        const localIdx = li - 1;
+        const gi = globalIdxPerLocalIdx[localIdx];
+        uzytePaczki.add(gi);
+        return paczki[gi];
+      });
+
+      // Sumy
+      let suma_kg = 0;
+      let suma_m3 = 0;
+      let suma_palet = 0;
+      for (const p of przystanki) {
+        suma_kg += p.suma_kg;
+        suma_m3 += p.suma_m3;
+        suma_palet += p.suma_palet;
+      }
+
+      kursy.push({
+        kurs_id_tmp: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        pojazd,
+        kierowca,
+        przystanki,
+        km_total: km,
+        czas_total_min: czasMin,
+        suma_kg: Math.round(suma_kg * 10) / 10,
+        suma_m3: Math.round(suma_m3 * 10) / 10,
+        suma_palet: Math.ceil(suma_palet),
+        start_czas: startCzas,
+      });
     }
-
-    const trasy = savingsAlgorithm(
-      dostepnePaczki,
-      pojazd,
-      localDistKm,
-      localDistMin,
-      maxCzasMin,
-      PLAN_CONFIG.auto_wraca_do_bazy
-    );
-
-    if (trasy.length === 0) continue;
-
-    // Wez najlepsza trase pod katem WAGI (sumaryczna kg paczek), nie liczby paczek.
-    // To rozwiazuje problem "Winda MAX z 1 paczka 15446 kg vs Winda MAX z 5 mniejszymi
-    // 5905 kg" — wybieramy MAX z DAX (98% pojemnosci) zamiast trasy z malymi paczkami
-    // (37% pojemnosci). Tie-breaker: wiecej paczek (lepsze gdy ta sama waga).
-    trasy.sort((a, b) => {
-      const wagaA = a.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
-      const wagaB = b.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
-      if (wagaB !== wagaA) return wagaB - wagaA;
-      return b.paczki.length - a.paczki.length;
-    });
-    const najlepsza = trasy[0];
-
-    // 2-opt
-    const optKolejnosc = twoOpt(najlepsza.paczki, localDistKm);
-    const km = obliczKmKursu(optKolejnosc, localDistKm, PLAN_CONFIG.auto_wraca_do_bazy);
-    const czasMin = obliczCzasKursu(optKolejnosc, localDistMin, PLAN_CONFIG.auto_wraca_do_bazy);
-
-    // Kierowca — z uwzglednieniem juz zajetego czasu (z DB + z tej sesji)
-    const kierowca = przydzielKierowce(czasMin, pojazd, input.kierowcy, uzyciKierowcyCzas);
-    if (!kierowca) {
-      // Brak dostepnego kierowcy — pomijamy ten pojazd, paczki zostaja
-      continue;
-    }
-    // Zapamietaj zajety czas kierowcy w tej sesji (na wypadek drugiego kursu)
-    const obecnyCzasKierowcy = uzyciKierowcyCzas.get(kierowca.kierowca_id) ?? 0;
-    uzyciKierowcyCzas.set(kierowca.kierowca_id, obecnyCzasKierowcy + czasMin);
-    // Zapamietaj zajety czas pojazdu w tej sesji
-    uzyciPojazdCzas.set(pojazdKey, (uzyciPojazdCzas.get(pojazdKey) ?? 0) + czasMin);
-
-    // Zaznacz uzyte paczki (mapowanie z lokalnych indeksow lokalna_paczki[idx-1] -> globalny)
-    const przystanki: PaczkaPrzystankowa[] = optKolejnosc.map((li) => {
-      const localIdx = li - 1; // li>=1
-      const gi = globalIdxPerLocalIdx[localIdx];
-      uzytePaczki.add(gi);
-      return paczki[gi];
-    });
-
-    // Sumy
-    let suma_kg = 0;
-    let suma_m3 = 0;
-    let suma_palet = 0;
-    for (const p of przystanki) {
-      suma_kg += p.suma_kg;
-      suma_m3 += p.suma_m3;
-      suma_palet += p.suma_palet;
-    }
-
-    // Czas startu: ze zmiany kierowcy
-    const startCzas = getZmiana(kierowca.zmiana).start;
-
-    kursy.push({
-      kurs_id_tmp: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      pojazd,
-      kierowca,
-      przystanki,
-      km_total: km,
-      czas_total_min: czasMin,
-      suma_kg: Math.round(suma_kg * 10) / 10,
-      suma_m3: Math.round(suma_m3 * 10) / 10,
-      suma_palet: Math.ceil(suma_palet),
-      start_czas: startCzas,
-    });
   }
 
   // 5. Pozostale paczki = niezaplanowane — z konkretnym powodem
