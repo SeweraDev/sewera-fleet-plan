@@ -49,15 +49,44 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
           v.playsInline = true;
           v.autoplay = true;
           // Firefox: poczekaj na loadedmetadata zeby wymiary byly OK
+          // TIMEOUT 6s — jesli okno desktopowe nie wypuszcza klatek (HW accel),
+          // pokaz komunikat zamiast wisiec w nieskonczonosc.
+          let metadataResolved = false;
           await new Promise<void>((resolve) => {
-            const onLoaded = () => { v.removeEventListener("loadedmetadata", onLoaded); resolve(); };
-            if (v.readyState >= 1) resolve();
-            else v.addEventListener("loadedmetadata", onLoaded, { once: true });
+            const onLoaded = () => {
+              if (metadataResolved) return;
+              metadataResolved = true;
+              v.removeEventListener("loadedmetadata", onLoaded);
+              console.log("[SnipLive] loadedmetadata OK");
+              resolve();
+            };
+            if (v.readyState >= 1) {
+              metadataResolved = true;
+              resolve();
+            } else {
+              v.addEventListener("loadedmetadata", onLoaded, { once: true });
+              setTimeout(() => {
+                if (!metadataResolved) {
+                  metadataResolved = true;
+                  v.removeEventListener("loadedmetadata", onLoaded);
+                  console.warn("[SnipLive] timeout 6s — brak loadedmetadata. FF nie moze capture okna apki.");
+                  resolve();
+                }
+              }, 6000);
+            }
           });
           try {
             await v.play();
           } catch (e) {
             console.warn("[SnipLive] play() warn:", e);
+          }
+          // Jesli wymiary 0 po timeout — pokaz konkretny komunikat
+          if (v.videoWidth === 0 || v.videoHeight === 0) {
+            console.warn("[SnipLive] videoWidth/Height = 0 — capture niemozliwy");
+            if (!cancelled) {
+              setError("Firefox nie potrafi przechwycic tego okna (aplikacja desktopowa z hardware acceleration). Anuluj i wybierz 'Caly ekran' / 'Ekran 2' zamiast okna apki. Alternatywa: Win+Shift+S i Ctrl+V w aplikacji.");
+            }
+            return;
           }
           setStreamReady(true);
           console.log("[SnipLive] video gotowy:", v.videoWidth, "x", v.videoHeight);
