@@ -157,16 +157,22 @@ export interface PlanInput {
 // SCALANIE TYCH SAMYCH ADRESOW (Wolowicz 2x -> 1 paczka)
 // ============================================================
 
-/** Klucz adresu do scalania — normalizacja whitespace + lowercase. */
+/** Klucz adresu do scalania — normalizacja whitespace + lowercase + usuniecie cudzyslowow. */
 function normalizeAdres(adres: string): string {
   return adres
     .toLowerCase()
+    .replace(/["'„""'']/g, '') // usun rozne typy cudzyslowow
     .replace(/\s+/g, ' ')
     .replace(/[,;]+/g, ',')
     .trim();
 }
 
-/** Hierarchia typow — wiekszy moze obsluzyc mniejszy. */
+/** Klucz geolokalizacji — zaokraglenie do 4 miejsc po przecinku (~10m precision). */
+function kluczGeo(lat: number, lng: number): string {
+  return `${lat.toFixed(4)},${lng.toFixed(4)}`;
+}
+
+/** Hierarchia typow — wiekszy moze obsluzyc mniejszy W TEJ SAMEJ RODZINIE. */
 const TYP_RANK: Record<string, number> = {
   'Dostawczy 1,2t': 1,
   'Winda 1,8t': 2,
@@ -176,11 +182,32 @@ const TYP_RANK: Record<string, number> = {
   'HDS 12,0t': 6,
 };
 
+/**
+ * Rodziny pojazdów. STRICT match miedzy rodzinami — np. klient wymagajacy
+ * Dostawczy 1,2t (waska uliczka) NIE zostanie obsluzony przez Winde czy HDS,
+ * bo wieksze auto tam nie wjedzie. Wewnatrz rodziny wiekszy moze zastapic
+ * mniejszy (Winda MAX zamiast Winda 1,8t, HDS 12 zamiast HDS 9).
+ */
+const TYP_RODZINA: Record<string, string> = {
+  'Dostawczy 1,2t': 'Dostawczy',
+  'Winda 1,8t': 'Winda',
+  'Winda 6,3t': 'Winda',
+  'Winda MAX': 'Winda',
+  'HDS 9,0t': 'HDS',
+  'HDS 12,0t': 'HDS',
+};
+
+function stripTyp(typ: string | null): string {
+  if (!typ) return '';
+  return typ.replace(/^zew:/, '').trim();
+}
+
 function rankTypu(typ: string | null): number {
-  if (!typ) return 0;
-  // Strip prefix "zew:" jesli jest
-  const t = typ.replace(/^zew:/, '').trim();
-  return TYP_RANK[t] ?? 0;
+  return TYP_RANK[stripTyp(typ)] ?? 0;
+}
+
+function rodzinaTypu(typ: string | null): string | null {
+  return TYP_RODZINA[stripTyp(typ)] ?? null;
 }
 
 /** Wybierz "wiekszy" z dwoch typow (lub null gdy oba puste). */
@@ -191,12 +218,23 @@ function maxTyp(a: string | null, b: string | null): string | null {
   return ra >= rb ? a : b;
 }
 
-/** Scal zlecenia tego samego adresu w paczki przystankowe. */
+/**
+ * Scal zlecenia tego samego adresu w paczki przystankowe.
+ *
+ * Klucz scalania: lat/lng z geokodowania (zaokrąglone do 4 miejsc po przecinku
+ * = ~10m). Dla niezgokodowanych (lat=0, lng=0) fallback na znormalizowany adres
+ * (lowercase + bez cudzyslowow + scalanie whitespace).
+ *
+ * Dzieki kluczowi lat/lng radzimy sobie z OCR errors typu "ul. Mostowa 2" vs
+ * "ul. M 2" — Photon geokoduje oba do tego samego punktu.
+ */
 export function scalAdresy(zlecenia: ZlecenieDoPlanu[]): PaczkaPrzystankowa[] {
   const mapa = new Map<string, PaczkaPrzystankowa>();
   for (const zl of zlecenia) {
     for (const wz of zl.wz_list) {
-      const klucz = normalizeAdres(wz.adres);
+      const klucz = wz.lat && wz.lng
+        ? kluczGeo(wz.lat, wz.lng)
+        : normalizeAdres(wz.adres);
       const istnieje = mapa.get(klucz);
 
       // Liczymy m³ i palety: realne lub proxy z wagi
@@ -319,9 +357,28 @@ export async function buildDistanceMatrix(
 // CAPACITY CHECK — czy paczka(i) miesci sie w pojezdzie
 // ============================================================
 
-/** Czy pojazd P moze obsluzyc paczke pod katem typu? */
+/**
+ * Czy pojazd P moze obsluzyc paczke pod katem typu?
+ *
+ * Logika:
+ * - typ wymagany pusty -> dowolne auto OK
+ * - typ wymagany podany -> rodzina pojazdu MUSI byc ta sama. Wewnatrz rodziny:
+ *     - Dostawczy: STRICT (klient ma waska uliczke, wieksze nie wjedzie)
+ *     - Winda / HDS: wiekszy moze obsluzyc mniejszy (Winda MAX zamiast 1.8t,
+ *       HDS 12 zamiast 9) — wieksze auto na tej samej rampie/wjezdzie spelni rolę.
+ */
 function pojazdSpelniaTyp(pojazd: PojazdSlot, paczka: PaczkaPrzystankowa): boolean {
   if (!paczka.wymagany_typ) return true; // dowolny typ
+  const rodzWym = rodzinaTypu(paczka.wymagany_typ);
+  const rodzPoj = rodzinaTypu(pojazd.typ);
+  if (!rodzWym || !rodzPoj) return false;
+  if (rodzWym !== rodzPoj) return false; // inna rodzina — nie pasuje
+
+  if (rodzWym === 'Dostawczy') {
+    // STRICT — Dostawczy 1,2t wymaga dokladnie Dostawczy 1,2t
+    return stripTyp(pojazd.typ) === stripTyp(paczka.wymagany_typ);
+  }
+  // Winda / HDS — wiekszy moze obsluzyc mniejszy w tej samej rodzinie
   return rankTypu(pojazd.typ) >= rankTypu(paczka.wymagany_typ);
 }
 
@@ -687,17 +744,17 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
     if (uzytePaczki.has(i)) return;
     let powod: string;
     if (p.wymagany_typ) {
-      // Sprawdz czy w ogole jest pojazd tego typu
-      const istnieje = input.pojazdy.some((pp) => rankTypu(pp.typ) >= rankTypu(p.wymagany_typ));
+      // Sprawdz czy w ogole jest pojazd kompatybilny (rodzina + STRICT dla Dostawczego)
+      const istnieje = input.pojazdy.some((pp) => pojazdSpelniaTyp(pp, p));
       if (!istnieje) {
-        powod = `Brak pojazdu typu ${p.wymagany_typ} lub wiekszego w oddziale`;
+        powod = `Brak pojazdu typu ${p.wymagany_typ} w oddziale (twardy wymóg klienta)`;
       } else {
-        powod = 'Brak miejsca w pojezdzie typu lub czasu pracy kierowcy';
+        powod = 'Brak miejsca w pojeździe lub czasu pracy kierowcy';
       }
     } else if (p.suma_kg > Math.max(...input.pojazdy.map((pp) => pp.ladownosc_kg))) {
-      powod = `Waga ${p.suma_kg} kg przekracza pojemnosc kazdego pojazdu`;
+      powod = `Waga ${p.suma_kg} kg przekracza pojemność każdego pojazdu`;
     } else {
-      powod = 'Brak dostepnego pojazdu/kierowcy lub czasu pracy';
+      powod = 'Brak dostępnego pojazdu/kierowcy lub czasu pracy';
     }
     niezaplanowane.push({ paczka: p, powod });
   });

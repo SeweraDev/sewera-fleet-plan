@@ -178,12 +178,23 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
           .lte('od', dzien)
           .gte('do', dzien);
         const zablokowani = new Set((blokady || []).map((b) => b.zasob_id));
+        // Sprawdz istniejace kursy dnia (jakichkolwiek oddzialow) — pojazdy/kierowcy
+        // moga byc juz uzyci w cross-branch kursie KAT/R
+        const { data: istKursy } = await supabase
+          .from('kursy')
+          .select('kierowca_id')
+          .eq('dzien', dzien)
+          .neq('status', 'usuniety');
+        const wKursach = new Set(
+          (istKursy || []).map((k) => k.kierowca_id).filter((v): v is string => !!v)
+        );
         setKierowcy(
           (data || []).map((k) => ({
             kierowca_id: k.id,
             imie_nazwisko: k.imie_nazwisko,
             uprawnienia: k.uprawnienia || '',
-            zmiana: zablokowani.has(k.id) ? 'OFF' : ZMIANA_DEFAULT,
+            // Pre-fill OFF gdy: blokada (urlop) LUB juz w innym kursie dnia
+            zmiana: (zablokowani.has(k.id) || wKursach.has(k.id)) ? 'OFF' : ZMIANA_DEFAULT,
           }))
         );
       } catch (e: any) {
@@ -317,13 +328,44 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         .lte('od', dzien)
         .gte('do', dzien);
       const zablokowanePojazdy = new Set((blokadyPoj || []).map((b) => b.zasob_id));
-      const pojazdyDostepne = pojazdy.filter(
-        (p) => !p.flota_id || !zablokowanePojazdy.has(p.flota_id)
+
+      // KRYTYCZNE: pobierz istniejace kursy z dnia (status != 'usuniety') i wyfiltruj
+      // pojazdy/kierowcow ktorzy juz sa w innych kursach (KAT lub R lub innym oddziale).
+      // Bez tego auto-plan tworzy konflikt: ten sam pojazd w 2 kursach na raz.
+      setProgressMsg('Sprawdzanie istniejących kursów...');
+      const { data: istniejaceKursy } = await supabase
+        .from('kursy')
+        .select('flota_id, nr_rej_zewn, kierowca_id, numer')
+        .eq('dzien', dzien)
+        .neq('status', 'usuniety');
+      const zajeteFlotaId = new Set(
+        (istniejaceKursy || []).map((k) => k.flota_id).filter((v): v is string => !!v)
+      );
+      const zajeteNrRejZewn = new Set(
+        (istniejaceKursy || []).map((k) => k.nr_rej_zewn).filter((v): v is string => !!v)
+      );
+      const zajeciKierowcy = new Set(
+        (istniejaceKursy || []).map((k) => k.kierowca_id).filter((v): v is string => !!v)
       );
 
-      // 6. Wybrani kierowcy (zmiana != OFF)
+      const pojazdyDostepne = pojazdy.filter((p) => {
+        // Blokada (urlop pojazdu)
+        if (p.flota_id && zablokowanePojazdy.has(p.flota_id)) return false;
+        // Juz w innym kursie tego dnia
+        if (p.flota_id && zajeteFlotaId.has(p.flota_id)) return false;
+        if (p.is_zewnetrzny && zajeteNrRejZewn.has(p.nr_rej)) return false;
+        return true;
+      });
+
+      const liczbaZajetych = pojazdy.length - pojazdyDostepne.length;
+      if (liczbaZajetych > 0) {
+        console.log(`[AutoPlan] wyłączono ${liczbaZajetych} pojazdów (już w kursach dnia)`);
+      }
+
+      // 6. Wybrani kierowcy (zmiana != OFF) — wyfiltrowani z juz aktywnych kursow
       const kierowcySloty: KierowcaSlot[] = kierowcy
         .filter((k) => k.zmiana !== 'OFF')
+        .filter((k) => !zajeciKierowcy.has(k.kierowca_id))
         .map((k) => ({
           kierowca_id: k.kierowca_id,
           imie_nazwisko: k.imie_nazwisko,
