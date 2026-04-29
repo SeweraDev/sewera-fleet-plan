@@ -14,7 +14,7 @@
  * ostrzezenie ktore zlecenia sa szacowane.
  */
 
-import { PLAN_CONFIG, ZmianaKod, getZmiana, timeStrToMin } from '@/lib/planConfig';
+import { PLAN_CONFIG, ZmianaKod, getZmiana, timeStrToMin, zmianaMinuty } from '@/lib/planConfig';
 import { haversineKm } from '@/lib/oddzialy-geo';
 
 // ============================================================
@@ -720,41 +720,72 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
   const uzyciPojazdCzas = new Map<string, number>();
   const uzytePaczki = new Set<number>(); // indeksy w paczki[]
 
-  const POJAZD_LIMIT_MIN = 720; // 12h dla pojazdu (2 zmiany rożnych kierowców)
+  // 4. Iteracja PER KIEROWCA — kazdy kierowca dostaje SWOJ pojazd na caly dzien
+  //    (1 auto = 1 kierowca w jednym dniu, fizyczna rzeczywistosc).
+  //    Per kierowca petla while buduje wiele kursow (4-5 jesli krotkie) az czas <= 9h.
+  //
+  //    Sortuj kierowcow po dostepnym czasie (najwiecej -> pierwszy bierze najwiekszy pojazd)
+  const kierowcySorted = [...input.kierowcy].sort((a, b) => {
+    const dostA = (zmianaMinuty(a.zmiana) - (a.czas_zajety_min ?? 0));
+    const dostB = (zmianaMinuty(b.zmiana) - (b.czas_zajety_min ?? 0));
+    return dostB - dostA;
+  });
 
-  // 4. Dla kazdego pojazdu zbuduj WIELE kursow (kierowca może zrobić 4-5 kursów dziennie)
-  //    Pętla wewnętrzna `while` — buduje kolejne kursy aż:
-  //      - skończy się czas pojazdu (12h) LUB kierowcy (9h)
-  //      - skończą się dostępne zlecenia
-  //      - nie da się zbudować sensownej trasy
-  for (const pojazd of pojazdySorted) {
-    const pojazdKey = pojazd.flota_id || pojazd.nr_rej;
+  // Pojazdy juz przypisane (1 pojazd = 1 kierowca/dzien)
+  const pojazdyPrzypisane = new Set<string>();
+  // Pomocnik: wybierz najlepszy wolny pojazd dla kierowcy + dostepnych paczek
+  const wybierzPojazdDlaKierowcy = (
+    kierowca: KierowcaSlot,
+    dostepneIdxy: number[]
+  ): { pojazd: PojazdSlot; key: string } | null => {
+    for (const candidate of pojazdySorted) {
+      const cKey = candidate.flota_id || candidate.nr_rej;
+      if (pojazdyPrzypisane.has(cKey)) continue;
+      // HDS wymaga uprawnien
+      if (/HDS/.test(candidate.typ) && !kierowca.ma_hds) continue;
+      // Czy ktorakolwiek paczka dostepna pasuje do tego pojazdu?
+      const pasuje = dostepneIdxy.some((gi) => {
+        const p = paczki[gi];
+        return pojazdSpelniaTyp(candidate, p) && miesciSieWPojezdzie(candidate, [p]);
+      });
+      if (!pasuje) continue;
+      return { pojazd: candidate, key: cKey };
+    }
+    return null;
+  };
 
+  for (const kierowca of kierowcySorted) {
+    const dostepneIdxy = paczki.map((_, i) => i).filter((i) => !uzytePaczki.has(i));
+    if (dostepneIdxy.length === 0) break;
+
+    const wybor = wybierzPojazdDlaKierowcy(kierowca, dostepneIdxy);
+    if (!wybor) continue; // brak wolnego kompatybilnego pojazdu — pomijamy
+    const { pojazd, key: pojazdKey } = wybor;
+    pojazdyPrzypisane.add(pojazdKey);
+
+    const KIEROWCA_LIMIT = PLAN_CONFIG.max_pracy_z_nadgodzina_min; // 540 min = 9h
+
+    // Petla budowania kursow dla pary (kierowca, pojazd)
     while (true) {
-      // Sprawdz dostępny czas pojazdu (z DB + użyty w tej sesji)
-      const pojazdCzasZajety = (pojazd.czas_zajety_min ?? 0) + (uzyciPojazdCzas.get(pojazdKey) ?? 0);
-      if (pojazdCzasZajety >= POJAZD_LIMIT_MIN) break;
-      const pojazdMaxCzas = POJAZD_LIMIT_MIN - pojazdCzasZajety;
+      const obecnyCzasKierowcy = uzyciKierowcyCzas.get(kierowca.kierowca_id) ?? 0;
+      const pozostalyKierowca = KIEROWCA_LIMIT - (kierowca.czas_zajety_min ?? 0) - obecnyCzasKierowcy;
+      if (pozostalyKierowca < 60) break; // mniej niz 1h zostalo — krotszy kurs nie ma sensu
 
-      // Dostępne zlecenia (nieużyte do tej pory)
-      const dostepnePaczki = paczki
+      const dostepneTeraz = paczki
         .map((p, i) => ({ p, i }))
         .filter(({ i }) => !uzytePaczki.has(i))
         .map(({ p }) => p);
+      if (dostepneTeraz.length === 0) break;
 
-      if (dostepnePaczki.length === 0) break;
+      const maxCzasMin = Math.min(PLAN_CONFIG.max_pracy_min, pozostalyKierowca);
 
-      // Trasa: zwykle 8h normy, max 9h. Plus nie więcej niz pozostały czas pojazdu.
-      const maxCzasMin = Math.min(PLAN_CONFIG.max_pracy_min, pojazdMaxCzas);
-
-      // Mapowanie globalnych indeksow paczek -> lokalnych dla savings
+      // Mapowanie indeksow lokalnych
       const globalIdxPerLocalIdx: number[] = [];
       paczki.forEach((p, gi) => {
         if (!uzytePaczki.has(gi)) globalIdxPerLocalIdx.push(gi);
       });
 
-      // Budujemy lokalne punkty + lokalna distance matrix dla savings
-      const localPunkty: GeoPoint[] = [input.oddzial_baza, ...dostepnePaczki.map((p) => ({ lat: p.lat, lng: p.lng }))];
+      const localPunkty: GeoPoint[] = [input.oddzial_baza, ...dostepneTeraz.map((p) => ({ lat: p.lat, lng: p.lng }))];
       const localDistKm: number[][] = Array.from({ length: localPunkty.length }, () =>
         Array(localPunkty.length).fill(0)
       );
@@ -770,48 +801,37 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
       }
 
       const trasy = savingsAlgorithm(
-        dostepnePaczki,
+        dostepneTeraz,
         pojazd,
         localDistKm,
         localDistMin,
         maxCzasMin,
         PLAN_CONFIG.auto_wraca_do_bazy
       );
-
       if (trasy.length === 0) break;
 
-      // Wez najlepsza trase pod kątem WAGI (sumaryczna kg).
+      // Wez trase z najwieksza waga
       trasy.sort((a, b) => {
-        const wagaA = a.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
-        const wagaB = b.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
+        const wagaA = a.paczki.reduce((s, idx) => s + dostepneTeraz[idx - 1].suma_kg, 0);
+        const wagaB = b.paczki.reduce((s, idx) => s + dostepneTeraz[idx - 1].suma_kg, 0);
         if (wagaB !== wagaA) return wagaB - wagaA;
         return b.paczki.length - a.paczki.length;
       });
       const najlepsza = trasy[0];
 
-      // 2-opt
       const optKolejnosc = twoOpt(najlepsza.paczki, localDistKm);
       const km = obliczKmKursu(optKolejnosc, localDistKm, PLAN_CONFIG.auto_wraca_do_bazy);
       const czasMin = obliczCzasKursu(optKolejnosc, localDistMin, PLAN_CONFIG.auto_wraca_do_bazy);
+      if (czasMin > pozostalyKierowca) break; // nie miesci sie czasowo
 
-      // Kierowca — preferuj juz uzytego z tym pojazdem (kontynuacja zmiany)
-      const kierowca = przydzielKierowce(czasMin, pojazd, input.kierowcy, uzyciKierowcyCzas);
-      if (!kierowca) {
-        // Brak dostępnego kierowcy → koniec dla tego pojazdu
-        break;
-      }
-
-      // Czas startu = czas zmiany kierowcy + czas już użyty (poprzednie kursy)
+      // Czas startu = start zmiany + juz zajety czas kierowcy
       const zmianaKierowcy = getZmiana(kierowca.zmiana);
-      const obecnyCzasKierowcy = uzyciKierowcyCzas.get(kierowca.kierowca_id) ?? 0;
       const startMin = timeStrToMin(zmianaKierowcy.start) + (kierowca.czas_zajety_min ?? 0) + obecnyCzasKierowcy;
       const startCzas = `${String(Math.floor(startMin / 60)).padStart(2, '0')}:${String(startMin % 60).padStart(2, '0')}`;
 
-      // Zapamietaj zajety czas kierowcy/pojazdu (uwzglednia kolejne iteracje while)
       uzyciKierowcyCzas.set(kierowca.kierowca_id, obecnyCzasKierowcy + czasMin);
       uzyciPojazdCzas.set(pojazdKey, (uzyciPojazdCzas.get(pojazdKey) ?? 0) + czasMin);
 
-      // Oznacz uzyte paczki
       const przystanki: PaczkaPrzystankowa[] = optKolejnosc.map((li) => {
         const localIdx = li - 1;
         const gi = globalIdxPerLocalIdx[localIdx];
@@ -819,7 +839,6 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
         return paczki[gi];
       });
 
-      // Sumy
       let suma_kg = 0;
       let suma_m3 = 0;
       let suma_palet = 0;
