@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong } from '@/lib/klasyfikacje';
-import { SnipOverlay } from '@/components/shared/SnipOverlay';
+import { SnipLiveOverlay } from '@/components/shared/SnipLiveOverlay';
 
 interface WzFormTabsProps {
   wzList: WzInput[];
@@ -481,8 +481,8 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   // Strony dokumentu — wielostronicowe WZ wymagaja sklejenia przed OCR.
   // Pierwszy paste/upload tworzy strone 1, kolejne dodaja strony 2, 3, ...
   const [pages, setPages] = useState<(File | Blob)[]>([]);
-  // Snip — przechwycona klatka ekranu, czeka na zaznaczenie obszaru
-  const [snipBitmap, setSnipBitmap] = useState<ImageBitmap | null>(null);
+  // Snip — modal z live preview ekranu (otwiera getDisplayMedia, user zaznacza fragment)
+  const [snipOpen, setSnipOpen] = useState(false);
   // Obraz zrodlowy zachowujemy do archiwum (po accept — kompresja JPEG + upload do Storage)
   const [imageBlob, setImageBlob] = useState<File | Blob | null>(null);
   // Object URL do podgladu obok formularza w step 'preview' (sprzedawca widzi oryginal
@@ -509,31 +509,20 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setPages((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Przechwycenie ekranu + zaznaczenie fragmentu (jak Win+Shift+S w aplikacji)
-  const handleSnip = async () => {
+  // Otwarcie live snip modal — modal sam wywoluje getDisplayMedia, pokazuje
+  // live preview, user zaznacza fragment. Po accept dostajemy gotowy blob.
+  const handleSnip = () => {
     setError(null);
-    try {
-      const { captureScreen } = await import("@/lib/screenSnip");
-      const captured = await captureScreen();
-      if (!captured) return;
-      setSnipBitmap(captured.bitmap);
-    } catch (e: any) {
-      // User odmowil udostepnienia — to nie blad krytyczny
-      if (e?.name === "NotAllowedError") return;
-      setError("Nie udało się przechwycić ekranu: " + (e?.message || "nieznany błąd"));
-    }
+    setSnipOpen(true);
   };
 
-  const handleSnipCrop = async (x: number, y: number, w: number, h: number) => {
-    if (!snipBitmap) return;
-    const { cropToBlob } = await import("@/lib/screenSnip");
-    const blob = await cropToBlob(snipBitmap, x, y, w, h);
-    setSnipBitmap(null);
-    if (blob) handleImage(blob);
+  const handleSnipCapture = (blob: Blob) => {
+    setSnipOpen(false);
+    handleImage(blob);
   };
 
   const handleSnipCancel = () => {
-    setSnipBitmap(null);
+    setSnipOpen(false);
   };
 
   // Uruchomienie OCR: scal strony pionowo, preprocess, Tesseract → text
@@ -725,9 +714,9 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         </>
       )}
 
-      {/* SnipOverlay — fullscreen rysowanie prostokata na przechwyconym ekranie */}
-      {snipBitmap && (
-        <SnipOverlay bitmap={snipBitmap} onCrop={handleSnipCrop} onCancel={handleSnipCancel} />
+      {/* SnipLiveOverlay — modal z live preview ekranu + zaznaczanie fragmentu */}
+      {snipOpen && (
+        <SnipLiveOverlay onCapture={handleSnipCapture} onCancel={handleSnipCancel} />
       )}
 
       {parsing && (
