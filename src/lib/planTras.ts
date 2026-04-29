@@ -316,20 +316,401 @@ export async function buildDistanceMatrix(
 }
 
 // ============================================================
-// PLACEHOLDER dla glownego algorytmu (Faza 2b)
+// CAPACITY CHECK — czy paczka(i) miesci sie w pojezdzie
+// ============================================================
+
+/** Czy pojazd P moze obsluzyc paczke pod katem typu? */
+function pojazdSpelniaTyp(pojazd: PojazdSlot, paczka: PaczkaPrzystankowa): boolean {
+  if (!paczka.wymagany_typ) return true; // dowolny typ
+  return rankTypu(pojazd.typ) >= rankTypu(paczka.wymagany_typ);
+}
+
+/** Czy suma paczek miesci sie w pojezdzie (kg + m³ + palety)? */
+function miesciSieWPojezdzie(
+  pojazd: PojazdSlot,
+  paczki: PaczkaPrzystankowa[]
+): boolean {
+  let sum_kg = 0;
+  let sum_m3 = 0;
+  let sum_palet = 0;
+  for (const p of paczki) {
+    sum_kg += p.suma_kg;
+    sum_m3 += p.suma_m3;
+    sum_palet += p.suma_palet;
+  }
+  if (sum_kg > pojazd.ladownosc_kg) return false;
+  if (pojazd.objetosc_m3 != null && sum_m3 > pojazd.objetosc_m3) return false;
+  if (pojazd.max_palet != null && sum_palet > pojazd.max_palet) return false;
+  return true;
+}
+
+// ============================================================
+// CZAS KURSU — zaladunek + jazda + obsluga + powrot
 // ============================================================
 
 /**
- * Glowna funkcja planowania — Faza 2b doda Savings + 2-opt + capacity.
- * Ten plik jest WIP.
+ * Oblicz czas calkowity kursu w minutach.
+ * Sekwencja: [base, p[0], p[1], ..., p[n-1], base?]
+ *
+ * @param indeksyPaczek kolejnosc paczek (indeksy w distMin matrix, gdzie 0 = baza)
  */
+function obliczCzasKursu(
+  indeksyPaczek: number[],
+  distMin: number[][],
+  wracaDoBazy: boolean
+): number {
+  let czas = PLAN_CONFIG.czas_zaladunku_min;
+  let prev = 0; // baza
+  for (const idx of indeksyPaczek) {
+    czas += distMin[prev][idx];
+    czas += PLAN_CONFIG.czas_rozladunku_min;
+    prev = idx;
+  }
+  if (wracaDoBazy && indeksyPaczek.length > 0) {
+    czas += distMin[prev][0];
+  }
+  return czas;
+}
+
+/**
+ * Oblicz km calkowite trasy.
+ */
+function obliczKmKursu(
+  indeksyPaczek: number[],
+  distKm: number[][],
+  wracaDoBazy: boolean
+): number {
+  let km = 0;
+  let prev = 0;
+  for (const idx of indeksyPaczek) {
+    km += distKm[prev][idx];
+    prev = idx;
+  }
+  if (wracaDoBazy && indeksyPaczek.length > 0) {
+    km += distKm[prev][0];
+  }
+  return Math.round(km * 10) / 10;
+}
+
+// ============================================================
+// SAVINGS ALGORITHM (Clarke-Wright)
+// ============================================================
+// Idea: zacznij z kazda paczka jako osobny kurs (baza-paczka-baza). Policz
+// "savings(i,j) = dist(0,i) + dist(0,j) - dist(i,j)" — ile zaoszczedzimy
+// jesli polaczymy te dwa kursy w jeden. Sortuj po malejacych savings,
+// dla kazdej pary sprob polaczyc trasy (przestrzegajac capacity + czas pracy).
+
+interface Trasa {
+  paczki: number[]; // indeksy w paczki[] (1-based, bo 0=baza w distMin)
+}
+
+function savingsAlgorithm(
+  paczki: PaczkaPrzystankowa[],
+  pojazd: PojazdSlot,
+  distKm: number[][],
+  distMin: number[][],
+  maxCzasMin: number,
+  wracaDoBazy: boolean
+): Trasa[] {
+  const n = paczki.length;
+  if (n === 0) return [];
+
+  // Filtruj paczki ktore w ogole pasuja do tego pojazdu (typ wymagany + capacity 1 paczki)
+  const dostepne: number[] = [];
+  for (let i = 0; i < n; i++) {
+    if (!pojazdSpelniaTyp(pojazd, paczki[i])) continue;
+    if (!miesciSieWPojezdzie(pojazd, [paczki[i]])) continue;
+    dostepne.push(i);
+  }
+  if (dostepne.length === 0) return [];
+
+  // Start: kazda paczka = osobna trasa
+  const trasy: Trasa[] = dostepne.map((i) => ({ paczki: [i + 1] })); // +1 bo 0=baza
+
+  // Liczymy savings dla kazdej pary
+  type Saving = { i: number; j: number; value: number };
+  const savings: Saving[] = [];
+  for (let a = 0; a < dostepne.length; a++) {
+    for (let b = a + 1; b < dostepne.length; b++) {
+      const i = dostepne[a] + 1;
+      const j = dostepne[b] + 1;
+      const s = distKm[0][i] + distKm[0][j] - distKm[i][j];
+      savings.push({ i, j, value: s });
+    }
+  }
+  savings.sort((a, b) => b.value - a.value);
+
+  // Helper: znajdz trase zawierajaca dany indeks paczki
+  const findTrasa = (idx: number): { trasa: Trasa; pozycja: 'start' | 'end' | 'mid' | null } => {
+    for (const t of trasy) {
+      const pos = t.paczki.indexOf(idx);
+      if (pos === -1) continue;
+      if (pos === 0) return { trasa: t, pozycja: 'start' };
+      if (pos === t.paczki.length - 1) return { trasa: t, pozycja: 'end' };
+      return { trasa: t, pozycja: 'mid' };
+    }
+    return { trasa: null as any, pozycja: null };
+  };
+
+  // Probuj laczyc pary w kolejnosci malejacych savings
+  for (const s of savings) {
+    if (s.value <= 0) break;
+    const ti = findTrasa(s.i);
+    const tj = findTrasa(s.j);
+    if (!ti.trasa || !tj.trasa) continue;
+    if (ti.trasa === tj.trasa) continue;
+    // Polaczenie mozliwe tylko gdy oba sa na koncach tras (start/end)
+    if (ti.pozycja === 'mid' || tj.pozycja === 'mid') continue;
+
+    // Konstruuj polaczona trase: i na koncu, j na poczatku (lub odwracaj)
+    let nowa: number[];
+    if (ti.pozycja === 'end' && tj.pozycja === 'start') {
+      nowa = [...ti.trasa.paczki, ...tj.trasa.paczki];
+    } else if (ti.pozycja === 'start' && tj.pozycja === 'end') {
+      nowa = [...tj.trasa.paczki, ...ti.trasa.paczki];
+    } else if (ti.pozycja === 'end' && tj.pozycja === 'end') {
+      nowa = [...ti.trasa.paczki, ...tj.trasa.paczki.slice().reverse()];
+    } else {
+      nowa = [...ti.trasa.paczki.slice().reverse(), ...tj.trasa.paczki];
+    }
+
+    // Sprawdz capacity calkowita
+    const paczkiNowe = nowa.map((idx) => paczki[idx - 1]);
+    if (!miesciSieWPojezdzie(pojazd, paczkiNowe)) continue;
+    // Sprawdz czas calkowity
+    const czas = obliczCzasKursu(nowa, distMin, wracaDoBazy);
+    if (czas > maxCzasMin) continue;
+
+    // OK — laczymy. Usun obie stare trasy, dodaj nowa.
+    const idxI = trasy.indexOf(ti.trasa);
+    if (idxI >= 0) trasy.splice(idxI, 1);
+    const idxJ = trasy.indexOf(tj.trasa);
+    if (idxJ >= 0) trasy.splice(idxJ, 1);
+    trasy.push({ paczki: nowa });
+  }
+
+  return trasy;
+}
+
+// ============================================================
+// 2-OPT LOCAL SEARCH — popraw kolejnosc w kazdej trasie
+// ============================================================
+
+function twoOpt(trasa: number[], distKm: number[][]): number[] {
+  if (trasa.length < 3) return trasa;
+  let best = trasa.slice();
+  let improved = true;
+  // Pelna ścieżka: 0 (baza) -> trasa -> 0 (baza). Liczymy z wstawionymi 0.
+  const totalKm = (route: number[]) => {
+    let km = 0;
+    let prev = 0;
+    for (const idx of route) {
+      km += distKm[prev][idx];
+      prev = idx;
+    }
+    km += distKm[prev][0];
+    return km;
+  };
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < best.length - 1; i++) {
+      for (let j = i + 1; j < best.length; j++) {
+        const candidate = best.slice();
+        // Odwroc segment [i, j]
+        const seg = candidate.slice(i, j + 1).reverse();
+        candidate.splice(i, j - i + 1, ...seg);
+        if (totalKm(candidate) < totalKm(best)) {
+          best = candidate;
+          improved = true;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+// ============================================================
+// PRZYDZIAL KIEROWCY DO TRASY
+// ============================================================
+// Reguly:
+// - Kierowca z uprawnieniami HDS moze prowadzic wszystko
+// - Kierowca BEZ HDS nie moze HDS-a (typ pojazdu zawiera "HDS")
+// - Czas trasy musi sie zmiescic w godzinach zmiany kierowcy
+
+function przydzielKierowce(
+  trasaCzasMin: number,
+  pojazd: PojazdSlot,
+  kierowcyDostepni: KierowcaSlot[],
+  uzyciKierowcy: Set<string>
+): KierowcaSlot | null {
+  const pojazdHDS = /HDS/.test(pojazd.typ);
+  for (const k of kierowcyDostepni) {
+    if (uzyciKierowcy.has(k.kierowca_id)) continue;
+    if (pojazdHDS && !k.ma_hds) continue;
+    const z = getZmiana(k.zmiana);
+    const dostepneMin = timeStrToMin(z.koniec) - timeStrToMin(z.start);
+    if (trasaCzasMin > dostepneMin) continue;
+    return k;
+  }
+  return null;
+}
+
+// ============================================================
+// GLOWNA FUNKCJA — planTras
+// ============================================================
+
 export async function planTras(input: PlanInput): Promise<PlanResult> {
+  const t0 = performance.now();
+  // 1. Scalanie tych samych adresow
   const paczki = scalAdresy(input.zlecenia);
   console.log(`[planTras] scalono ${input.zlecenia.length} zlecen w ${paczki.length} paczek`);
+
+  if (paczki.length === 0) {
+    return { kursy: [], crossBranch: [], niezaplanowane: [], liczba_z_proxy: 0 };
+  }
+
+  // 2. Distance matrix (baza + paczki)
+  const punkty: GeoPoint[] = [input.oddzial_baza, ...paczki.map((p) => ({ lat: p.lat, lng: p.lng }))];
+  const { km: distKm, minuty: distMin } = await buildDistanceMatrix(punkty);
+
+  // 3. Pojazdy posortowane: wlasne (Sewera) przed zewnętrznymi, w obrebie tego samego ranking typu
+  const pojazdySorted = [...input.pojazdy].sort((a, b) => {
+    if (a.is_zewnetrzny !== b.is_zewnetrzny) return a.is_zewnetrzny ? 1 : -1;
+    return rankTypu(b.typ) - rankTypu(a.typ); // wieksze pierwsze (HDS przed Dostawczy)
+  });
+
+  const kursy: KursPropozycja[] = [];
+  const niezaplanowane: Niezaplanowane[] = [];
+  const uzyciKierowcy = new Set<string>();
+  const uzytePaczki = new Set<number>(); // indeksy w paczki[]
+
+  // 4. Dla kazdego pojazdu sprob zaplanowac trase z paczek nieuzytych
+  for (const pojazd of pojazdySorted) {
+    const dostepnePaczki = paczki
+      .map((p, i) => ({ p, i }))
+      .filter(({ i }) => !uzytePaczki.has(i))
+      .map(({ p }) => p);
+
+    if (dostepnePaczki.length === 0) break;
+
+    // 8h zwykle, 9h fallback gdy 8h nie zaplanuje wszystkiego
+    const maxCzasMin = PLAN_CONFIG.max_pracy_min;
+
+    // Mapowanie globalnych indeksow paczek -> lokalnych dla savings
+    const globalIdxPerLocalIdx: number[] = [];
+    paczki.forEach((p, gi) => {
+      if (!uzytePaczki.has(gi)) globalIdxPerLocalIdx.push(gi);
+    });
+
+    // Budujemy lokalne paczki + lokalna distance matrix dla savings (slice z global)
+    const localPunkty: GeoPoint[] = [input.oddzial_baza, ...dostepnePaczki.map((p) => ({ lat: p.lat, lng: p.lng }))];
+    const localDistKm: number[][] = Array.from({ length: localPunkty.length }, () =>
+      Array(localPunkty.length).fill(0)
+    );
+    const localDistMin: number[][] = Array.from({ length: localPunkty.length }, () =>
+      Array(localPunkty.length).fill(0)
+    );
+    // Mapuj 0=baza, 1..k = lokalne paczki
+    const lookup = (li: number) => (li === 0 ? 0 : globalIdxPerLocalIdx[li - 1] + 1);
+    for (let i = 0; i < localPunkty.length; i++) {
+      for (let j = 0; j < localPunkty.length; j++) {
+        localDistKm[i][j] = distKm[lookup(i)][lookup(j)];
+        localDistMin[i][j] = distMin[lookup(i)][lookup(j)];
+      }
+    }
+
+    const trasy = savingsAlgorithm(
+      dostepnePaczki,
+      pojazd,
+      localDistKm,
+      localDistMin,
+      maxCzasMin,
+      PLAN_CONFIG.auto_wraca_do_bazy
+    );
+
+    if (trasy.length === 0) continue;
+
+    // Wez tylko najlepsza (najwiecej paczek dla tego pojazdu); pojedynczy pojazd = 1 kurs/dzien
+    trasy.sort((a, b) => b.paczki.length - a.paczki.length);
+    const najlepsza = trasy[0];
+
+    // 2-opt
+    const optKolejnosc = twoOpt(najlepsza.paczki, localDistKm);
+    const km = obliczKmKursu(optKolejnosc, localDistKm, PLAN_CONFIG.auto_wraca_do_bazy);
+    const czasMin = obliczCzasKursu(optKolejnosc, localDistMin, PLAN_CONFIG.auto_wraca_do_bazy);
+
+    // Kierowca
+    const kierowca = przydzielKierowce(czasMin, pojazd, input.kierowcy, uzyciKierowcy);
+    if (!kierowca) {
+      // Brak dostepnego kierowcy — pomijamy ten pojazd, paczki zostaja
+      continue;
+    }
+    uzyciKierowcy.add(kierowca.kierowca_id);
+
+    // Zaznacz uzyte paczki (mapowanie z lokalnych indeksow lokalna_paczki[idx-1] -> globalny)
+    const przystanki: PaczkaPrzystankowa[] = optKolejnosc.map((li) => {
+      const localIdx = li - 1; // li>=1
+      const gi = globalIdxPerLocalIdx[localIdx];
+      uzytePaczki.add(gi);
+      return paczki[gi];
+    });
+
+    // Sumy
+    let suma_kg = 0;
+    let suma_m3 = 0;
+    let suma_palet = 0;
+    for (const p of przystanki) {
+      suma_kg += p.suma_kg;
+      suma_m3 += p.suma_m3;
+      suma_palet += p.suma_palet;
+    }
+
+    // Czas startu: ze zmiany kierowcy
+    const startCzas = getZmiana(kierowca.zmiana).start;
+
+    kursy.push({
+      kurs_id_tmp: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      pojazd,
+      kierowca,
+      przystanki,
+      km_total: km,
+      czas_total_min: czasMin,
+      suma_kg: Math.round(suma_kg * 10) / 10,
+      suma_m3: Math.round(suma_m3 * 10) / 10,
+      suma_palet: Math.ceil(suma_palet),
+      start_czas: startCzas,
+    });
+  }
+
+  // 5. Pozostale paczki = niezaplanowane
+  paczki.forEach((p, i) => {
+    if (uzytePaczki.has(i)) return;
+    let powod: string;
+    if (p.wymagany_typ) {
+      // Sprawdz czy w ogole jest pojazd tego typu
+      const istnieje = input.pojazdy.some((pp) => rankTypu(pp.typ) >= rankTypu(p.wymagany_typ));
+      if (!istnieje) {
+        powod = `Brak pojazdu typu ${p.wymagany_typ} lub wiekszego w oddziale`;
+      } else {
+        powod = 'Brak miejsca w pojezdzie typu lub czasu pracy kierowcy';
+      }
+    } else if (p.suma_kg > Math.max(...input.pojazdy.map((pp) => pp.ladownosc_kg))) {
+      powod = `Waga ${p.suma_kg} kg przekracza pojemnosc kazdego pojazdu`;
+    } else {
+      powod = 'Brak dostepnego pojazdu/kierowcy lub czasu pracy';
+    }
+    niezaplanowane.push({ paczka: p, powod });
+  });
+
+  const t1 = performance.now();
+  console.log(
+    `[planTras] gotowe: ${kursy.length} kursow, ${niezaplanowane.length} niezaplanowanych, ${Math.round(t1 - t0)} ms`
+  );
+
   return {
-    kursy: [],
-    crossBranch: [],
-    niezaplanowane: paczki.map((p) => ({ paczka: p, powod: 'Algorytm WIP — Faza 2b' })),
+    kursy,
+    crossBranch: [], // Faza 3 doda
+    niezaplanowane,
     liczba_z_proxy: paczki.filter((p) => p.ma_proxy).length,
   };
 }
