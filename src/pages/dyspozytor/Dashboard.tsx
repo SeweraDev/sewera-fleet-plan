@@ -34,6 +34,7 @@ import { KolejkaTab } from '@/components/dyspozytor/KolejkaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
 import { AutoPlanModal } from '@/components/dyspozytor/AutoPlanModal';
+import { ImportZleceniaCsvModal } from '@/components/dyspozytor/ImportZleceniaCsvModal';
 import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
 import { PolaczKursyModal } from '@/components/dyspozytor/PolaczKursyModal';
 import { DodajDoKursuModal } from '@/components/dyspozytor/DodajDoKursuModal';
@@ -1006,6 +1007,7 @@ export default function DyspozytorDashboard() {
   const [showModal, setShowModal] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
   const [showAutoPlan, setShowAutoPlan] = useState(false);
+  const [showImportCsv, setShowImportCsv] = useState(false);
   const [preSelectedZlIds, setPreSelectedZlIds] = useState<string[]>([]);
   const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
@@ -1073,6 +1075,18 @@ export default function DyspozytorDashboard() {
                 </Button>
                 <Button onClick={() => setShowModal(true)} disabled={!oddzialId}>
                   + Nowy kurs
+                </Button>
+              </div>
+            )}
+            {activeId === 'zlecenia' && (
+              <div className="ml-auto mt-4 flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowImportCsv(true)}
+                  disabled={!oddzialId}
+                  title="Import zleceń z pliku CSV (Zestawienie z systemu magazynowego)"
+                >
+                  📥 Importuj z CSV
                 </Button>
               </div>
             )}
@@ -1155,6 +1169,16 @@ export default function DyspozytorDashboard() {
               oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
               dzien={dzien}
               onPlanZapisany={() => { refetch(); refetchZlBezKursu(); }}
+            />
+          )}
+
+          {oddzialId != null && (
+            <ImportZleceniaCsvModal
+              open={showImportCsv}
+              onClose={() => setShowImportCsv(false)}
+              oddzialId={oddzialId}
+              oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
+              onImported={() => { refetchZlBezKursu(); }}
             />
           )}
         </main>
