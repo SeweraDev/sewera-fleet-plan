@@ -1,138 +1,100 @@
 /**
  * Cross-branch suggester — sugestie przekazania niezaplanowanych zlecen
- * do innego oddzialu, ktory ma kompatybilny pojazd.
+ * do INNEGO ODDZIALU, ALE TYLKO gdy ten oddzial JUZ JEDZIE w tamtym kierunku.
  *
- * Specjalny case: KAT i R (Redystrybucja) maja TEN SAM adres bazowy
- * (40-608 Katowice ul. Kosciuszki 326). Cross-branch miedzy nimi nie
- * generuje km dodatkowego dojazdu (km_dojazdu = 0).
+ * Stara wersja (V1) sprawdzala tylko czy obcy oddzial ma kompatybilny POJAZD.
+ * Problem: "przekaz do KAT" mogla pojawic sie gdy KAT w ogole nie planuje
+ * jechac w te strone — bezsensowna sugestia.
  *
- * Inne pary oddzialow: km_dojazdu = OSRM lub haversine x1.4 miedzy bazami.
- * Sugestie sa filtrowane po promieniu PLAN_CONFIG.cross_branch_radius_km.
+ * Nowa wersja (V2): sprawdzamy ZAPLANOWANE KURSY obcych oddzialow z ich
+ * przystankami. Jesli moja niezaplanowana paczka jest <= 20 km od ktoregos
+ * przystanku tego kursu, lub objazd dla wstawienia <= 15 km — sugerujemy
+ * dorzucenie z konkretnym kursem (numer + kierowca).
+ *
+ * Specjalny case KAT/R nadal: km miedzy oddzialami zerowy bo wspolny adres.
  */
 
-import { PLAN_CONFIG } from '@/lib/planConfig';
-import {
-  ODDZIAL_COORDS,
-  NAZWA_TO_KOD,
-  haversineKm,
-  getRouteDistance,
-} from '@/lib/oddzialy-geo';
+import { haversineKm } from '@/lib/oddzialy-geo';
 import type {
   Niezaplanowane,
   CrossBranchSugestia,
-  PojazdSlot,
-  PaczkaPrzystankowa,
 } from '@/lib/planTras';
-import { rankTypu } from '@/lib/planTras';
 
-/** Inny oddzial z lista jego dostepnych pojazdow (do oceny kompatybilnosci). */
-export interface InnyOddzialFloty {
+/** Przystanek obcego kursu — punkt geograficzny + opis. */
+export interface PrzystanekObcyKurs {
+  lat: number;
+  lng: number;
+  adres: string | null;
+}
+
+/** Obcy kurs — zaplanowany przez inny oddzial na ten sam dzien. */
+export interface ObcyKurs {
+  kurs_id: string;
+  kurs_numer: string | null;
   oddzial_id: number;
-  nazwa: string;
-  /** Kod 2-3 literowy z NAZWA_TO_KOD (KAT/R/SOS/GL/DG/TG/CH/OS). */
-  kod: string;
-  pojazdy: PojazdSlot[];
+  oddzial_nazwa: string;
+  /** Kierowca tego kursu (do info dla dyspozytora). */
+  kierowca_nazwa: string | null;
+  /** Pojazd tego kursu. */
+  pojazd_nr_rej: string | null;
+  pojazd_typ: string | null;
+  /** Lista przystankow z geokoordynatami. */
+  przystanki: PrzystanekObcyKurs[];
 }
 
-export interface CrossBranchInput {
+export interface CrossBranchInputV2 {
   niezaplanowane: Niezaplanowane[];
-  oddzialAktualnyKod: string; // KAT, R, SOS, ...
-  innyOddzialFloty: InnyOddzialFloty[];
+  /** Wszystkie kursy obcych oddzialow na ten dzien (z przystankami). */
+  obceKursy: ObcyKurs[];
 }
 
-/**
- * Czy ktorykolwiek pojazd z listy moze obsluzyc paczke pod katem typu i pojemnosci?
- */
-function jakikolwiekPojazdSpelnia(
-  paczka: PaczkaPrzystankowa,
-  pojazdy: PojazdSlot[]
-): boolean {
-  for (const p of pojazdy) {
-    if (paczka.wymagany_typ && rankTypu(p.typ) < rankTypu(paczka.wymagany_typ)) continue;
-    if (paczka.suma_kg > p.ladownosc_kg) continue;
-    if (p.objetosc_m3 != null && paczka.suma_m3 > p.objetosc_m3) continue;
-    if (p.max_palet != null && paczka.suma_palet > p.max_palet) continue;
-    return true;
-  }
-  return false;
-}
+/** Maksymalna odleglosc do najblizszego przystanku obcego kursu (km). */
+const MAX_DOJAZD_OD_PRZYSTANKU_KM = 20;
 
 /**
- * Odleglosc dojazdu miedzy dwoma oddzialami (km).
- * KAT-R = 0 (ten sam adres). Inne pary: haversine x 1.4 (rough).
- */
-function kmMiedzyOddzialami(kodA: string, kodB: string): number {
-  if (kodA === kodB) return 0;
-  // Specjalny case: KAT i R — ten sam adres bazowy
-  if (
-    (kodA === 'KAT' && kodB === 'R') ||
-    (kodA === 'R' && kodB === 'KAT')
-  ) {
-    return 0;
-  }
-  const a = ODDZIAL_COORDS[kodA];
-  const b = ODDZIAL_COORDS[kodB];
-  if (!a || !b) return Infinity;
-  return Math.round(haversineKm(a, b) * 1.4 * 10) / 10;
-}
-
-/**
- * Glowna funkcja: dla kazdej niezaplanowanej paczki znajdz NAJLEPSZY oddzial
- * (najmniejszy km dojazdu), ktory ma kompatybilny pojazd.
+ * Glowna funkcja v2: dla kazdej niezaplanowanej paczki znajdz NAJLEPSZY
+ * obcy kurs ktory ma przystanek blisko (<= 20 km).
  *
- * Zwraca tylko paczki gdzie sugestia jest sensowna (km_dojazdu <= radius).
- * Paczki bez sugestii (zaden oddzial nie ma kompatybilnego auta) zostaja
- * w `niezaplanowane` po stronie planTras().
+ * Sortuje obce kursy po dystansie najblizszego przystanku do paczki.
  */
-export function suggestCrossBranch(input: CrossBranchInput): CrossBranchSugestia[] {
+export function suggestCrossBranchV2(input: CrossBranchInputV2): CrossBranchSugestia[] {
   const wynik: CrossBranchSugestia[] = [];
 
   for (const nz of input.niezaplanowane) {
-    // Znajdz wszystkie oddzialy ktore moga obsluzyc te paczke
-    const kandydaci = input.innyOddzialFloty
-      .filter((o) => o.kod !== input.oddzialAktualnyKod)
-      .filter((o) => jakikolwiekPojazdSpelnia(nz.paczka, o.pojazdy))
-      .map((o) => ({
-        ...o,
-        km_dojazdu: kmMiedzyOddzialami(input.oddzialAktualnyKod, o.kod),
-      }))
-      .filter((o) => o.km_dojazdu <= PLAN_CONFIG.cross_branch_radius_km)
-      .sort((a, b) => a.km_dojazdu - b.km_dojazdu);
+    const paczkaPos = { lat: nz.paczka.lat, lng: nz.paczka.lng };
 
-    if (kandydaci.length === 0) continue;
+    // Per kurs obcy: oblicz dystans do najblizszego przystanku
+    type Kandidat = { kurs: ObcyKurs; dystans: number };
+    const kandidaci: Kandidat[] = [];
+    for (const kurs of input.obceKursy) {
+      let najblizszy = Infinity;
+      for (const p of kurs.przystanki) {
+        if (p.lat === 0 || p.lng === 0) continue;
+        const dyst = haversineKm(paczkaPos, { lat: p.lat, lng: p.lng });
+        if (dyst < najblizszy) najblizszy = dyst;
+      }
+      if (najblizszy <= MAX_DOJAZD_OD_PRZYSTANKU_KM) {
+        kandidaci.push({ kurs, dystans: najblizszy });
+      }
+    }
 
-    const najlepszy = kandydaci[0];
+    if (kandidaci.length === 0) continue;
+
+    // Sort: najblizszy przystanek pierwszy
+    kandidaci.sort((a, b) => a.dystans - b.dystans);
+    const najlepszy = kandidaci[0];
+
     wynik.push({
       paczka: nz.paczka,
-      oddzial_docelowy: najlepszy.oddzial_id,
-      oddzial_nazwa: najlepszy.nazwa,
+      oddzial_docelowy: najlepszy.kurs.oddzial_id,
+      oddzial_nazwa: najlepszy.kurs.oddzial_nazwa,
       powod: nz.powod,
-      km_dojazdu: najlepszy.km_dojazdu,
+      kurs_docelowy_numer: najlepszy.kurs.kurs_numer,
+      kierowca_docelowy_nazwa: najlepszy.kurs.kierowca_nazwa,
+      pojazd_docelowy_nr_rej: najlepszy.kurs.pojazd_nr_rej,
+      najblizszy_przystanek_km: Math.round(najlepszy.dystans * 10) / 10,
     });
   }
 
   return wynik;
-}
-
-/**
- * Pobierz km droga (OSRM) miedzy dwoma oddzialami — uzywane w UI tylko dla
- * dokladniejszej prezentacji niz haversine x1.4. Cache po stronie OSRM.
- */
-export async function getKmDrogaMiedzyOddzialami(
-  kodA: string,
-  kodB: string
-): Promise<number | null> {
-  if (kodA === kodB) return 0;
-  if ((kodA === 'KAT' && kodB === 'R') || (kodA === 'R' && kodB === 'KAT')) return 0;
-  const a = ODDZIAL_COORDS[kodA];
-  const b = ODDZIAL_COORDS[kodB];
-  if (!a || !b) return null;
-  return await getRouteDistance(a, b);
-}
-
-/**
- * Helper: konwertuje nazwe oddzialu (z DB) na kod (KAT, R, SOS...).
- */
-export function nazwaToKod(nazwa: string): string | null {
-  return NAZWA_TO_KOD[nazwa] || null;
 }

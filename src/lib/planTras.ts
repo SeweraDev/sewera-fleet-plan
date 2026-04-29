@@ -121,16 +121,22 @@ export interface KursPropozycja {
   start_czas: string;
 }
 
-/** Sugestia cross-branch dla zlecenia ktorego nie da sie obsluzyc w oddziale. */
+/** Sugestia cross-branch — przekaz do innego oddzialu ktory JUZ JEDZIE w tamtym kierunku. */
 export interface CrossBranchSugestia {
   paczka: PaczkaPrzystankowa;
-  /** Oddzial ktory ma kompatybilne auto. */
+  /** Oddzial ktory ma kurs w tym kierunku. */
   oddzial_docelowy: number;
   oddzial_nazwa: string;
-  /** Powod oryginalny dla ktorego nie da sie zaplanowac w obecnym oddziale. */
+  /** Powod oryginalny dla ktorego nie da sie zaplanowac u nas. */
   powod: string;
-  /** Szacowana odleglosc dojazdu dodatkowego (km). 0 = ten sam adres bazowy (KAT↔R). */
-  km_dojazdu: number;
+  /** Numer kursu obcego oddzialu do ktorego dorzucamy. */
+  kurs_docelowy_numer?: string | null;
+  /** Kierowca obcego kursu (info dla dyspozytora). */
+  kierowca_docelowy_nazwa?: string | null;
+  /** Pojazd obcego kursu. */
+  pojazd_docelowy_nr_rej?: string | null;
+  /** Odleglosc do najblizszego przystanku obcego kursu (km). */
+  najblizszy_przystanek_km: number;
 }
 
 /** Niezaplanowane zlecenia + powod. */

@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { geocodeAddress, NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import { ZMIANY, ZMIANA_DEFAULT, type ZmianaKod } from '@/lib/planConfig';
 import { planTras, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult, type KursPropozycja } from '@/lib/planTras';
-import { suggestCrossBranch, type InnyOddzialFloty } from '@/lib/crossBranchSuggest';
+import { suggestCrossBranchV2, type ObcyKurs } from '@/lib/crossBranchSuggest';
 import { proponujDorzucenie, type SugestiaDorzucenia, type PaczkaObca } from '@/lib/proponujDorzucenie';
 import { scalAdresy } from '@/lib/planTras';
 import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
@@ -422,53 +422,102 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
       });
 
       // 9. Cross-branch — pobierz floty innych oddzialow ktore moga obsluzyc niezaplanowane
-      setProgressMsg('Sprawdzanie sugestii przekazania...');
+      // Cross-branch v2: sprawdzamy KURSY innych oddzialow (z przystankami),
+      // sugerujemy dorzucenie tylko jesli obcy kurs jedzie blisko niezaplanowanej paczki.
+      setProgressMsg('Sprawdzanie kursów innych oddziałów...');
       const { data: oddzialy } = await supabase.from('oddzialy').select('id, nazwa').neq('id', oddzialId);
-      const innyOddzialFloty: InnyOddzialFloty[] = [];
-      for (const o of oddzialy || []) {
-        const kod = NAZWA_TO_KOD[o.nazwa];
-        if (!kod) continue;
-        const { data: fOdd } = await supabase
-          .from('flota')
-          .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet')
-          .eq('oddzial_id', o.id)
-          .eq('aktywny', true);
-        const { data: fOddZ } = await supabase
-          .from('flota_zewnetrzna')
-          .select('nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet')
-          .eq('oddzial_id', o.id)
-          .eq('aktywny', true);
-        innyOddzialFloty.push({
-          oddzial_id: o.id,
-          nazwa: o.nazwa,
-          kod,
-          pojazdy: [
-            ...(fOdd || []).map((f) => ({
-              flota_id: f.id,
-              nr_rej: f.nr_rej,
-              typ: f.typ,
-              ladownosc_kg: Number(f.ladownosc_kg) || 0,
-              objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null,
-              max_palet: (f as any).max_palet != null ? Number((f as any).max_palet) : null,
-              is_zewnetrzny: false,
-            })),
-            ...(fOddZ || []).map((f) => ({
-              flota_id: null,
-              nr_rej: f.nr_rej,
-              typ: f.typ,
-              ladownosc_kg: Number(f.ladownosc_kg) || 0,
-              objetosc_m3: f.objetosc_m3 != null ? Number(f.objetosc_m3) : null,
-              max_palet: (f as any).max_palet != null ? Number((f as any).max_palet) : null,
-              is_zewnetrzny: true,
-            })),
-          ],
-        });
+      const obceOddzialIds = (oddzialy || []).map((o) => o.id);
+      const oddzialNazwaMap = new Map<number, string>();
+      (oddzialy || []).forEach((o) => oddzialNazwaMap.set(o.id, o.nazwa));
+
+      const obceKursy: ObcyKurs[] = [];
+      if (obceOddzialIds.length > 0) {
+        // Pobierz kursy obcych oddzialow z dnia
+        const { data: kursyObce } = await supabase
+          .from('kursy')
+          .select('id, numer, oddzial_id, kierowca_nazwa, flota_id, nr_rej_zewn')
+          .eq('dzien', dzien)
+          .neq('status', 'usuniety')
+          .in('oddzial_id', obceOddzialIds);
+
+        // Pobierz typy/nr_rej pojazdow flota
+        const flotaIds = (kursyObce || []).map((k) => k.flota_id).filter((v): v is string => !!v);
+        const flotaInfoMap = new Map<string, { nr_rej: string; typ: string }>();
+        if (flotaIds.length > 0) {
+          const { data: flotaData } = await supabase
+            .from('flota')
+            .select('id, nr_rej, typ')
+            .in('id', flotaIds);
+          (flotaData || []).forEach((f) => flotaInfoMap.set(f.id, { nr_rej: f.nr_rej, typ: f.typ }));
+        }
+        const flotaZewMap = new Map<string, string>();
+        const nrRejZewn = (kursyObce || []).map((k) => k.nr_rej_zewn).filter((v): v is string => !!v);
+        if (nrRejZewn.length > 0) {
+          const { data: fzData } = await supabase
+            .from('flota_zewnetrzna')
+            .select('nr_rej, typ')
+            .in('nr_rej', nrRejZewn);
+          (fzData || []).forEach((f) => flotaZewMap.set(f.nr_rej, f.typ));
+        }
+
+        // Pobierz przystanki tych kursow
+        const kursIdyObce = (kursyObce || []).map((k) => k.id);
+        const przystankiPerKurs = new Map<string, { adres: string; lat: number; lng: number }[]>();
+        if (kursIdyObce.length > 0) {
+          // kurs_przystanki -> zlecenia -> zlecenia_wz -> adres
+          const { data: przystData } = await supabase
+            .from('kurs_przystanki')
+            .select('kurs_id, zlecenie_id, kolejnosc')
+            .in('kurs_id', kursIdyObce)
+            .order('kolejnosc');
+          const zlIdyZPrzystanki = (przystData || []).map((p) => p.zlecenie_id);
+          const wzAdresMap = new Map<string, string[]>(); // zlecenie_id -> adresy
+          if (zlIdyZPrzystanki.length > 0) {
+            const { data: wzData } = await supabase
+              .from('zlecenia_wz')
+              .select('zlecenie_id, adres')
+              .in('zlecenie_id', zlIdyZPrzystanki);
+            for (const w of wzData || []) {
+              if (!wzAdresMap.has(w.zlecenie_id)) wzAdresMap.set(w.zlecenie_id, []);
+              if (w.adres) wzAdresMap.get(w.zlecenie_id)!.push(w.adres);
+            }
+          }
+          // Geocoduj adresy obcych kursow
+          for (const p of przystData || []) {
+            const adresy = wzAdresMap.get(p.zlecenie_id) ?? [];
+            for (const adres of adresy) {
+              if (!wzZGeo.has(adres)) {
+                const coords = await geocodeAddress(adres);
+                wzZGeo.set(adres, coords);
+              }
+              const geo = wzZGeo.get(adres);
+              if (!geo) continue;
+              if (!przystankiPerKurs.has(p.kurs_id)) przystankiPerKurs.set(p.kurs_id, []);
+              przystankiPerKurs.get(p.kurs_id)!.push({ adres, lat: geo.lat, lng: geo.lng });
+            }
+          }
+        }
+
+        for (const k of kursyObce || []) {
+          const fInfo = k.flota_id ? flotaInfoMap.get(k.flota_id) : null;
+          const fZewTyp = k.nr_rej_zewn ? flotaZewMap.get(k.nr_rej_zewn) : null;
+          obceKursy.push({
+            kurs_id: k.id,
+            kurs_numer: k.numer,
+            oddzial_id: k.oddzial_id,
+            oddzial_nazwa: oddzialNazwaMap.get(k.oddzial_id) ?? '?',
+            kierowca_nazwa: k.kierowca_nazwa,
+            pojazd_nr_rej: fInfo?.nr_rej ?? k.nr_rej_zewn,
+            pojazd_typ: fInfo?.typ ?? fZewTyp ?? null,
+            przystanki: przystankiPerKurs.get(k.id) ?? [],
+          });
+        }
+        console.log(`[AutoPlan] obce kursy do analizy cross-branch: ${obceKursy.length}`);
       }
 
-      const crossBranch = suggestCrossBranch({
+      const crossBranch = suggestCrossBranchV2({
         niezaplanowane: wynik.niezaplanowane,
-        oddzialAktualnyKod: kodOddz,
-        innyOddzialFloty,
+        obceKursy,
       });
 
       // 10. Sugestie dorzucenia obcych zlecen do kursow R
@@ -685,17 +734,43 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               )}
             </div>
 
-            {/* Lista kursow */}
-            {planResult.kursy.length > 0 && (
+            {/* Lista kursow — POGRUPOWANE PER KIEROWCA */}
+            {planResult.kursy.length > 0 && (() => {
+              // Grupuj kursy per kierowca + sumaryczne dane
+              const grupy = new Map<string, typeof planResult.kursy>();
+              for (const k of planResult.kursy) {
+                const kid = k.kierowca?.kierowca_id ?? '__brak__';
+                if (!grupy.has(kid)) grupy.set(kid, []);
+                grupy.get(kid)!.push(k);
+              }
+              return (
               <div>
                 <h3 className="font-medium mb-2">Proponowane kursy</h3>
-                <div className="space-y-2">
-                  {planResult.kursy.map((k, i) => {
-                    const isZapisany = zaakceptowane.has(k.kurs_id_tmp);
-                    const isSaving = savingKurs === k.kurs_id_tmp;
-                    const dorzucDoTegoKursu = sugestieDorzucenia.filter(
-                      (s) => s.kurs_id_tmp === k.kurs_id_tmp
-                    );
+                <div className="space-y-3">
+                  {Array.from(grupy.entries()).map(([kid, kursyKierowcy]) => {
+                    const sumaCzasH = kursyKierowcy.reduce((s, k) => s + k.czas_total_min, 0) / 60;
+                    const sumaKm = kursyKierowcy.reduce((s, k) => s + k.km_total, 0);
+                    const sumaKg = kursyKierowcy.reduce((s, k) => s + k.suma_kg, 0);
+                    const nazwaKierowcy = kursyKierowcy[0].kierowca?.imie_nazwisko ?? 'Brak kierowcy';
+                    return (
+                      <div key={kid} className="space-y-2">
+                        <div className="flex items-baseline gap-2 border-l-4 border-blue-500 pl-3 py-1 bg-blue-50/50 rounded-r">
+                          <span className="font-medium">👤 {nazwaKierowcy}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {kursyKierowcy.length} kurs{kursyKierowcy.length > 1 ? 'y' : ''}
+                            {' · '}{Math.round(sumaCzasH * 10) / 10}h / 9h
+                            {' · '}{sumaKm.toFixed(1)} km
+                            {' · '}{Math.round(sumaKg)} kg
+                          </span>
+                        </div>
+                        <div className="space-y-2 ml-2">
+                          {kursyKierowcy.map((k) => {
+                            const i = planResult.kursy.indexOf(k);
+                            const isZapisany = zaakceptowane.has(k.kurs_id_tmp);
+                            const isSaving = savingKurs === k.kurs_id_tmp;
+                            const dorzucDoTegoKursu = sugestieDorzucenia.filter(
+                              (s) => s.kurs_id_tmp === k.kurs_id_tmp
+                            );
                     return (
                       <Card key={k.kurs_id_tmp} className={`p-3 ${isZapisany ? 'bg-green-50 border-green-200' : ''}`}>
                         <div className="flex justify-between items-start gap-3">
@@ -787,12 +862,17 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                             </div>
                           </div>
                         )}
-                      </Card>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Mapa tras */}
             {planResult.kursy.length > 0 && (() => {
@@ -813,38 +893,63 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               );
             })()}
 
-            {/* Cross-branch */}
+            {/* Cross-branch — sugestie dorzucenia do KONKRETNEGO kursu obcego oddziału */}
             {planResult.crossBranch.length > 0 && (
               <div>
-                <h3 className="font-medium mb-2">🔄 Sugestie przekazania do innego oddziału</h3>
+                <h3 className="font-medium mb-2">🔄 Sugestie przekazania (oddziały już jadące w tę stronę)</h3>
                 <div className="space-y-1">
                   {planResult.crossBranch.map((cb, i) => (
                     <div key={i} className="text-sm bg-blue-50 border border-blue-200 p-2 rounded">
-                      <b>{cb.paczka.odbiorca}</b> → przekaż do <b>{cb.oddzial_nazwa}</b>
-                      {' '}({cb.km_dojazdu === 0 ? 'ten sam adres bazowy' : `${cb.km_dojazdu} km`})
-                      <div className="text-xs text-muted-foreground">{cb.powod}</div>
+                      <b>{cb.paczka.odbiorca}</b> ({cb.paczka.adres})
+                      {' '}→ dorzuć do{' '}
+                      {cb.kurs_docelowy_numer ? (
+                        <>
+                          <b>{cb.kurs_docelowy_numer}</b>
+                          {cb.kierowca_docelowy_nazwa && ` (${cb.kierowca_docelowy_nazwa})`}
+                          {cb.pojazd_docelowy_nr_rej && ` • ${cb.pojazd_docelowy_nr_rej}`}
+                        </>
+                      ) : (
+                        <b>{cb.oddzial_nazwa}</b>
+                      )}
+                      <div className="text-xs text-muted-foreground">
+                        {cb.najblizszy_przystanek_km} km od najbliższego przystanku obcego kursu
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Niezaplanowane */}
-            {planResult.niezaplanowane.length > 0 && (
-              <div>
-                <h3 className="font-medium mb-2">⚠ Niezaplanowane</h3>
-                <div className="space-y-1">
-                  {planResult.niezaplanowane
-                    .filter((nz) => !planResult.crossBranch.some((cb) => cb.paczka.klucz_adresu === nz.paczka.klucz_adresu))
-                    .map((nz, i) => (
-                      <div key={i} className="text-sm bg-orange-50 border border-orange-200 p-2 rounded">
+            {/* Niezaplanowane = TRANSPORT ZEWNĘTRZNY (nikt nie jedzie w tę stronę) */}
+            {(() => {
+              const niezaplanowaneBezSugestii = planResult.niezaplanowane.filter(
+                (nz) => !planResult.crossBranch.some((cb) => cb.paczka.klucz_adresu === nz.paczka.klucz_adresu)
+              );
+              if (niezaplanowaneBezSugestii.length === 0) return null;
+              const sumaKg = niezaplanowaneBezSugestii.reduce((s, nz) => s + nz.paczka.suma_kg, 0);
+              return (
+                <div>
+                  <h3 className="font-medium mb-2">🚛 Transport zewnętrzny</h3>
+                  <div className="bg-orange-50 border border-orange-200 p-3 rounded mb-2">
+                    <div className="text-sm font-medium mb-1">
+                      Zostało <b>{niezaplanowaneBezSugestii.length}</b> zleceń ({Math.round(sumaKg)} kg)
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Nie zmieściły się u nas i żaden inny oddział nie jedzie w tę stronę. Rozważ kontakt z firmą zewnętrzną.
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {niezaplanowaneBezSugestii.map((nz, i) => (
+                      <div key={i} className="text-sm bg-white border p-2 rounded">
                         <b>{nz.paczka.odbiorca}</b> — {nz.paczka.adres}
+                        {' '}<span className="text-muted-foreground">({Math.round(nz.paczka.suma_kg)} kg)</span>
                         <div className="text-xs text-muted-foreground">{nz.powod}</div>
                       </div>
                     ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
