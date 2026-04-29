@@ -12,6 +12,7 @@ import { suggestCrossBranch, type InnyOddzialFloty } from '@/lib/crossBranchSugg
 import { proponujDorzucenie, type SugestiaDorzucenia, type PaczkaObca } from '@/lib/proponujDorzucenie';
 import { scalAdresy } from '@/lib/planTras';
 import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
+import { AutoPlanMapa } from '@/components/dyspozytor/AutoPlanMapa';
 
 interface Props {
   open: boolean;
@@ -770,6 +771,25 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                 </div>
               </div>
             )}
+
+            {/* Mapa tras */}
+            {planResult.kursy.length > 0 && (() => {
+              const kodOddz = NAZWA_TO_KOD[oddzialNazwa];
+              const baza = ODDZIAL_COORDS[kodOddz];
+              if (!baza) return null;
+              return (
+                <div>
+                  <h3 className="font-medium mb-2">🗺 Mapa tras</h3>
+                  <AutoPlanMapa
+                    kursy={planResult.kursy}
+                    oddzialBaza={{ lat: baza.lat, lng: baza.lng }}
+                    oddzialNazwa={oddzialNazwa}
+                    crossBranch={planResult.crossBranch}
+                    dorzucenia={sugestieDorzucenia}
+                  />
+                </div>
+              );
+            })()}
 
             {/* Cross-branch */}
             {planResult.crossBranch.length > 0 && (
