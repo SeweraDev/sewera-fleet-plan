@@ -21,6 +21,12 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
   const [streamReady, setStreamReady] = useState(false);
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [end, setEnd] = useState<{ x: number; y: number } | null>(null);
+  // Visual debug log — pokazujemy w UI gdy F12 zwiniete
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const dbg = (msg: string) => {
+    console.log("[SnipLive]", msg);
+    setDebugLog((prev) => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`]);
+  };
 
   // 1. Otworz getDisplayMedia po mount
   useEffect(() => {
@@ -35,11 +41,9 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
         // wymaga allow='display-capture'. Bez tego stream nie zwraca klatek.
         const inIframe = window.self !== window.top;
         const host = window.location.hostname;
-        console.log("[SnipLive] host:", host, "iframe:", inIframe);
-        if (inIframe) {
-          console.warn("[SnipLive] aplikacja w iframe — getDisplayMedia moze byc zablokowany");
-        }
-        console.log("[SnipLive] getDisplayMedia start");
+        dbg(`host=${host} iframe=${inIframe}`);
+        if (inIframe) dbg("UWAGA: aplikacja w iframe — moze byc zablokowane");
+        dbg("getDisplayMedia start (kliknij Udostepnij w popupie)");
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
           audio: false,
@@ -48,7 +52,9 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
-        console.log("[SnipLive] stream OK, tracks:", stream.getVideoTracks().length);
+        const tracks = stream.getVideoTracks();
+        const settings = tracks[0]?.getSettings?.() ?? {};
+        dbg(`stream OK, tracks=${tracks.length}, surface=${(settings as any).displaySurface ?? "?"}`);
         streamRef.current = stream;
         const v = videoRef.current;
         if (v) {
@@ -59,13 +65,14 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
           // Firefox: poczekaj na loadedmetadata zeby wymiary byly OK
           // TIMEOUT 6s — jesli okno desktopowe nie wypuszcza klatek (HW accel),
           // pokaz komunikat zamiast wisiec w nieskonczonosc.
+          dbg(`readyState=${v.readyState}, czekam na loadedmetadata...`);
           let metadataResolved = false;
           await new Promise<void>((resolve) => {
             const onLoaded = () => {
               if (metadataResolved) return;
               metadataResolved = true;
               v.removeEventListener("loadedmetadata", onLoaded);
-              console.log("[SnipLive] loadedmetadata OK");
+              dbg("loadedmetadata OK");
               resolve();
             };
             if (v.readyState >= 1) {
@@ -77,30 +84,32 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
                 if (!metadataResolved) {
                   metadataResolved = true;
                   v.removeEventListener("loadedmetadata", onLoaded);
-                  console.warn("[SnipLive] timeout 6s — brak loadedmetadata. FF nie moze capture okna apki.");
+                  dbg("TIMEOUT 6s — brak loadedmetadata");
                   resolve();
                 }
               }, 6000);
             }
           });
+          dbg(`po metadata: w=${v.videoWidth} h=${v.videoHeight}, play()...`);
           // play() z timeout 3s — czasem wisi dla streamu okna apki desktopowej
           await Promise.race([
-            v.play().catch((e) => { console.warn("[SnipLive] play() warn:", e); }),
+            v.play().catch((e) => { dbg(`play() blad: ${e?.message || e}`); }),
             new Promise<void>((resolve) => setTimeout(() => {
-              console.warn("[SnipLive] play() timeout 3s — kontynuuje bez czekania");
+              dbg("play() TIMEOUT 3s");
               resolve();
             }, 3000)),
           ]);
+          dbg(`po play: w=${v.videoWidth} h=${v.videoHeight}`);
           // Po wszystkim sprawdz wymiary — jesli 0, capture jest niemozliwy
           if (v.videoWidth === 0 || v.videoHeight === 0) {
-            console.warn("[SnipLive] videoWidth/Height = 0 — capture niemozliwy");
+            dbg("BLAD: videoWidth/Height = 0 — capture niemozliwy");
             if (!cancelled) {
               setError("Firefox nie przechwycil tego okna. WYBIERZ 'CALY EKRAN' / 'Ekran 2' zamiast okna aplikacji desktopowej. Alternatywa: zamknij to i uzyj Win+Shift+S, potem Ctrl+V w aplikacji.");
             }
             return;
           }
           setStreamReady(true);
-          console.log("[SnipLive] video gotowy:", v.videoWidth, "x", v.videoHeight);
+          dbg(`video gotowy: ${v.videoWidth}x${v.videoHeight}`);
         }
         // Detect koniec udostepniania (user kliknie 'Zatrzymaj udostepnianie' w pasku FF)
         stream.getVideoTracks()[0]?.addEventListener("ended", () => {
@@ -260,6 +269,13 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
           Anuluj (Esc)
         </button>
       </div>
+
+      {/* Visual debug log — widoczny zawsze, na czas diagnostyki */}
+      {debugLog.length > 0 && (
+        <div className="absolute bottom-2 left-2 right-2 max-h-32 overflow-y-auto bg-black/70 text-green-300 text-[10px] font-mono p-2 rounded border border-green-700/40">
+          {debugLog.map((l, i) => <div key={i}>{l}</div>)}
+        </div>
+      )}
     </div>
   );
 }
