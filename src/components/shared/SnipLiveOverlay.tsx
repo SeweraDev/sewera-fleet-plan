@@ -5,23 +5,31 @@ interface Props {
   onCancel: () => void;
 }
 
+type Stage = "loading" | "floating" | "freeze";
+
 /**
- * Live preview screen capture.
- * Otwiera getDisplayMedia, pokazuje LIVE video w modalu (Firefox potrzebuje
- * widocznego video element zeby decode pipeline ruszyl). User zaznacza
- * prostokat myszka. Klik "Wytnij" -> grab biezacej klatki, crop, return blob.
+ * Live preview screen capture z 3-stage UX:
+ *   loading   — popup browsera, czekamy na user'a
+ *   floating  — maly widget 280x170 w prawym dolnym rogu z live preview;
+ *               user pracuje swobodnie (Alt+Tab do Ekonoma, otwiera dokument WZ),
+ *               gdy gotowy klika "Wytnij teraz"
+ *   freeze    — fullscreen ze statyczna klatka (zatrzymana w czasie) + zaznaczanie
+ *               myszka + przycisk Wytnij. Wstecz wraca do floating.
  *
- * Naprawia problem hidden-video-hangs-in-Firefox.
+ * Firefox potrzebuje WIDOCZNEGO video element zeby decode pipeline ruszyl —
+ * dlatego floating widget jest stale renderowany (nawet w stage 'freeze' video
+ * leci dalej w tle, tylko przykryte canvas'em z freeze frame).
  */
 export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const freezeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [stage, setStage] = useState<Stage>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [streamReady, setStreamReady] = useState(false);
+  const [frozenSize, setFrozenSize] = useState<{ w: number; h: number } | null>(null);
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [end, setEnd] = useState<{ x: number; y: number } | null>(null);
-  // Pomocnik logujacy do console (do dignostyki gdyby cos znow padlo)
+  // Pomocnik logujacy do console (do diagnostyki)
   const dbg = (msg: string) => console.log("[SnipLive]", msg);
 
   // 1. Otworz getDisplayMedia po mount
@@ -33,8 +41,6 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
           setError("Twoja przegladarka nie wspiera Screen Capture API");
           return;
         }
-        // Detekcja iframe — Lovable preview jest w iframe, getDisplayMedia
-        // wymaga allow='display-capture'. Bez tego stream nie zwraca klatek.
         const inIframe = window.self !== window.top;
         const host = window.location.hostname;
         dbg(`host=${host} iframe=${inIframe}`);
@@ -58,9 +64,6 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
           v.muted = true;
           v.playsInline = true;
           v.autoplay = true;
-          // Firefox: poczekaj na loadedmetadata zeby wymiary byly OK
-          // TIMEOUT 6s — jesli okno desktopowe nie wypuszcza klatek (HW accel),
-          // pokaz komunikat zamiast wisiec w nieskonczonosc.
           dbg(`readyState=${v.readyState}, czekam na loadedmetadata...`);
           let metadataResolved = false;
           await new Promise<void>((resolve) => {
@@ -86,8 +89,6 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
               }, 6000);
             }
           });
-          dbg(`po metadata: w=${v.videoWidth} h=${v.videoHeight}, play()...`);
-          // play() z timeout 3s — czasem wisi dla streamu okna apki desktopowej
           await Promise.race([
             v.play().catch((e) => { dbg(`play() blad: ${e?.message || e}`); }),
             new Promise<void>((resolve) => setTimeout(() => {
@@ -96,7 +97,6 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
             }, 3000)),
           ]);
           dbg(`po play: w=${v.videoWidth} h=${v.videoHeight}`);
-          // Po wszystkim sprawdz wymiary — jesli 0, capture jest niemozliwy
           if (v.videoWidth === 0 || v.videoHeight === 0) {
             dbg("BLAD: videoWidth/Height = 0 — capture niemozliwy");
             if (!cancelled) {
@@ -104,18 +104,18 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
             }
             return;
           }
-          setStreamReady(true);
-          dbg(`video gotowy: ${v.videoWidth}x${v.videoHeight}`);
+          if (!cancelled) {
+            setStage("floating");
+            dbg(`video gotowy: ${v.videoWidth}x${v.videoHeight}, stage=floating`);
+          }
         }
-        // Detect koniec udostepniania (user kliknie 'Zatrzymaj udostepnianie' w pasku FF)
         stream.getVideoTracks()[0]?.addEventListener("ended", () => {
-          console.log("[SnipLive] track ended (user zatrzymal)");
+          dbg("track ended (user zatrzymal)");
           if (!cancelled) onCancel();
         });
       } catch (e: any) {
         console.error("[SnipLive] error:", e);
         if (e?.name === "NotAllowedError") {
-          // User odmowil — po prostu zamknij
           onCancel();
           return;
         }
@@ -133,24 +133,57 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2. Esc anuluje, Enter akceptuje
+  // Esc anuluje, Enter akceptuje (tylko gdy zaznaczenie aktywne w stage freeze)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
-      if (e.key === "Enter" && start && end) acceptCrop();
+      if (e.key === "Enter" && stage === "freeze" && start && end) acceptCrop();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, streamReady]);
+  }, [start, end, stage]);
 
-  // Wspolrzedne myszki -> wspolrzedne w pixelach video
-  const getCoords = (e: React.MouseEvent) => {
+  // FREEZE: grab biezacej klatki z video, narysuj na canvas, przejdz do stage 'freeze'
+  const handleSnap = () => {
     const v = videoRef.current;
-    if (!v) return { x: 0, y: 0 };
-    const rect = v.getBoundingClientRect();
-    const scaleX = v.videoWidth / rect.width;
-    const scaleY = v.videoHeight / rect.height;
+    if (!v) return;
+    const w = v.videoWidth;
+    const h = v.videoHeight;
+    if (w === 0 || h === 0) {
+      setError("Brak klatek z video — sprobuj ponownie");
+      return;
+    }
+    setFrozenSize({ w, h });
+    setStart(null);
+    setEnd(null);
+    setStage("freeze");
+    dbg(`freeze frame: ${w}x${h}`);
+    // Narysuj na canvas po następnym tick'u (gdy canvas zostanie wyrenderowany)
+    setTimeout(() => {
+      const c = freezeCanvasRef.current;
+      if (!c) return;
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(v, 0, 0);
+    }, 0);
+  };
+
+  const handleBackToFloating = () => {
+    setStage("floating");
+    setStart(null);
+    setEnd(null);
+  };
+
+  // Wspolrzedne myszki -> wspolrzedne w pixelach FROZEN frame
+  const getCoords = (e: React.MouseEvent) => {
+    const c = freezeCanvasRef.current;
+    if (!c || !frozenSize) return { x: 0, y: 0 };
+    const rect = c.getBoundingClientRect();
+    const scaleX = frozenSize.w / rect.width;
+    const scaleY = frozenSize.h / rect.height;
     return {
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
@@ -158,49 +191,45 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0 || !streamReady) return;
+    if (e.button !== 0 || stage !== "freeze") return;
     setStart(getCoords(e));
     setEnd(getCoords(e));
   };
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!start) return;
+    if (!start || stage !== "freeze") return;
     setEnd(getCoords(e));
-  };
-  const handleMouseUp = () => {
-    // Zostawiamy zaznaczenie aktywne — user moze poprawic
   };
 
   const acceptCrop = async () => {
-    const v = videoRef.current;
-    if (!v || !start || !end) return;
+    const c = freezeCanvasRef.current;
+    if (!c || !start || !end) return;
     const x = Math.min(start.x, end.x);
     const y = Math.min(start.y, end.y);
     const w = Math.abs(end.x - start.x);
     const h = Math.abs(end.y - start.y);
     if (w < 10 || h < 10) return;
-    // Grab biezaca klatke z video do canvas (juz wyciety obszar)
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(w);
-    canvas.height = Math.round(h);
-    const ctx = canvas.getContext("2d");
+    const out = document.createElement("canvas");
+    out.width = Math.round(w);
+    out.height = Math.round(h);
+    const ctx = out.getContext("2d");
     if (!ctx) return;
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(v, x, y, w, h, 0, 0, w, h);
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(c, x, y, w, h, 0, 0, w, h);
     const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92);
+      out.toBlob((b) => resolve(b), "image/jpeg", 0.92);
     });
     if (blob) onCapture(blob);
   };
 
-  // Wymiary prostokata zaznaczenia w pixelach DISPLAY video
+  // Wymiary prostokata zaznaczenia w pixelach DISPLAY canvasu freeze
   const rectStyle = (() => {
-    if (!start || !end) return null;
-    const v = videoRef.current;
-    if (!v) return null;
-    const rect = v.getBoundingClientRect();
-    const scaleX = rect.width / Math.max(v.videoWidth, 1);
-    const scaleY = rect.height / Math.max(v.videoHeight, 1);
+    if (!start || !end || !frozenSize) return null;
+    const c = freezeCanvasRef.current;
+    if (!c) return null;
+    const rect = c.getBoundingClientRect();
+    const scaleX = rect.width / frozenSize.w;
+    const scaleY = rect.height / frozenSize.h;
     const x = Math.min(start.x, end.x) * scaleX;
     const y = Math.min(start.y, end.y) * scaleY;
     const w = Math.abs(end.x - start.x) * scaleX;
@@ -208,64 +237,136 @@ export function SnipLiveOverlay({ onCapture, onCancel }: Props) {
     return { left: x, top: y, width: w, height: h };
   })();
 
-  return (
-    <div
-      className="fixed inset-0 z-[9999] bg-black/85 flex flex-col items-center justify-center"
-      ref={containerRef}
-    >
-      <div className="text-white text-sm mb-2 text-center px-4">
-        {error
-          ? <span className="text-red-400">{error}</span>
-          : !streamReady
-            ? "⏳ Ladowanie podgladu... wybierz ekran/okno w popupie przegladarki"
-            : "✂️ Zaznacz fragment myszka (przeciagnij). Enter = wytnij, Esc = anuluj."}
+  // === STAGE: loading ===
+  if (stage === "loading" && !error) {
+    return (
+      <div className="fixed bottom-4 right-4 z-[9999] bg-black/90 text-white p-3 rounded-lg shadow-2xl border border-white/20 max-w-xs">
+        <div className="text-sm">⏳ Wybierz ekran/okno w popupie przegladarki...</div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-2 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-xs"
+        >
+          Anuluj
+        </button>
       </div>
+    );
+  }
 
+  // === STAGE: error ===
+  if (error) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-black/85 flex items-center justify-center p-4">
+        <div className="bg-white p-6 rounded-lg max-w-md">
+          <div className="text-red-600 font-medium mb-3">❌ Blad screen capture</div>
+          <div className="text-sm text-gray-700 mb-4">{error}</div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+          >
+            Zamknij
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // === Container z video — zawsze obecny w DOM (Firefox potrzebuje widocznego video) ===
+  // W stage 'floating' video jest widoczne w widget'cie.
+  // W stage 'freeze' video leci dalej w tle (1px), ale freeze canvas pokrywa ekran.
+  return (
+    <>
+      {/* FLOATING WIDGET — widoczny w stage 'floating', schowany w 'freeze' */}
       <div
-        className="relative cursor-crosshair max-w-[95vw] max-h-[80vh]"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        className="fixed z-[9999] bg-black/90 rounded-lg shadow-2xl border-2 border-blue-500 overflow-hidden"
+        style={{
+          bottom: stage === "floating" ? 16 : -9999,
+          right: stage === "floating" ? 16 : -9999,
+          width: 280,
+        }}
       >
+        <div className="text-white text-xs px-2 py-1 bg-blue-600 font-medium">
+          🎥 Podglad strumienia
+        </div>
         <video
           ref={videoRef}
           autoPlay
           muted
           playsInline
-          className="block max-w-[95vw] max-h-[80vh]"
-          style={{ display: streamReady ? "block" : "none" }}
+          className="block w-full"
+          style={{ maxHeight: 160, objectFit: "contain", background: "#000" }}
         />
-        {!streamReady && !error && (
-          <div className="w-[60vw] h-[40vh] bg-black/40 flex items-center justify-center text-white">
-            Czekam na strumien...
+        <div className="flex gap-1 p-2 bg-black/80">
+          <button
+            type="button"
+            onClick={handleSnap}
+            className="flex-1 px-2 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-medium"
+          >
+            ✂️ Wytnij teraz
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-2 py-1.5 bg-gray-700 text-white rounded hover:bg-gray-600 text-xs"
+          >
+            Anuluj
+          </button>
+        </div>
+        <div className="text-white/70 text-[10px] px-2 pb-2">
+          Przelacz sie na okno (Alt+Tab), gdy gotowe — kliknij Wytnij teraz
+        </div>
+      </div>
+
+      {/* FREEZE OVERLAY — fullscreen ze statyczna klatka */}
+      {stage === "freeze" && (
+        <div className="fixed inset-0 z-[10000] bg-black/90 flex flex-col items-center justify-center p-4">
+          <div className="text-white text-sm mb-2 text-center">
+            ✂️ Zaznacz fragment myszka (przeciagnij). Enter = wytnij, Esc = anuluj, Wstecz = nowa klatka.
           </div>
-        )}
-        {rectStyle && (
           <div
-            className="absolute border-2 border-blue-400 bg-blue-400/20 pointer-events-none"
-            style={rectStyle}
-          />
-        )}
-      </div>
-
-      <div className="flex gap-2 mt-3">
-        <button
-          type="button"
-          onClick={acceptCrop}
-          disabled={!start || !end || !streamReady}
-          className="px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-        >
-          ✂️ Wytnij
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
-        >
-          Anuluj (Esc)
-        </button>
-      </div>
-
-    </div>
+            className="relative cursor-crosshair max-w-[95vw] max-h-[80vh]"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+          >
+            <canvas
+              ref={freezeCanvasRef}
+              className="block max-w-[95vw] max-h-[80vh]"
+              style={{ imageRendering: "pixelated" }}
+            />
+            {rectStyle && (
+              <div
+                className="absolute border-2 border-blue-400 bg-blue-400/20 pointer-events-none"
+                style={rectStyle}
+              />
+            )}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={acceptCrop}
+              disabled={!start || !end}
+              className="px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              ✂️ Wytnij
+            </button>
+            <button
+              type="button"
+              onClick={handleBackToFloating}
+              className="px-4 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+            >
+              ← Wstecz (nowa klatka)
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-1.5 bg-red-700 text-white rounded hover:bg-red-800 text-sm"
+            >
+              Anuluj (Esc)
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
