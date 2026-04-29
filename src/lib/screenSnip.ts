@@ -24,33 +24,86 @@ export async function captureScreen(): Promise<CapturedFrame | null> {
   if (!navigator.mediaDevices?.getDisplayMedia) {
     throw new Error("Twoja przeglądarka nie wspiera Screen Capture API");
   }
+  // displaySurface jako preferencja (advanced) — Firefox nie zawsze radzi sobie z mandatory.
+  // Bez tego user widzi pelny picker (Caly ekran / Okno / Karta) i sam wybiera.
   const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: { displaySurface: "window" } as any,
+    video: true,
     audio: false,
   });
   try {
     const track = stream.getVideoTracks()[0];
-    // ImageCapture API jest dostepne w Chrome/Edge; fallback przez video element.
+    // ImageCapture API jest dostepne w Chrome/Edge; w Firefox brak — fallback przez video element.
     const ICAP = (window as any).ImageCapture;
     if (ICAP) {
-      const imgCapture = new ICAP(track);
-      const bitmap: ImageBitmap = await imgCapture.grabFrame();
-      return { bitmap, width: bitmap.width, height: bitmap.height };
+      try {
+        const imgCapture = new ICAP(track);
+        const bitmap: ImageBitmap = await imgCapture.grabFrame();
+        if (bitmap.width > 0 && bitmap.height > 0) {
+          return { bitmap, width: bitmap.width, height: bitmap.height };
+        }
+      } catch {
+        // Padaj w fallback gdy ImageCapture rzuci (czasem w Edge)
+      }
     }
     // Fallback: video element + drawImage do canvas → ImageBitmap
     const video = document.createElement("video");
     video.srcObject = stream;
     video.muted = true;
-    await video.play();
-    await new Promise((r) => setTimeout(r, 100)); // poczekaj na 1 klatke
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(video, 0, 0);
-    const bitmap = await createImageBitmap(canvas);
-    return { bitmap, width: bitmap.width, height: bitmap.height };
+    video.playsInline = true;
+    // Niektore przegladarki nie odtwarzaja video oderwanego od DOM — ukrywamy poza viewportem.
+    video.style.position = "fixed";
+    video.style.left = "-9999px";
+    video.style.top = "0";
+    video.style.width = "1px";
+    video.style.height = "1px";
+    video.style.opacity = "0";
+    document.body.appendChild(video);
+    try {
+      // Poczekaj na metadata, zeby videoWidth/Height byly != 0
+      if (video.readyState < 1) {
+        await new Promise<void>((resolve, reject) => {
+          const onLoaded = () => { cleanup(); resolve(); };
+          const onError = () => { cleanup(); reject(new Error("Blad ladowania metadanych video")); };
+          const cleanup = () => {
+            video.removeEventListener("loadedmetadata", onLoaded);
+            video.removeEventListener("error", onError);
+          };
+          video.addEventListener("loadedmetadata", onLoaded, { once: true });
+          video.addEventListener("error", onError, { once: true });
+          // Bezpieczny timeout
+          setTimeout(() => { cleanup(); reject(new Error("Timeout (metadata)")); }, 5000);
+        });
+      }
+      await video.play();
+      // Poczekaj na pierwsza realna klatke (rVFC) lub fallback krotki delay
+      await new Promise<void>((resolve) => {
+        const v: any = video;
+        if (typeof v.requestVideoFrameCallback === "function") {
+          v.requestVideoFrameCallback(() => resolve());
+          // Bezpieczny timeout — gdyby rVFC nigdy nie odpalil
+          setTimeout(resolve, 600);
+        } else {
+          setTimeout(resolve, 250);
+        }
+      });
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w === 0 || h === 0) {
+        throw new Error("Pusta klatka video (videoWidth/Height = 0)");
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0);
+      const bitmap = await createImageBitmap(canvas);
+      return { bitmap, width: bitmap.width, height: bitmap.height };
+    } finally {
+      try { video.pause(); } catch { /* noop */ }
+      video.srcObject = null;
+      if (video.parentNode) video.parentNode.removeChild(video);
+    }
   } finally {
     // Zatrzymaj wszystkie tracki — koniec udostepniania
     stream.getTracks().forEach((t) => t.stop());
