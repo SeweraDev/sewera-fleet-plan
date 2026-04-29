@@ -87,6 +87,8 @@ export interface PojazdSlot {
   objetosc_m3: number | null;
   max_palet: number | null;
   is_zewnetrzny: boolean;
+  /** Czas juz zajety w innych kursach dnia (min). 0 = wolny. */
+  czas_zajety_min?: number;
 }
 
 /** Kierowca dostepny + wybrana zmiana. */
@@ -96,6 +98,8 @@ export interface KierowcaSlot {
   zmiana: ZmianaKod;
   /** Czy ma uprawnienia HDS (z pola `uprawnienia` w DB). */
   ma_hds: boolean;
+  /** Czas juz zajety w innych kursach dnia (min). 0 = wolny. */
+  czas_zajety_min?: number;
 }
 
 /** Pojedynczy proponowany kurs. */
@@ -588,22 +592,87 @@ function twoOpt(trasa: number[], distKm: number[][]): number[] {
 // - Kierowca BEZ HDS nie moze HDS-a (typ pojazdu zawiera "HDS")
 // - Czas trasy musi sie zmiescic w godzinach zmiany kierowcy
 
+/**
+ * Przydziel kierowce do trasy.
+ *
+ * Logika:
+ * - Pojazd HDS wymaga kierowcy z HDS uprawnieniami
+ * - Czas trasy + juz_zajety_czas_kierowcy <= czas_zmiany (8h normy)
+ *   ALBO <= 9h (max z nadgodzina) jesli zmiana standardowa nie wystarcza
+ * - W jednym zaplanowaniu auto-plan moze przydzielic kierowce do drugiego kursu
+ *   jesli ma wolny czas (uzyciKierowcy.czas_uzyty_min)
+ */
 function przydzielKierowce(
   trasaCzasMin: number,
   pojazd: PojazdSlot,
   kierowcyDostepni: KierowcaSlot[],
-  uzyciKierowcy: Set<string>
+  uzyciKierowcyCzas: Map<string, number>
 ): KierowcaSlot | null {
   const pojazdHDS = /HDS/.test(pojazd.typ);
   for (const k of kierowcyDostepni) {
-    if (uzyciKierowcy.has(k.kierowca_id)) continue;
     if (pojazdHDS && !k.ma_hds) continue;
+
+    // Calkowity zajety czas = czas_zajety_min (z istniejacych kursow w DB) +
+    // czas_uzyty_w_tej_sesji (kierowca dostal juz inny kurs auto-plan)
+    const czasJuzZajety = (k.czas_zajety_min ?? 0) + (uzyciKierowcyCzas.get(k.kierowca_id) ?? 0);
+
+    // Limity:
+    // - Zwykla zmiana 8h (480 min) — pierwszy wybor
+    // - Z nadgodzina 9h (540 min) — fallback gdy nie ma innego kierowcy
     const z = getZmiana(k.zmiana);
-    const dostepneMin = timeStrToMin(z.koniec) - timeStrToMin(z.start);
-    if (trasaCzasMin > dostepneMin) continue;
+    const czasZmiany = timeStrToMin(z.koniec) - timeStrToMin(z.start);
+    const limitMin = Math.max(czasZmiany, PLAN_CONFIG.max_pracy_z_nadgodzina_min);
+
+    if (czasJuzZajety + trasaCzasMin > limitMin) continue;
     return k;
   }
   return null;
+}
+
+// ============================================================
+// USTALANIE POWODU NIEZAPLANOWANEGO
+// ============================================================
+// Konkretny powod dla user'a (zamiast generycznego "brak miejsca").
+
+function ustalPowodNiezaplanowanego(p: PaczkaPrzystankowa, input: PlanInput): string {
+  // 1. Czy istnieje POJAZD ktory typowo i wagowo moze obsluzyc?
+  const pojazdyKompatybilne = input.pojazdy.filter((pp) => pojazdSpelniaTyp(pp, p));
+  if (pojazdyKompatybilne.length === 0) {
+    if (p.wymagany_typ) {
+      return `Wymagany typ pojazdu: ${p.wymagany_typ} (lub większy). Brak takiego pojazdu w oddziale.`;
+    }
+    return 'Brak pojazdu kompatybilnego z paczką';
+  }
+
+  // 2. Czy ktorys pojazd ma wystarczajaca pojemnosc kg?
+  const maPojemnoscKg = pojazdyKompatybilne.some((pp) => pp.ladownosc_kg >= p.suma_kg);
+  if (!maPojemnoscKg) {
+    const maxKg = Math.max(...pojazdyKompatybilne.map((pp) => pp.ladownosc_kg));
+    return `Waga ${Math.round(p.suma_kg)} kg przekracza pojemność największego dostępnego pojazdu (${maxKg} kg)`;
+  }
+
+  // 3. Czy jakis kompatybilny pojazd jest WOLNY (czas zajety < limit)?
+  const limitMin = PLAN_CONFIG.max_pracy_z_nadgodzina_min;
+  const wolnePojazdy = pojazdyKompatybilne.filter((pp) => (pp.czas_zajety_min ?? 0) < limitMin);
+  if (wolnePojazdy.length === 0) {
+    return 'Wszystkie kompatybilne pojazdy mają już pełny grafik dnia (≥9h)';
+  }
+
+  // 4. Czy jest kierowca z odpowiednimi uprawnieniami i czasem pracy?
+  const wymagaHDS = wolnePojazdy.every((pp) => /HDS/.test(pp.typ));
+  const kierowcyOk = input.kierowcy.filter((k) => {
+    if (wymagaHDS && !k.ma_hds) return false;
+    return (k.czas_zajety_min ?? 0) < limitMin;
+  });
+  if (kierowcyOk.length === 0) {
+    if (wymagaHDS) {
+      return 'Brak kierowcy z uprawnieniami HDS dostępnego w wybranych zmianach';
+    }
+    return 'Brak dostępnego kierowcy w wybranych zmianach (wszyscy mają pełny grafik)';
+  }
+
+  // 5. Inne — najpewniej za daleko / nie pasuje czasowo do istniejacej trasy
+  return 'Paczka nie pasuje czasowo do żadnej dostępnej trasy';
 }
 
 // ============================================================
@@ -624,15 +693,25 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
   const punkty: GeoPoint[] = [input.oddzial_baza, ...paczki.map((p) => ({ lat: p.lat, lng: p.lng }))];
   const { km: distKm, minuty: distMin } = await buildDistanceMatrix(punkty);
 
-  // 3. Pojazdy posortowane: wlasne (Sewera) przed zewnętrznymi, w obrebie tego samego ranking typu
+  // 3. Pojazdy posortowane:
+  //    - wlasne (Sewera) przed zewnetrznymi (oszczednosc - flota zewn jako fallback)
+  //    - w obrebie tego samego = wieksza ladownosc_kg pierwsza
+  //      (Winda MAX 15800 > HDS 12 11700 > HDS 9 8900 > Winda 6,3 6300 > Dostawczy 1100)
+  //    - dzieki temu duze auto bedzie pelne zanim algorytm wezmie mniejsze (efekt
+  //      zakupu Windy MAX zeby robic 1 kolko zamiast 2x mniejszym)
   const pojazdySorted = [...input.pojazdy].sort((a, b) => {
     if (a.is_zewnetrzny !== b.is_zewnetrzny) return a.is_zewnetrzny ? 1 : -1;
-    return rankTypu(b.typ) - rankTypu(a.typ); // wieksze pierwsze (HDS przed Dostawczy)
+    return b.ladownosc_kg - a.ladownosc_kg;
   });
 
   const kursy: KursPropozycja[] = [];
   const niezaplanowane: Niezaplanowane[] = [];
-  const uzyciKierowcy = new Set<string>();
+  // Czas juz uzyty per kierowca w TEJ SESJI auto-planu (oprocz czas_zajety_min z DB).
+  // Dzieki temu kierowca moze dostac 2 kursy w jednej sesji jesli laczny czas <= 9h.
+  const uzyciKierowcyCzas = new Map<string, number>();
+  // Czas juz uzyty per pojazd w tej sesji (do limitu pojazdu — nie liczymy 8h tylko
+  // bardziej liberalnie 12h, bo pojazd moze byc na 2 zmianach roznych kierowcow).
+  const uzyciPojazdCzas = new Map<string, number>();
   const uzytePaczki = new Set<number>(); // indeksy w paczki[]
 
   // 4. Dla kazdego pojazdu sprob zaplanowac trase z paczek nieuzytych
@@ -644,8 +723,15 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
 
     if (dostepnePaczki.length === 0) break;
 
-    // 8h zwykle, 9h fallback gdy 8h nie zaplanuje wszystkiego
-    const maxCzasMin = PLAN_CONFIG.max_pracy_min;
+    // Pojazd: limit 12h (720 min) bo na 2 zmianach. Czas zajety = z DB + z tej sesji.
+    const pojazdKey = pojazd.flota_id || pojazd.nr_rej;
+    const pojazdCzasZajety = (pojazd.czas_zajety_min ?? 0) + (uzyciPojazdCzas.get(pojazdKey) ?? 0);
+    const POJAZD_LIMIT_MIN = 720; // 12h dla pojazdu (2 zmiany x 6h jazdy + przerwy)
+    if (pojazdCzasZajety >= POJAZD_LIMIT_MIN) continue;
+    const pojazdMaxCzas = POJAZD_LIMIT_MIN - pojazdCzasZajety;
+
+    // Trasa: zwykle 8h, max 9h fallback. Plus nie wiecej niz pozostaly czas pojazdu.
+    const maxCzasMin = Math.min(PLAN_CONFIG.max_pracy_min, pojazdMaxCzas);
 
     // Mapowanie globalnych indeksow paczek -> lokalnych dla savings
     const globalIdxPerLocalIdx: number[] = [];
@@ -681,8 +767,16 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
 
     if (trasy.length === 0) continue;
 
-    // Wez tylko najlepsza (najwiecej paczek dla tego pojazdu); pojedynczy pojazd = 1 kurs/dzien
-    trasy.sort((a, b) => b.paczki.length - a.paczki.length);
+    // Wez najlepsza trase pod katem WAGI (sumaryczna kg paczek), nie liczby paczek.
+    // To rozwiazuje problem "Winda MAX z 1 paczka 15446 kg vs Winda MAX z 5 mniejszymi
+    // 5905 kg" — wybieramy MAX z DAX (98% pojemnosci) zamiast trasy z malymi paczkami
+    // (37% pojemnosci). Tie-breaker: wiecej paczek (lepsze gdy ta sama waga).
+    trasy.sort((a, b) => {
+      const wagaA = a.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
+      const wagaB = b.paczki.reduce((s, idx) => s + dostepnePaczki[idx - 1].suma_kg, 0);
+      if (wagaB !== wagaA) return wagaB - wagaA;
+      return b.paczki.length - a.paczki.length;
+    });
     const najlepsza = trasy[0];
 
     // 2-opt
@@ -690,13 +784,17 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
     const km = obliczKmKursu(optKolejnosc, localDistKm, PLAN_CONFIG.auto_wraca_do_bazy);
     const czasMin = obliczCzasKursu(optKolejnosc, localDistMin, PLAN_CONFIG.auto_wraca_do_bazy);
 
-    // Kierowca
-    const kierowca = przydzielKierowce(czasMin, pojazd, input.kierowcy, uzyciKierowcy);
+    // Kierowca — z uwzglednieniem juz zajetego czasu (z DB + z tej sesji)
+    const kierowca = przydzielKierowce(czasMin, pojazd, input.kierowcy, uzyciKierowcyCzas);
     if (!kierowca) {
       // Brak dostepnego kierowcy — pomijamy ten pojazd, paczki zostaja
       continue;
     }
-    uzyciKierowcy.add(kierowca.kierowca_id);
+    // Zapamietaj zajety czas kierowcy w tej sesji (na wypadek drugiego kursu)
+    const obecnyCzasKierowcy = uzyciKierowcyCzas.get(kierowca.kierowca_id) ?? 0;
+    uzyciKierowcyCzas.set(kierowca.kierowca_id, obecnyCzasKierowcy + czasMin);
+    // Zapamietaj zajety czas pojazdu w tej sesji
+    uzyciPojazdCzas.set(pojazdKey, (uzyciPojazdCzas.get(pojazdKey) ?? 0) + czasMin);
 
     // Zaznacz uzyte paczki (mapowanie z lokalnych indeksow lokalna_paczki[idx-1] -> globalny)
     const przystanki: PaczkaPrzystankowa[] = optKolejnosc.map((li) => {
@@ -733,23 +831,10 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
     });
   }
 
-  // 5. Pozostale paczki = niezaplanowane
+  // 5. Pozostale paczki = niezaplanowane — z konkretnym powodem
   paczki.forEach((p, i) => {
     if (uzytePaczki.has(i)) return;
-    let powod: string;
-    if (p.wymagany_typ) {
-      // Sprawdz czy w ogole jest pojazd kompatybilny (typ równy lub większy)
-      const istnieje = input.pojazdy.some((pp) => pojazdSpelniaTyp(pp, p));
-      if (!istnieje) {
-        powod = `Brak pojazdu typu ${p.wymagany_typ} lub większego w oddziale`;
-      } else {
-        powod = 'Brak miejsca w pojeździe lub czasu pracy kierowcy';
-      }
-    } else if (p.suma_kg > Math.max(...input.pojazdy.map((pp) => pp.ladownosc_kg))) {
-      powod = `Waga ${p.suma_kg} kg przekracza pojemność każdego pojazdu`;
-    } else {
-      powod = 'Brak dostępnego pojazdu/kierowcy lub czasu pracy';
-    }
+    const powod = ustalPowodNiezaplanowanego(p, input);
     niezaplanowane.push({ paczka: p, powod });
   });
 

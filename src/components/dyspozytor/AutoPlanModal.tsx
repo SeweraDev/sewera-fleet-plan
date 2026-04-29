@@ -183,23 +183,15 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
           .lte('od', dzien)
           .gte('do', dzien);
         const zablokowani = new Set((blokady || []).map((b) => b.zasob_id));
-        // Sprawdz istniejace kursy dnia (jakichkolwiek oddzialow) — pojazdy/kierowcy
-        // moga byc juz uzyci w kursie miedzyoddzialowym KAT/R
-        const { data: istKursy } = await supabase
-          .from('kursy')
-          .select('kierowca_id')
-          .eq('dzien', dzien)
-          .neq('status', 'usuniety');
-        const wKursach = new Set(
-          (istKursy || []).map((k) => k.kierowca_id).filter((v): v is string => !!v)
-        );
+        // Pre-fill OFF tylko dla zablokowanych (urlopów). Kierowcy juz w innych
+        // kursach dnia mogą wziąć kolejny kurs jeśli starczy budżetu czasowego
+        // (≤9h łącznie). Domyslna zmiana — algorytm doda 2. kurs jesli sie zmiesci.
         setKierowcy(
           (data || []).map((k) => ({
             kierowca_id: k.id,
             imie_nazwisko: k.imie_nazwisko,
             uprawnienia: k.uprawnienia || '',
-            // Pre-fill OFF gdy: blokada (urlop) LUB juz w innym kursie dnia
-            zmiana: (zablokowani.has(k.id) || wKursach.has(k.id)) ? 'OFF' : ZMIANA_DEFAULT,
+            zmiana: zablokowani.has(k.id) ? 'OFF' : ZMIANA_DEFAULT,
           }))
         );
       } catch (e: any) {
@@ -334,48 +326,78 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         .gte('do', dzien);
       const zablokowanePojazdy = new Set((blokadyPoj || []).map((b) => b.zasob_id));
 
-      // KRYTYCZNE: pobierz istniejace kursy z dnia (status != 'usuniety') i wyfiltruj
-      // pojazdy/kierowcow ktorzy juz sa w innych kursach (KAT lub R lub innym oddziale).
-      // Bez tego auto-plan tworzy konflikt: ten sam pojazd w 2 kursach na raz.
+      // Pobierz istniejace kursy dnia + ich liczbe przystankow (do szacowania czasu).
+      // NIE filtrujemy binarnie 'zajety/wolny' — pojazd moze jechac 2x w jeden dzien
+      // (rozni kierowcy na zmianach, lub ten sam kierowca laczny czas <=9h).
+      // Zamiast tego liczymy 'czas_zajety_min' per pojazd/kierowca i ograniczamy
+      // do limitu w planTras (12h pojazd, 9h kierowca).
       setProgressMsg('Sprawdzanie istniejących kursów...');
       const { data: istniejaceKursy } = await supabase
         .from('kursy')
-        .select('flota_id, nr_rej_zewn, kierowca_id, numer')
+        .select('id, flota_id, nr_rej_zewn, kierowca_id, numer')
         .eq('dzien', dzien)
         .neq('status', 'usuniety');
-      const zajeteFlotaId = new Set(
-        (istniejaceKursy || []).map((k) => k.flota_id).filter((v): v is string => !!v)
-      );
-      const zajeteNrRejZewn = new Set(
-        (istniejaceKursy || []).map((k) => k.nr_rej_zewn).filter((v): v is string => !!v)
-      );
-      const zajeciKierowcy = new Set(
-        (istniejaceKursy || []).map((k) => k.kierowca_id).filter((v): v is string => !!v)
-      );
 
-      const pojazdyDostepne = pojazdy.filter((p) => {
-        // Blokada (urlop pojazdu)
-        if (p.flota_id && zablokowanePojazdy.has(p.flota_id)) return false;
-        // Juz w innym kursie tego dnia
-        if (p.flota_id && zajeteFlotaId.has(p.flota_id)) return false;
-        if (p.is_zewnetrzny && zajeteNrRejZewn.has(p.nr_rej)) return false;
-        return true;
-      });
-
-      const liczbaZajetych = pojazdy.length - pojazdyDostepne.length;
-      if (liczbaZajetych > 0) {
-        console.log(`[AutoPlan] wyłączono ${liczbaZajetych} pojazdów (już w kursach dnia)`);
+      // Per kurs: liczba przystankow (z kurs_przystanki) -> heurystyka czasu
+      const kursIds = (istniejaceKursy || []).map((k) => k.id);
+      const przystankiPerKurs = new Map<string, number>();
+      if (kursIds.length > 0) {
+        const { data: przystData } = await supabase
+          .from('kurs_przystanki')
+          .select('kurs_id')
+          .in('kurs_id', kursIds);
+        for (const p of przystData || []) {
+          przystankiPerKurs.set(p.kurs_id, (przystankiPerKurs.get(p.kurs_id) ?? 0) + 1);
+        }
+      }
+      // Heurystyka czasu trwania kursu (min):
+      // 30 min zaladunek + n × (20 min rozladunek + 30 min jazda)
+      const szacujCzasKursu = (kursId: string): number => {
+        const n = przystankiPerKurs.get(kursId) ?? 0;
+        return 30 + n * 50;
+      };
+      // Sumy czasu zajetego per pojazd/kierowca z istniejacych kursow
+      const czasZajetyFlotaId = new Map<string, number>();
+      const czasZajetyNrRejZewn = new Map<string, number>();
+      const czasZajetyKierowca = new Map<string, number>();
+      for (const k of istniejaceKursy || []) {
+        const czas = szacujCzasKursu(k.id);
+        if (k.flota_id) {
+          czasZajetyFlotaId.set(k.flota_id, (czasZajetyFlotaId.get(k.flota_id) ?? 0) + czas);
+        }
+        if (k.nr_rej_zewn) {
+          czasZajetyNrRejZewn.set(k.nr_rej_zewn, (czasZajetyNrRejZewn.get(k.nr_rej_zewn) ?? 0) + czas);
+        }
+        if (k.kierowca_id) {
+          czasZajetyKierowca.set(k.kierowca_id, (czasZajetyKierowca.get(k.kierowca_id) ?? 0) + czas);
+        }
       }
 
-      // 6. Wybrani kierowcy (zmiana != OFF) — wyfiltrowani z juz aktywnych kursow
+      // Pojazdy dostepne — wyklucz tylko zablokowane (urlop), ale nie zajete czasowo
+      // (czas_zajety_min przekazany do planTras decyduje czy wezmie kolejny kurs)
+      const pojazdyDostepne: PojazdSlot[] = pojazdy
+        .filter((p) => !(p.flota_id && zablokowanePojazdy.has(p.flota_id)))
+        .map((p) => ({
+          ...p,
+          czas_zajety_min: p.flota_id
+            ? (czasZajetyFlotaId.get(p.flota_id) ?? 0)
+            : (czasZajetyNrRejZewn.get(p.nr_rej) ?? 0),
+        }));
+
+      const liczbaZCzasem = pojazdyDostepne.filter((p) => (p.czas_zajety_min ?? 0) > 0).length;
+      if (liczbaZCzasem > 0) {
+        console.log(`[AutoPlan] ${liczbaZCzasem} pojazdów ma już zaplanowany czas dnia (mogą wziąć drugi kurs jeśli starczy budżetu)`);
+      }
+
+      // 6. Wybrani kierowcy (zmiana != OFF) — z czasem juz zajetym z istniejacych kursow
       const kierowcySloty: KierowcaSlot[] = kierowcy
         .filter((k) => k.zmiana !== 'OFF')
-        .filter((k) => !zajeciKierowcy.has(k.kierowca_id))
         .map((k) => ({
           kierowca_id: k.kierowca_id,
           imie_nazwisko: k.imie_nazwisko,
           zmiana: k.zmiana as ZmianaKod,
           ma_hds: /HDS|hds/.test(k.uprawnienia),
+          czas_zajety_min: czasZajetyKierowca.get(k.kierowca_id) ?? 0,
         }));
 
       // 7. Baza oddzialu
