@@ -455,14 +455,30 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
       const inneOddzIds = (oddzialy || []).map((o) => o.id);
       let dorzucenia: SugestiaDorzucenia[] = [];
       if (inneOddzIds.length > 0 && wynik.kursy.length > 0) {
-        // Niezaplanowane zlecenia z innych oddzialow na ten dzien
+        // Zlecenia z innych oddzialow na ten dzien — RÓWNIEŻ te z kursami
+        // (mozna je realokowac, jesli sensowniej zeby pojechaly innym kursem).
+        // Pomijamy tylko 'dostarczona' (juz dostarczone), 'anulowana', 'w_trasie'
+        // (juz w drodze, nie ma sensu realokowac).
         const { data: zlObce } = await supabase
           .from('zlecenia')
           .select('id, numer, oddzial_id, typ_pojazdu, preferowana_godzina, kurs_id, status')
           .in('oddzial_id', inneOddzIds)
           .eq('dzien', dzien)
-          .is('kurs_id', null)
-          .in('status', ['robocza', 'do_weryfikacji']);
+          .in('status', ['robocza', 'do_weryfikacji', 'potwierdzona']);
+
+        // Pobierz numery kursow zrodlowych (gdy kurs_id != null)
+        const kursIdsZrodlowe = Array.from(
+          new Set((zlObce || []).map((z) => z.kurs_id).filter((v): v is string => !!v))
+        );
+        const kursNumerMap = new Map<string, string>();
+        if (kursIdsZrodlowe.length > 0) {
+          const { data: kursyZr } = await supabase
+            .from('kursy')
+            .select('id, numer')
+            .in('id', kursIdsZrodlowe);
+          (kursyZr || []).forEach((k) => kursNumerMap.set(k.id, k.numer || ''));
+        }
+
         const obceIds = (zlObce || []).map((z) => z.id);
         if (obceIds.length > 0) {
           const { data: wzObce } = await supabase
@@ -478,6 +494,11 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               wzZGeo.set(adres, coords);
             }
           }
+
+          // Mapuj zlecenie_id -> kurs_id (zrodlowy) zeby wiedziec ktore zlecenie
+          // jest juz w jakims kursie (do oznaczenia w UI '[w K-XYZ]')
+          const zlKursMap = new Map<string, string | null>();
+          (zlObce || []).forEach((z) => zlKursMap.set(z.id, z.kurs_id));
 
           // Buduj ZlecenieDoPlanu dla obcych
           const zleceniaObce: ZlecenieDoPlanu[] = (zlObce || []).map((z) => {
@@ -524,10 +545,16 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
           for (const [oddId, zl] of perOddzial.entries()) {
             const paczki = scalAdresy(zl);
             for (const p of paczki) {
+              // Wybierz numer kursu zrodlowego (jesli ktores ze zlecen w paczce ma kurs)
+              const kursZrId = p.zlecenia
+                .map((z) => zlKursMap.get(z.zlecenie_id))
+                .find((k): k is string => !!k);
+              const kursZrNumer = kursZrId ? (kursNumerMap.get(kursZrId) ?? null) : null;
               paczkiObce.push({
                 ...p,
                 oddzial_zrodlowy_id: oddId,
                 oddzial_zrodlowy_nazwa: oddzMap.get(oddId) ?? '?',
+                kurs_zrodlowy_numer: kursZrNumer,
               });
             }
           }
@@ -719,6 +746,11 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                                     {' '}<span className="text-muted-foreground">
                                       ({s.paczka_obca.oddzial_zrodlowy_nazwa})
                                     </span>
+                                    {s.paczka_obca.kurs_zrodlowy_numer && (
+                                      <span className="ml-1 text-orange-700">
+                                        [obecnie w {s.paczka_obca.kurs_zrodlowy_numer}]
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-muted-foreground">
                                     {Math.round(s.paczka_obca.suma_kg)} kg

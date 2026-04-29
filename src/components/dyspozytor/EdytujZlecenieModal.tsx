@@ -382,20 +382,24 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
           {loading ? (
             <p className="text-center text-muted-foreground py-6">Ładowanie...</p>
-          ) : zlecenie && ['dostarczona', 'w_trasie', 'anulowana'].includes(zlecenie.status) ? (
+          ) : zlecenie && ['dostarczona', 'anulowana'].includes(zlecenie.status) ? (
             <div className="py-8 text-center space-y-3">
-              <p className="text-sm font-medium">Zlecenie ma status: <strong>{zlecenie.status === 'dostarczona' ? 'Dostarczone' : zlecenie.status === 'w_trasie' ? 'W trasie' : 'Anulowane'}</strong></p>
+              <p className="text-sm font-medium">Zlecenie ma status: <strong>{zlecenie.status === 'dostarczona' ? 'Dostarczone' : 'Anulowane'}</strong></p>
               <p className="text-sm text-muted-foreground">
                 {zlecenie.status === 'anulowana'
                   ? 'Anulowanych zleceń nie można edytować.'
-                  : zlecenie.status === 'w_trasie'
-                  ? 'Zleceń w trasie nie można edytować.'
                   : 'Zrealizowanych zleceń nie można edytować.'}
               </p>
               <Button variant="outline" onClick={onClose}>Zamknij</Button>
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Ostrzeżenie dla zleceń w trasie — edycja możliwa, ale na własną odpowiedzialność */}
+              {zlecenie?.status === 'w_trasie' && (
+                <div className="bg-orange-50 border border-orange-200 text-orange-900 p-3 rounded-md text-sm">
+                  ⚠ <b>Zlecenie jest w trasie.</b> Zmiany mogą wprowadzić nieporządek u kierowcy — koniecznie poinformuj go o modyfikacjach (telefon/SMS).
+                </div>
+              )}
               {/* Info + dzień edytowalny */}
               <div className="grid grid-cols-4 gap-3 p-3 rounded-lg bg-muted/50">
                 <div>
@@ -572,7 +576,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
             );
           })()}
 
-          {zlecenie && !['dostarczona', 'w_trasie', 'anulowana'].includes(zlecenie.status) && (
+          {zlecenie && !['dostarczona', 'anulowana'].includes(zlecenie.status) && (
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Anuluj</Button>
               <Button variant="secondary" onClick={() => setShowPrzekaz(true)} disabled={saving || loading}>

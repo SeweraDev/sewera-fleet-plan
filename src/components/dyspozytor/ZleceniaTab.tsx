@@ -168,12 +168,12 @@ function ZlSzczegolyDialog({
               Przypisz do kursu
             </Button>
           )}
-          {['robocza', 'do_weryfikacji', 'potwierdzona'].includes(zlecenie.status) && (
+          {['robocza', 'do_weryfikacji', 'potwierdzona', 'w_trasie'].includes(zlecenie.status) && (
             <Button variant="outline" onClick={() => { onClose(); onEdit(zlecenie.id); }}>
               Edytuj zlecenie
             </Button>
           )}
-          {['robocza', 'do_weryfikacji', 'potwierdzona'].includes(zlecenie.status) && (
+          {['robocza', 'do_weryfikacji', 'potwierdzona', 'w_trasie'].includes(zlecenie.status) && (
             <Button variant="secondary" onClick={() => { onClose(); onPrzekaz(zlecenie.id); }}>
               ↗ Przekaż do oddziału
             </Button>

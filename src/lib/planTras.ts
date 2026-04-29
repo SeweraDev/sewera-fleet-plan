@@ -360,25 +360,19 @@ export async function buildDistanceMatrix(
 /**
  * Czy pojazd P moze obsluzyc paczke pod katem typu?
  *
- * Logika:
+ * Logika ranking-based: 'wiekszy moze obsluzyc mniejszy' (zgodnie z faktycznym
+ * workflow user'a — np. ZL-KAT/.../007 [Dostawczy 1,2t] dla MEGRES SZPITAL TYCHY
+ * pojechalo Winda 6,3t bez problemu).
+ *
  * - typ wymagany pusty -> dowolne auto OK
- * - typ wymagany podany -> rodzina pojazdu MUSI byc ta sama. Wewnatrz rodziny:
- *     - Dostawczy: STRICT (klient ma waska uliczke, wieksze nie wjedzie)
- *     - Winda / HDS: wiekszy moze obsluzyc mniejszy (Winda MAX zamiast 1.8t,
- *       HDS 12 zamiast 9) — wieksze auto na tej samej rampie/wjezdzie spelni rolę.
+ * - typ wymagany podany -> rank pojazdu >= rank wymagany
+ *
+ * UWAGA: jesli klient ma TWARDY wymog (waska uliczka, ramp HDS itp.), trzeba
+ * dodac dedykowane pole 'twardy_wymog' w zleceniu (przyszla iteracja).
+ * Aktualnie sam typ_pojazdu jest 'preferowany typ' / klasa.
  */
 function pojazdSpelniaTyp(pojazd: PojazdSlot, paczka: PaczkaPrzystankowa): boolean {
   if (!paczka.wymagany_typ) return true; // dowolny typ
-  const rodzWym = rodzinaTypu(paczka.wymagany_typ);
-  const rodzPoj = rodzinaTypu(pojazd.typ);
-  if (!rodzWym || !rodzPoj) return false;
-  if (rodzWym !== rodzPoj) return false; // inna rodzina — nie pasuje
-
-  if (rodzWym === 'Dostawczy') {
-    // STRICT — Dostawczy 1,2t wymaga dokladnie Dostawczy 1,2t
-    return stripTyp(pojazd.typ) === stripTyp(paczka.wymagany_typ);
-  }
-  // Winda / HDS — wiekszy moze obsluzyc mniejszy w tej samej rodzinie
   return rankTypu(pojazd.typ) >= rankTypu(paczka.wymagany_typ);
 }
 
@@ -744,10 +738,10 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
     if (uzytePaczki.has(i)) return;
     let powod: string;
     if (p.wymagany_typ) {
-      // Sprawdz czy w ogole jest pojazd kompatybilny (rodzina + STRICT dla Dostawczego)
+      // Sprawdz czy w ogole jest pojazd kompatybilny (typ równy lub większy)
       const istnieje = input.pojazdy.some((pp) => pojazdSpelniaTyp(pp, p));
       if (!istnieje) {
-        powod = `Brak pojazdu typu ${p.wymagany_typ} w oddziale (twardy wymóg klienta)`;
+        powod = `Brak pojazdu typu ${p.wymagany_typ} lub większego w oddziale`;
       } else {
         powod = 'Brak miejsca w pojeździe lub czasu pracy kierowcy';
       }

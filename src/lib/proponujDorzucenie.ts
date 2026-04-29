@@ -41,6 +41,8 @@ export interface SugestiaDorzucenia {
 export interface PaczkaObca extends PaczkaPrzystankowa {
   oddzial_zrodlowy_id: number;
   oddzial_zrodlowy_nazwa: string;
+  /** Numer kursu zrodlowego (jesli paczka jest juz w jakims kursie). null = niezaplanowana. */
+  kurs_zrodlowy_numer: string | null;
 }
 
 /** Maksymalny akceptowalny przyrost km — wieksze odpadaja jako "nie po drodze". */
