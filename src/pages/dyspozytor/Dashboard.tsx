@@ -33,6 +33,7 @@ import { ZleceniaTab } from '@/components/dyspozytor/ZleceniaTab';
 import { KolejkaTab } from '@/components/dyspozytor/KolejkaTab';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { EdytujKursModal } from '@/components/dyspozytor/EdytujKursModal';
+import { AutoPlanModal } from '@/components/dyspozytor/AutoPlanModal';
 import { PrzepnijModal } from '@/components/dyspozytor/PrzepnijModal';
 import { PolaczKursyModal } from '@/components/dyspozytor/PolaczKursyModal';
 import { DodajDoKursuModal } from '@/components/dyspozytor/DodajDoKursuModal';
@@ -1004,6 +1005,7 @@ export default function DyspozytorDashboard() {
   }, []);
   const [showModal, setShowModal] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
+  const [showAutoPlan, setShowAutoPlan] = useState(false);
   const [preSelectedZlIds, setPreSelectedZlIds] = useState<string[]>([]);
   const { flota, refetch: refetchFlota } = useFlotaOddzialu(oddzialId);
   const { kursy, refetch } = useKursyDnia(oddzialId, dzien, rangeMode ? dzienDo : undefined);
@@ -1060,6 +1062,14 @@ export default function DyspozytorDashboard() {
               <div className="ml-auto mt-4 flex gap-2">
                 <Button variant="outline" onClick={() => setShowExcelImport(true)} disabled={!oddzialId}>
                   📊 Importuj plan
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAutoPlan(true)}
+                  disabled={!oddzialId}
+                  title="Automatyczne planowanie tras dla wszystkich niezaplanowanych zlecen z dnia"
+                >
+                  🤖 Auto-plan
                 </Button>
                 <Button onClick={() => setShowModal(true)} disabled={!oddzialId}>
                   + Nowy kurs
@@ -1136,6 +1146,17 @@ export default function DyspozytorDashboard() {
             oddzialy={oddzialy}
             onImported={() => { refetch(); refetchZlBezKursu(); }}
           />
+
+          {oddzialId != null && (
+            <AutoPlanModal
+              open={showAutoPlan}
+              onClose={() => setShowAutoPlan(false)}
+              oddzialId={oddzialId}
+              oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
+              dzien={dzien}
+              onPlanZapisany={() => { refetch(); refetchZlBezKursu(); }}
+            />
+          )}
         </main>
       </div>
     </div>

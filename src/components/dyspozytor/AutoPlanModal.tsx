@@ -7,8 +7,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { geocodeAddress, NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import { ZMIANY, ZMIANA_DEFAULT, type ZmianaKod } from '@/lib/planConfig';
-import { planTras, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult } from '@/lib/planTras';
+import { planTras, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult, type KursPropozycja } from '@/lib/planTras';
 import { suggestCrossBranch, type InnyOddzialFloty } from '@/lib/crossBranchSuggest';
+import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 
 interface Props {
   open: boolean;
@@ -37,13 +38,18 @@ type KierowcaWybor = {
  *   4. Wyniki: lista kursów + cross-branch sugestie + niezaplanowane
  *   5. (Faza 4b) akcje: akceptuj wszystko / akceptuj jeden / edytuj / odrzuć
  */
-export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, onPlanZapisany: _onPlanZapisany }: Props) {
+export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, onPlanZapisany }: Props) {
   const [step, setStep] = useState<'config' | 'planning' | 'wynik'>('config');
   const [kierowcy, setKierowcy] = useState<KierowcaWybor[]>([]);
   const [loadingDane, setLoadingDane] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [progressMsg, setProgressMsg] = useState('');
+  /** Set kurs_id_tmp ktore zostaly zaakceptowane (zapisane do DB). */
+  const [zaakceptowane, setZaakceptowane] = useState<Set<string>>(new Set());
+  /** Map kurs_id_tmp -> realny kurs_id (po INSERT) — do generowania karty drogowej. */
+  const [zapisaneKursy, setZapisaneKursy] = useState<Map<string, string>>(new Map());
+  const [savingKurs, setSavingKurs] = useState<string | null>(null);
 
   // Reset stanu po zamknieciu
   useEffect(() => {
@@ -52,8 +58,105 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
       setPlanResult(null);
       setError(null);
       setProgressMsg('');
+      setZaakceptowane(new Set());
+      setZapisaneKursy(new Map());
+      setSavingKurs(null);
     }
   }, [open]);
+
+  /**
+   * Zapis pojedynczego kursu do DB:
+   * - INSERT do `kursy` (status: zaplanowany)
+   * - INSERT do `kurs_przystanki` per zlecenie z paczek
+   * - UPDATE zlecenia.kurs_id
+   */
+  const zapiszKurs = async (kurs: KursPropozycja) => {
+    setSavingKurs(kurs.kurs_id_tmp);
+    try {
+      const numerKursu = await generateNumerKursu(oddzialId);
+      const insertKurs: any = {
+        numer: numerKursu,
+        oddzial_id: oddzialId,
+        dzien,
+        status: 'zaplanowany',
+        godzina_start: kurs.start_czas,
+        kierowca_id: kurs.kierowca?.kierowca_id ?? null,
+        kierowca_nazwa: kurs.kierowca?.imie_nazwisko ?? null,
+      };
+      if (kurs.pojazd.is_zewnetrzny) {
+        insertKurs.nr_rej_zewn = kurs.pojazd.nr_rej;
+      } else {
+        insertKurs.flota_id = kurs.pojazd.flota_id;
+      }
+      const { data: kursRow, error: errKurs } = await supabase
+        .from('kursy')
+        .insert(insertKurs)
+        .select('id')
+        .single();
+      if (errKurs || !kursRow) throw new Error(errKurs?.message || 'INSERT kursy nieudane');
+
+      // Buduj liste przystankow: kazda paczka moze miec wiele zlecen → osobny przystanek per zlecenie
+      // (zachowujac kolejnosc paczek z 2-opt)
+      const przystanki: any[] = [];
+      let kolejnosc = 1;
+      for (const paczka of kurs.przystanki) {
+        for (const zl of paczka.zlecenia) {
+          przystanki.push({
+            kurs_id: kursRow.id,
+            zlecenie_id: zl.zlecenie_id,
+            kolejnosc,
+          });
+          kolejnosc++;
+        }
+      }
+      const { error: errPrz } = await supabase.from('kurs_przystanki').insert(przystanki);
+      if (errPrz) throw new Error('INSERT kurs_przystanki: ' + errPrz.message);
+
+      // UPDATE zlecenia.kurs_id
+      const zlIds = kurs.przystanki.flatMap((p) => p.zlecenia.map((z) => z.zlecenie_id));
+      const { error: errUpd } = await supabase
+        .from('zlecenia')
+        .update({ kurs_id: kursRow.id })
+        .in('id', zlIds);
+      if (errUpd) throw new Error('UPDATE zlecenia.kurs_id: ' + errUpd.message);
+
+      setZaakceptowane((prev) => {
+        const n = new Set(prev);
+        n.add(kurs.kurs_id_tmp);
+        return n;
+      });
+      setZapisaneKursy((prev) => {
+        const n = new Map(prev);
+        n.set(kurs.kurs_id_tmp, kursRow.id);
+        return n;
+      });
+      toast.success(`Kurs ${numerKursu} zapisany`);
+      onPlanZapisany?.();
+    } catch (e: any) {
+      console.error('[AutoPlan] zapis kursu blad:', e);
+      toast.error('Błąd zapisu kursu: ' + (e?.message || 'nieznany'));
+    } finally {
+      setSavingKurs(null);
+    }
+  };
+
+  const akceptujWszystko = async () => {
+    if (!planResult) return;
+    for (const k of planResult.kursy) {
+      if (zaakceptowane.has(k.kurs_id_tmp)) continue;
+      await zapiszKurs(k);
+    }
+  };
+
+  /** Otwiera kartę drogową w nowej karcie (strona `/karta-drogowa/:kursId`). */
+  const otworzKarteDrogowa = (kursIdTmp: string) => {
+    const kursId = zapisaneKursy.get(kursIdTmp);
+    if (!kursId) {
+      toast.error('Najpierw zaakceptuj kurs');
+      return;
+    }
+    window.open(`/karta-drogowa/${kursId}`, '_blank', 'noopener,noreferrer');
+  };
 
   // Pobierz kierowcow oddzialu po otwarciu
   useEffect(() => {
@@ -392,42 +495,66 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               <div>
                 <h3 className="font-medium mb-2">Proponowane kursy</h3>
                 <div className="space-y-2">
-                  {planResult.kursy.map((k, i) => (
-                    <Card key={k.kurs_id_tmp} className="p-3">
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm">
-                            #{i + 1} • {k.pojazd.nr_rej} ({k.pojazd.typ})
-                            {k.pojazd.is_zewnetrzny && <span className="ml-1 text-orange-600">[zew]</span>}
-                            {' • '}{k.kierowca?.imie_nazwisko ?? '—'}
-                            {' • start '}{k.start_czas}
+                  {planResult.kursy.map((k, i) => {
+                    const isZapisany = zaakceptowane.has(k.kurs_id_tmp);
+                    const isSaving = savingKurs === k.kurs_id_tmp;
+                    return (
+                      <Card key={k.kurs_id_tmp} className={`p-3 ${isZapisany ? 'bg-green-50 border-green-200' : ''}`}>
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm">
+                              {isZapisany && <span className="text-green-600">✅ </span>}
+                              #{i + 1} • {k.pojazd.nr_rej} ({k.pojazd.typ})
+                              {k.pojazd.is_zewnetrzny && <span className="ml-1 text-orange-600">[zew]</span>}
+                              {' • '}{k.kierowca?.imie_nazwisko ?? '—'}
+                              {' • start '}{k.start_czas}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {k.przystanki.length} przyst. • {k.km_total} km •{' '}
+                              {Math.round(k.czas_total_min / 60 * 10) / 10}h •{' '}
+                              {Math.round(k.suma_kg)} kg
+                              {k.suma_m3 > 0 && ` • ${k.suma_m3} m³`}
+                              {k.suma_palet > 0 && ` • ${k.suma_palet} pal.`}
+                            </div>
+                            <div className="text-xs mt-2 space-y-0.5">
+                              {k.przystanki.map((p, pi) => (
+                                <div key={p.klucz_adresu} className="flex gap-2">
+                                  <span className="text-muted-foreground">{pi + 1}.</span>
+                                  <span className="truncate flex-1">
+                                    <b>{p.odbiorca}</b> — {p.adres}
+                                    {p.wymagany_typ && <span className="ml-1 text-blue-600">[{p.wymagany_typ}]</span>}
+                                    {p.ma_proxy && <span className="ml-1 text-orange-600">⚠</span>}
+                                  </span>
+                                  <span className="text-muted-foreground whitespace-nowrap">
+                                    {Math.round(p.suma_kg)} kg
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {k.przystanki.length} przyst. • {k.km_total} km •{' '}
-                            {Math.round(k.czas_total_min / 60 * 10) / 10}h •{' '}
-                            {Math.round(k.suma_kg)} kg
-                            {k.suma_m3 > 0 && ` • ${k.suma_m3} m³`}
-                            {k.suma_palet > 0 && ` • ${k.suma_palet} pal.`}
-                          </div>
-                          <div className="text-xs mt-2 space-y-0.5">
-                            {k.przystanki.map((p, pi) => (
-                              <div key={p.klucz_adresu} className="flex gap-2">
-                                <span className="text-muted-foreground">{pi + 1}.</span>
-                                <span className="truncate flex-1">
-                                  <b>{p.odbiorca}</b> — {p.adres}
-                                  {p.wymagany_typ && <span className="ml-1 text-blue-600">[{p.wymagany_typ}]</span>}
-                                  {p.ma_proxy && <span className="ml-1 text-orange-600">⚠</span>}
-                                </span>
-                                <span className="text-muted-foreground whitespace-nowrap">
-                                  {Math.round(p.suma_kg)} kg
-                                </span>
-                              </div>
-                            ))}
+                          <div className="flex flex-col gap-1 shrink-0">
+                            {!isZapisany ? (
+                              <Button
+                                size="sm"
+                                onClick={() => zapiszKurs(k)}
+                                disabled={isSaving}
+                              >
+                                {isSaving ? '...' : '✅ Akceptuj'}
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => otworzKarteDrogowa(k.kurs_id_tmp)}
+                              >
+                                📄 Karta drogowa
+                              </Button>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -479,13 +606,19 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               </Button>
             </>
           )}
-          {step === 'wynik' && (
+          {step === 'wynik' && planResult && (
             <>
               <Button variant="outline" onClick={() => setStep('config')}>← Wróć</Button>
               <Button variant="outline" onClick={onClose}>Zamknij</Button>
-              {/* Faza 4b: przycisk "Akceptuj wszystko" + INSERT */}
-              <Button disabled title="Akceptacja w Fazie 4b">
-                ✅ Akceptuj wszystko (TODO)
+              <Button
+                onClick={akceptujWszystko}
+                disabled={
+                  savingKurs != null ||
+                  planResult.kursy.length === 0 ||
+                  planResult.kursy.every((k) => zaakceptowane.has(k.kurs_id_tmp))
+                }
+              >
+                ✅ Akceptuj wszystko ({planResult.kursy.length - zaakceptowane.size})
               </Button>
             </>
           )}
