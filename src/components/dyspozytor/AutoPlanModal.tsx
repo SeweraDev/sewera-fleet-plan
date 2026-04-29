@@ -35,7 +35,7 @@ type KierowcaWybor = {
  *   1. Open: pobierz zlecenia bez kursu + flotę + kierowców
  *   2. Dyspozytor wybiera zmianę dla każdego kierowcy (lub OFF)
  *   3. Klik "Zaplanuj" -> geocoding adresów -> planTras() + suggestCrossBranch()
- *   4. Wyniki: lista kursów + cross-branch sugestie + niezaplanowane
+ *   4. Wyniki: lista kursów + sugestie przekazania do innego oddziału + niezaplanowane
  *   5. (Faza 4b) akcje: akceptuj wszystko / akceptuj jeden / edytuj / odrzuć
  */
 export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, onPlanZapisany }: Props) {
@@ -179,7 +179,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
           .gte('do', dzien);
         const zablokowani = new Set((blokady || []).map((b) => b.zasob_id));
         // Sprawdz istniejace kursy dnia (jakichkolwiek oddzialow) — pojazdy/kierowcy
-        // moga byc juz uzyci w cross-branch kursie KAT/R
+        // moga byc juz uzyci w kursie miedzyoddzialowym KAT/R
         const { data: istKursy } = await supabase
           .from('kursy')
           .select('kierowca_id')
@@ -395,7 +395,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
       });
 
       // 9. Cross-branch — pobierz floty innych oddzialow ktore moga obsluzyc niezaplanowane
-      setProgressMsg('Sprawdzanie cross-branch...');
+      setProgressMsg('Sprawdzanie sugestii przekazania...');
       const { data: oddzialy } = await supabase.from('oddzialy').select('id, nazwa').neq('id', oddzialId);
       const innyOddzialFloty: InnyOddzialFloty[] = [];
       for (const o of oddzialy || []) {
@@ -524,7 +524,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
             <div className="text-sm text-muted-foreground">
               ✅ Zaplanowano {planResult.kursy.length} kurs(ów),
               {' '}{planResult.niezaplanowane.length} niezaplanowanych,
-              {' '}{planResult.crossBranch.length} sugestii cross-branch
+              {' '}{planResult.crossBranch.length} sugestii przekazania
               {planResult.liczba_z_proxy > 0 && (
                 <span className="ml-2 text-orange-600">
                   ⚠ {planResult.liczba_z_proxy} paczek bez m³/palet — szacowanie z wagi
@@ -604,7 +604,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
             {/* Cross-branch */}
             {planResult.crossBranch.length > 0 && (
               <div>
-                <h3 className="font-medium mb-2">🔄 Sugestie cross-branch</h3>
+                <h3 className="font-medium mb-2">🔄 Sugestie przekazania do innego oddziału</h3>
                 <div className="space-y-1">
                   {planResult.crossBranch.map((cb, i) => (
                     <div key={i} className="text-sm bg-blue-50 border border-blue-200 p-2 rounded">
