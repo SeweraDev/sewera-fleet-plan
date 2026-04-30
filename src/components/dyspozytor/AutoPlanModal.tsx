@@ -13,6 +13,7 @@ import { proponujDorzucenie, type SugestiaDorzucenia, type PaczkaObca } from '@/
 import { scalAdresy } from '@/lib/planTras';
 import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 import { AutoPlanMapa } from '@/components/dyspozytor/AutoPlanMapa';
+import { obliczKosztKursuPropozycji } from '@/lib/kosztAutoplan';
 
 interface Props {
   open: boolean;
@@ -718,7 +719,25 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         )}
 
         {/* === STAGE: wynik === */}
-        {step === 'wynik' && planResult && (
+        {step === 'wynik' && planResult && (() => {
+          // Pre-licz koszty wszystkich kursow (faktura klienta wg taryfikatora IV 2026)
+          const kodOddz = NAZWA_TO_KOD[oddzialNazwa];
+          const baza = ODDZIAL_COORDS[kodOddz];
+          const kosztyMap = new Map<string, ReturnType<typeof obliczKosztKursuPropozycji> | null>();
+          if (baza) {
+            for (const k of planResult.kursy) {
+              try {
+                kosztyMap.set(k.kurs_id_tmp, obliczKosztKursuPropozycji(k, { lat: baza.lat, lng: baza.lng }));
+              } catch {
+                kosztyMap.set(k.kurs_id_tmp, null);
+              }
+            }
+          }
+          const sumaKosztu = Array.from(kosztyMap.values()).reduce(
+            (s, r) => s + (r?.koszt_calkowity ?? 0),
+            0
+          );
+          return (
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground">
               ✅ Zaplanowano {planResult.kursy.length} kurs(ów),
@@ -733,6 +752,16 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                 </span>
               )}
             </div>
+
+            {/* Podsumowanie finansowe (faktura klienta wg taryfikatora IV 2026) */}
+            {sumaKosztu > 0 && (
+              <div className="text-sm bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded p-2">
+                💰 <b>Suma faktur klientów</b> (taryfikator IV 2026): <b>{sumaKosztu.toFixed(2)} zł</b>
+                <span className="text-xs text-muted-foreground ml-2">
+                  (linia prosta × udział × km kółka, min 10 km/punkt)
+                </span>
+              </div>
+            )}
 
             {/* Lista kursow — POGRUPOWANE PER KIEROWCA */}
             {planResult.kursy.length > 0 && (() => {
@@ -788,9 +817,21 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                               {Math.round(k.suma_kg)} kg
                               {k.suma_m3 > 0 && ` • ${k.suma_m3} m³`}
                               {k.suma_palet > 0 && ` • ${k.suma_palet} pal.`}
+                              {(() => {
+                                const r = kosztyMap.get(k.kurs_id_tmp);
+                                if (!r) return null;
+                                return (
+                                  <span className="ml-1 text-emerald-700 dark:text-emerald-400 font-medium">
+                                    {' • 💰 '}{r.koszt_calkowity.toFixed(2)} zł
+                                  </span>
+                                );
+                              })()}
                             </div>
                             <div className="text-xs mt-2 space-y-0.5">
-                              {k.przystanki.map((p, pi) => (
+                              {k.przystanki.map((p, pi) => {
+                                const r = kosztyMap.get(k.kurs_id_tmp);
+                                const punktKoszt = r?.punkty[pi]?.koszt_punktu;
+                                return (
                                 <div key={p.klucz_adresu} className="flex gap-2">
                                   <span className="text-muted-foreground">{pi + 1}.</span>
                                   <span className="truncate flex-1">
@@ -798,11 +839,17 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                                     {p.wymagany_typ && <span className="ml-1 text-blue-600">[{p.wymagany_typ}]</span>}
                                     {p.ma_proxy && <span className="ml-1 text-orange-600">⚠</span>}
                                   </span>
+                                  {punktKoszt != null && (
+                                    <span className="text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                      {punktKoszt.toFixed(2)} zł
+                                    </span>
+                                  )}
                                   <span className="text-muted-foreground whitespace-nowrap">
                                     {Math.round(p.suma_kg)} kg
                                   </span>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                           <div className="flex flex-col gap-1 shrink-0">
@@ -951,7 +998,8 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               );
             })()}
           </div>
-        )}
+          );
+        })()}
 
         <DialogFooter className="gap-2">
           {step === 'config' && (
