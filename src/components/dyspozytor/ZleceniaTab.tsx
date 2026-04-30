@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EdytujZlecenieModal } from '@/components/dyspozytor/EdytujZlecenieModal';
 import { useZleceniaOddzialu, useZlecenieWz } from '@/hooks/useZleceniaOddzialu';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
+import { useFlotaWszystkichOddzialow, findOddzialZTypem } from '@/hooks/useFlotaWszystkichOddzialow';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -258,6 +259,9 @@ export function ZleceniaTab({
   const refetch = () => { refetchInner(); onZlChange?.(); };
   const { flota } = useFlotaOddzialu(oddzialId);
   const availableTypes = useMemo(() => [...new Set(flota.map(f => f.typ))], [flota]);
+  const { typyPerOddzial, nazwyOddzialow } = useFlotaWszystkichOddzialow();
+  // Literalna flota oddziału macierzystego (bez sharing'u KAT↔R) — do detekcji "brak auta typu"
+  const literalTypySet = typyPerOddzial.get(oddzialId);
   const [statusFilter, setStatusFilter] = useState<ZlStatusFilter>('bez_kursu');
   const [selectedZl, setSelectedZl] = useState<ZlecenieOddzialuDto | null>(null);
   const [editZlId, setEditZlId] = useState<string | null>(null);
@@ -607,7 +611,30 @@ export function ZleceniaTab({
                         </div>
                       ) : '—'}
                     </TableCell>
-                    <TableCell className="text-xs">{z.typ_pojazdu || '—'}</TableCell>
+                    <TableCell className="text-xs">
+                      {(() => {
+                        const tp = z.typ_pojazdu;
+                        if (!tp) return '—';
+                        const target = literalTypySet && !literalTypySet.has(tp)
+                          ? findOddzialZTypem(tp, oddzialId, typyPerOddzial, nazwyOddzialow)
+                          : null;
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <span>{tp}</span>
+                            {target && (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-300 cursor-pointer w-fit"
+                                onClick={(e) => { e.stopPropagation(); setPrzekazZlId(z.id); }}
+                                title={`Oddział nie ma auta typu ${tp}. Klik = otwórz okno przekazania.`}
+                              >
+                                ↗ przekaż do {target.nazwa}
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>
                       {z.kurs_numer || z.kurs_nrrej
                         ? <Badge variant="outline" className="font-mono text-xs">{z.kurs_numer || ''}{z.kurs_nrrej ? (z.kurs_numer ? ' · ' : '') + z.kurs_nrrej : ''}</Badge>
