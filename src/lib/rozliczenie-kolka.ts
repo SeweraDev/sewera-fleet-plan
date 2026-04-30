@@ -8,6 +8,7 @@
 // Spec: memory/project_rozliczenie_kosztow_transportu.md
 
 import { kosztKolka, isKlasyfikacjaRozliczalna, type KlasyfikacjaKod } from './stawki-rozliczenie';
+import { groupKey as groupKeyByAdresLatLng } from './groupByAdres';
 
 export interface WzDoRozliczenia {
   id: string;
@@ -23,6 +24,9 @@ export interface WzDoRozliczenia {
   kolejnosc: number;
   /** Linia prosta oddział → adres (km, Haversine). Null gdy nie udało się zgeocodować. */
   km_prosta: number | null;
+  /** Współrzędne adresu — używane do grupowania luźnego (różne zapisy = ta sama lokalizacja) */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 /** Źródło wagi do rozdziału kosztu adresu na WZ-y (do UI ostrzegania). */
@@ -31,6 +35,8 @@ export type ZrodloRozdzialu = 'wartosc_netto' | 'masa_kg' | 'rowny';
 export interface RozliczeniePunkt {
   kolejnosc: number;
   adres: string;
+  /** Klucz grupy (lat/lng po geocodingu albo znormalizowany adres) — używany przez UI do mapowania per wiersz */
+  group_key: string;
   klasyfikacja: KlasyfikacjaKod;
   km_prosta: number;
   udzial_proc: number;      // np. 0.5086 (51%)
@@ -72,23 +78,25 @@ function normAdres(a: string): string {
 export function rozliczKurs(kmKolka: number, wzList: WzDoRozliczenia[]): RozliczenieKursu {
   const ostrzezenia: string[] = [];
 
-  // Grupuj WZ per ADRES (nie per kolejnosc).
-  // Ten sam adres w różnych `kolejnosc` (osobne zlecenia) to w algorytmie jeden punkt.
+  // Grupuj WZ po LOKALIZACJI (lat/lng z geocodingu, fallback na znormalizowany
+  // adres). Spójne z UI tabeli kursu i karty drogowej (groupByAdres.ts).
+  // Dwa różne zapisy tego samego adresu (np. 'Marszałka Piłsudskiego 59' vs
+  // 'Piłsudskiego 59') dają te same współrzędne → jeden punkt rozliczeniowy.
   const punktyMap = new Map<string, WzDoRozliczenia[]>();
   wzList.forEach(wz => {
-    const key = normAdres(wz.adres);
+    const key = groupKeyByAdresLatLng(wz);
     const g = punktyMap.get(key) || [];
     g.push(wz);
     punktyMap.set(key, g);
   });
 
   // Suma linii prostych — podstawa do procentów
-  const punktyList = Array.from(punktyMap.values())
-    .map(wzy => {
+  const punktyList = Array.from(punktyMap.entries())
+    .map(([groupKeyValue, wzy]) => {
       // Kolejnosc wyświetlania = najmniejsza z grupy (żeby sortować naturalnie w tabeli)
       const kolejnosc = Math.min(...wzy.map(w => w.kolejnosc));
       const kmProsta = wzy.find(w => w.km_prosta != null)?.km_prosta ?? null;
-      return { kolejnosc, wzy, kmProsta };
+      return { kolejnosc, wzy, kmProsta, groupKey: groupKeyValue };
     })
     .sort((a, b) => a.kolejnosc - b.kolejnosc);
 
@@ -169,6 +177,7 @@ export function rozliczKurs(kmKolka: number, wzList: WzDoRozliczenia[]): Rozlicz
     punkty.push({
       kolejnosc: p.kolejnosc,
       adres: p.wzy[0]?.adres || '',
+      group_key: p.groupKey,
       klasyfikacja,
       km_prosta: p.kmProsta,
       udzial_proc: udzial,

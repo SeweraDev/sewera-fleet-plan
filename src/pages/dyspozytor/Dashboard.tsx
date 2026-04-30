@@ -318,21 +318,22 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
               kolejnosc: p.kolejnosc,
               // Override z ręcznej edycji ma priorytet nad Haversine z Photona
               km_prosta: p.km_prosta_override ?? p.km_prosta,
+              // lat/lng do grupowania spójnego z UI (luźne — różne zapisy = ta sama lokalizacja)
+              lat: p.lat, lng: p.lng,
             }));
             rozliczenie = rozliczKurs(kmEfektywne, wzListRozl);
           }
-          // Mapy per adres (grupowanie spójne z algorytmem — ten sam adres = jeden punkt)
-          const normAdres = (a: string) => (a || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          // Mapy per groupKey (lat/lng po geocodingu, fallback adres) — spójne
+          // z UI tabeli i algorytmem rozliczenia (groupByAdres.ts).
           const kosztByWzId = new Map<string, number>();
-          const kmPunktuByAdres = new Map<string, number>();
-          const udzialProcByAdres = new Map<string, number>();
-          const kosztPunktuByAdres = new Map<string, number>();
+          const kmPunktuByGroup = new Map<string, number>();
+          const udzialProcByGroup = new Map<string, number>();
+          const kosztPunktuByGroup = new Map<string, number>();
           if (rozliczenie) {
             for (const pt of rozliczenie.punkty) {
-              const key = normAdres(pt.adres);
-              kmPunktuByAdres.set(key, pt.km_punktu);
-              udzialProcByAdres.set(key, pt.udzial_proc);
-              kosztPunktuByAdres.set(key, pt.koszt_punktu);
+              kmPunktuByGroup.set(pt.group_key, pt.km_punktu);
+              udzialProcByGroup.set(pt.group_key, pt.udzial_proc);
+              kosztPunktuByGroup.set(pt.group_key, pt.koszt_punktu);
               for (const w of pt.wz) {
                 kosztByWzId.set(w.id, w.koszt_wz);
               }
@@ -616,12 +617,12 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                               ) : null}
                               {isFirst ? (
                                 <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
-                                  {(() => { const u = udzialProcByAdres.get(normAdres(p.adres)); return u != null ? (u * 100).toFixed(1) + ' %' : '—'; })()}
+                                  {(() => { const u = udzialProcByGroup.get(key); return u != null ? (u * 100).toFixed(1) + ' %' : '—'; })()}
                                 </TableCell>
                               ) : null}
                               {isFirst ? (
                                 <TableCell rowSpan={groupSize} className="align-top text-right text-xs">
-                                  {(() => { const km = kmPunktuByAdres.get(normAdres(p.adres)); return km != null ? km.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'; })()}
+                                  {(() => { const km = kmPunktuByGroup.get(key); return km != null ? km.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' km' : '—'; })()}
                                 </TableCell>
                               ) : null}
                               <TableCell className="text-right text-xs font-semibold">
