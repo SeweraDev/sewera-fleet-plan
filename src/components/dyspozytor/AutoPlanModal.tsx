@@ -1109,6 +1109,11 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                     // Target nie może być "ruchomy" — czyli kurs który sam znika po
                     // przeniesieniu wszystkich swoich zleceń
                     if (kursyRuchome.has(tgtKurs.kurs_id_tmp)) continue;
+                    // Konsolidacja: tylko małe kursy → duże, nie odwrotnie.
+                    // Wymagamy żeby target miał (a) większy lub równy pojazd
+                    // i (b) więcej zleceń lub równo niż source.
+                    if (rankTypu(tgtKurs.pojazd.typ) < rankTypu(srcKurs.pojazd.typ)) continue;
+                    if (tgtKurs.przystanki.length < srcKurs.przystanki.length) continue;
                     // Pojazd target musi obsłużyć typ paczki (hierarchia)
                     if (paczka.wymagany_typ && rankTypu(tgtKurs.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
                     // Mieści się wagowo + m³ + palety w target?
