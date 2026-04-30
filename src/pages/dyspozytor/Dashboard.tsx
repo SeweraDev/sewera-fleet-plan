@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateRouteTotal } from '@/lib/oddzialy-geo';
 import { rozliczKurs, type WzDoRozliczenia, type RozliczenieKursu } from '@/lib/rozliczenie-kolka';
+import { groupKey as groupKeyByAdresLatLng } from '@/lib/groupByAdres';
 import { EdytujKmModal } from '@/components/dyspozytor/EdytujKmModal';
 import { EdytujProstaModal } from '@/components/dyspozytor/EdytujProstaModal';
 import { KLASYFIKACJE } from '@/lib/klasyfikacje';
@@ -395,11 +396,12 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                     </TableHeader>
                     <TableBody>
                       {(() => {
-                        // Klucz grupowania: ZAWSZE adres (spójnie z algorytmem rozliczenia
-                        // i mental modelem usera — ten sam adres w różnych zleceniach to
-                        // jeden przystanek dla kierowcy, niezależnie od statusu kursu).
-                        const groupKeyOf = (w: { kolejnosc: number; adres: string }) =>
-                          normAdres(w.adres);
+                        // Klucz grupowania: lat/lng z geocodingu (luźne porównanie ~11m)
+                        // gdy są dostępne, fallback na znormalizowany adres.
+                        // Łapie różne zapisy tego samego adresu (Marszałka Piłsudskiego
+                        // vs Piłsudskiego) bo geocode daje te same współrzędne.
+                        const groupKeyOf = (w: { kolejnosc: number; adres: string; lat?: number | null; lng?: number | null }) =>
+                          groupKeyByAdresLatLng(w);
 
                         // Posortuj WZ tak, żeby ten sam adres był w ciągłym bloku
                         // (rowSpan musi być spójny). Zachowujemy kolejność pierwszego

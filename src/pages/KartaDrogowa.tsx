@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { geocodeAddress, getKmProstaFromOddzial, ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { groupKey as groupKeyByAdresLatLng } from '@/lib/groupByAdres';
 import { useAuth } from '@/hooks/useAuth';
 
 interface KursFull {
@@ -38,6 +39,8 @@ interface PrzystanekFull {
   preferowana_godzina: string;
   km_prosta: number | null;
   klasyfikacja: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 export default function KartaDrogowa() {
@@ -175,6 +178,8 @@ export default function KartaDrogowa() {
             preferowana_godzina: zl?.preferowana_godzina || '',
             km_prosta: null,
             klasyfikacja: null,
+            lat: null,
+            lng: null,
           });
         } else {
           wzList.forEach((w: any, i) => {
@@ -194,6 +199,8 @@ export default function KartaDrogowa() {
               preferowana_godzina: zl?.preferowana_godzina || '',
               km_prosta: null,
               klasyfikacja: w.klasyfikacja || null,
+              lat: null,
+              lng: null,
             });
           });
         }
@@ -208,11 +215,16 @@ export default function KartaDrogowa() {
         const coords = new Map<string, { lat: number; lng: number } | null>();
         for (const a of uniqAdresy) coords.set(a, await geocodeAddress(a));
         setPrzystanki(prev => prev.map(p => {
-          if (!p.adres || p.km_prosta != null) return p;
+          if (!p.adres) return p;
           const c = coords.get(p.adres);
           if (!c) return p;
-          const km = getKmProstaFromOddzial(oddzial_nazwa, c.lat, c.lng);
-          return km != null ? { ...p, km_prosta: km } : p;
+          // Zapisz lat/lng do grupowania po lokalizacji + km_prosta jeśli brak
+          const next = { ...p, lat: p.lat ?? c.lat, lng: p.lng ?? c.lng };
+          if (next.km_prosta == null) {
+            const km = getKmProstaFromOddzial(oddzial_nazwa, c.lat, c.lng);
+            if (km != null) next.km_prosta = km;
+          }
+          return next;
         }));
       }
     })();
@@ -301,30 +313,29 @@ export default function KartaDrogowa() {
           </thead>
           <tbody>
             {(() => {
-              // Grupowanie WZ po adresie (ten sam adres = jeden przystanek dla
-              // kierowcy). Sortuj żeby grupy były ciągłe, numerację licz per grupę.
-              const normAdr = (a: string) => (a || '').trim().toLowerCase().replace(/\s+/g, ' ');
+              // Grupowanie WZ po lokalizacji (lat/lng po geocodingu, fallback na
+              // znormalizowany adres). Łapie różne zapisy tego samego adresu.
               const firstIdxByKey = new Map<string, number>();
               przystanki.forEach((x, i) => {
-                const k = normAdr(x.adres);
+                const k = groupKeyByAdresLatLng(x);
                 if (!firstIdxByKey.has(k)) firstIdxByKey.set(k, i);
               });
               const sorted = [...przystanki].sort((a, b) => {
-                const ka = normAdr(a.adres);
-                const kb = normAdr(b.adres);
+                const ka = groupKeyByAdresLatLng(a);
+                const kb = groupKeyByAdresLatLng(b);
                 if (ka === kb) return 0;
                 return (firstIdxByKey.get(ka)! - firstIdxByKey.get(kb)!);
               });
               const displayNumMap = new Map<string, number>();
               sorted.forEach(x => {
-                const k = normAdr(x.adres);
+                const k = groupKeyByAdresLatLng(x);
                 if (!displayNumMap.has(k)) displayNumMap.set(k, displayNumMap.size + 1);
               });
               return sorted.map((p, idx) => {
-                const key = normAdr(p.adres);
-                const prevKey = idx > 0 ? normAdr(sorted[idx - 1].adres) : null;
+                const key = groupKeyByAdresLatLng(p);
+                const prevKey = idx > 0 ? groupKeyByAdresLatLng(sorted[idx - 1]) : null;
                 const isFirst = idx === 0 || prevKey !== key;
-                const groupSize = sorted.filter(x => normAdr(x.adres) === key).length;
+                const groupSize = sorted.filter(x => groupKeyByAdresLatLng(x) === key).length;
                 const displayNum = displayNumMap.get(key)!;
                 return (
                   <tr key={p.id}>

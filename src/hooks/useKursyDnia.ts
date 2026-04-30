@@ -52,6 +52,9 @@ export interface PrzystanekDto {
   km_prosta_override: number | null;
   klasyfikacja: string | null; // klasyfikacja rozliczeniowa WZ (A/B/C/D/E/F/H)
   wartosc_netto: number | null; // wartość netto dokumentu (do rozdziału kosztów)
+  /** Współrzędne adresu z geocodingu (do grupowania luźnego po lokalizacji) */
+  lat: number | null;
+  lng: number | null;
 }
 
 export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: string) {
@@ -203,6 +206,8 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
             km_prosta_override: null,
             klasyfikacja: null,
             wartosc_netto: null,
+            lat: null,
+            lng: null,
           });
         } else {
           wzList.forEach((w, i) => {
@@ -219,6 +224,8 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
               km_prosta_override: wAny.km_prosta_override != null ? Number(wAny.km_prosta_override) : null,
               klasyfikacja: wAny.klasyfikacja || null,
               wartosc_netto: wAny.wartosc_netto != null ? Number(wAny.wartosc_netto) : null,
+              lat: null,
+              lng: null,
             });
           });
         }
@@ -263,11 +270,16 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
           coordsByAdres.set(adres, c);
         }
         setPrzystanki(prev => prev.map(p => {
-          if (!p.adres || p.km_prosta != null) return p;
+          if (!p.adres) return p;
           const c = coordsByAdres.get(p.adres);
           if (!c) return p;
-          const km = getKmProstaFromOddzial(oddzialNazwa, c.lat, c.lng);
-          return km != null ? { ...p, km_prosta: km } : p;
+          // Zapisz lat/lng do grupowania po lokalizacji + km_prosta jeśli jeszcze brak
+          const next = { ...p, lat: p.lat ?? c.lat, lng: p.lng ?? c.lng };
+          if (next.km_prosta == null) {
+            const km = getKmProstaFromOddzial(oddzialNazwa, c.lat, c.lng);
+            if (km != null) next.km_prosta = km;
+          }
+          return next;
         }));
       })();
     } else {
