@@ -31,7 +31,7 @@ const LADOWNOSC_PER_TYP: Record<string, number> = {
 const MAX_DORZUCENIE_KM = 30;
 
 /** Limit nadkładania (objazd haversine ×1.4) przy przenoszeniu zlecenia do innego kursu w tym samym planie (km). */
-const MAX_OBJAZD_WEWN_KM = 15;
+const MAX_OBJAZD_WEWN_KM = 25;
 
 /** Maksymalna liczba sugestii przeniesień wewn. pokazywanych w UI (top N po najmniejszym objezdzie). */
 const TOP_SUGESTII_WEWN = 5;
