@@ -130,6 +130,76 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
   const [editKurs, setEditKurs] = useState<KursDto | null>(null);
   const [editKmKurs, setEditKmKurs] = useState<KursDto | null>(null);
   const [editProsta, setEditProsta] = useState<{ kursId: string; zlecenieIds: string[]; adres: string; kmProsta: number | null; override: number | null } | null>(null);
+  // Drag & drop reorderingu przystanków: trzymamy klucz grupy (adres) — bo wiele
+  // WZ pod jednym adresem to jeden przystanek dla kierowcy.
+  const [dragKursId, setDragKursId] = useState<string | null>(null);
+  const [dragGroupKey, setDragGroupKey] = useState<string | null>(null);
+  const [dragOverGroupKey, setDragOverGroupKey] = useState<string | null>(null);
+
+  /**
+   * Zmień kolejność grupy adresów w kursie. fromKey i toKey to klucze grupy
+   * (z groupKeyByAdresLatLng). Funkcja zbiera wszystkie WZ pod tymi adresami,
+   * przelicza nowe `kolejnosc` w `kurs_przystanki` i zapisuje batch'em.
+   */
+  const handleReorderPrzystanki = async (kursId: string, fromKey: string, toKey: string) => {
+    if (fromKey === toKey) return;
+    const kPrz = przystanki.filter(p => p.kurs_id === kursId);
+    if (kPrz.length === 0) return;
+
+    // Zbuduj listę unikalnych grup w aktualnej kolejności
+    const seen = new Set<string>();
+    const groups: { key: string; items: typeof kPrz }[] = [];
+    for (const p of kPrz) {
+      const k = groupKeyByAdresLatLng(p);
+      if (seen.has(k)) {
+        groups.find(g => g.key === k)!.items.push(p);
+      } else {
+        seen.add(k);
+        groups.push({ key: k, items: [p] });
+      }
+    }
+
+    // Wyciągnij grupę 'from' i wstaw przed 'to'
+    const fromIdx = groups.findIndex(g => g.key === fromKey);
+    const toIdx = groups.findIndex(g => g.key === toKey);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = groups.splice(fromIdx, 1);
+    // Po splice indeks toKey może się przesunąć
+    const newToIdx = groups.findIndex(g => g.key === toKey);
+    groups.splice(newToIdx, 0, moved);
+
+    // Buduj listę zaktualizowanych WZ — kazdy WZ dostaje nowy `kolejnosc`
+    // (per WZ, nie per grupa, bo DB ma kolejnosc na poziomie kurs_przystanki)
+    const updates: { id: string; kolejnosc: number }[] = [];
+    let kol = 1;
+    for (const g of groups) {
+      for (const item of g.items) {
+        // p.id w PrzystanekDto może być sztuczne ('${prz_id}_wz${i}') —
+        // wyciągamy oryginalne id przystanku przed '_wz'
+        const realId = item.id.includes('_wz') ? item.id.split('_wz')[0] : item.id;
+        // Każdy realId tylko raz (jedno zlecenie = jeden przystanek w DB)
+        if (!updates.find(u => u.id === realId)) {
+          updates.push({ id: realId, kolejnosc: kol });
+        }
+      }
+      kol += g.items.length; // następna grupa zaczyna po wszystkich WZ tej grupy
+    }
+
+    // Update batch w Supabase (Promise.all, każdy update osobno bo różne wartości)
+    try {
+      const results = await Promise.all(
+        updates.map(u =>
+          supabase.from('kurs_przystanki').update({ kolejnosc: u.kolejnosc }).eq('id', u.id)
+        )
+      );
+      const err = results.find(r => r.error);
+      if (err?.error) throw err.error;
+      toast.success('Kolejność przystanków zmieniona');
+      combinedRefetch();
+    } catch (e: any) {
+      toast.error('Błąd zmiany kolejności: ' + (e?.message || 'nieznany'));
+    }
+  };
 
   /** Zmień klasyfikację dla wszystkich WZ na danym adresie w obrębie kursa. */
   const handleChangeKlasyfikacjaAdres = async (kursId: string, adres: string, nowaKlasyf: string) => {
@@ -430,10 +500,48 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                           const isFirst = pIdx === 0 || prevKey !== key;
                           const groupSize = kPrzSorted.filter(x => groupKeyOf(x) === key).length;
                           const displayNum = displayNumMap.get(key)!;
+                          // Drag&drop tylko dla statusu 'zaplanowany' (przed wyjazdem)
+                          const isDraggable = isFirst && kurs.status === 'zaplanowany';
+                          const isDragSrc = dragKursId === kurs.id && dragGroupKey === key;
+                          const isDragOver = dragKursId === kurs.id && dragOverGroupKey === key && dragGroupKey !== key;
                           return (
-                        <TableRow key={p.id}>
+                        <TableRow
+                          key={p.id}
+                          draggable={isDraggable}
+                          onDragStart={(e) => {
+                            if (!isDraggable) return;
+                            setDragKursId(kurs.id);
+                            setDragGroupKey(key);
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragOver={(e) => {
+                            if (dragKursId !== kurs.id) return;
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            if (dragOverGroupKey !== key) setDragOverGroupKey(key);
+                          }}
+                          onDragLeave={() => {
+                            if (dragOverGroupKey === key) setDragOverGroupKey(null);
+                          }}
+                          onDrop={(e) => {
+                            if (dragKursId !== kurs.id || !dragGroupKey || dragGroupKey === key) {
+                              setDragKursId(null); setDragGroupKey(null); setDragOverGroupKey(null);
+                              return;
+                            }
+                            e.preventDefault();
+                            handleReorderPrzystanki(kurs.id, dragGroupKey, key);
+                            setDragKursId(null); setDragGroupKey(null); setDragOverGroupKey(null);
+                          }}
+                          onDragEnd={() => {
+                            setDragKursId(null); setDragGroupKey(null); setDragOverGroupKey(null);
+                          }}
+                          className={`${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragSrc ? 'opacity-50' : ''} ${isDragOver ? 'border-t-2 border-blue-500' : ''}`}
+                        >
                           {isFirst ? (
-                            <TableCell rowSpan={groupSize} className="align-top font-medium">{displayNum}</TableCell>
+                            <TableCell rowSpan={groupSize} className="align-top font-medium">
+                              {isDraggable && <span className="mr-1 text-muted-foreground" title="Przeciągnij, aby zmienić kolejność">⋮⋮</span>}
+                              {displayNum}
+                            </TableCell>
                           ) : null}
                           <TableCell className="text-xs">{p.preferowana_godzina || '—'}</TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{p.odbiorca}</TableCell>
