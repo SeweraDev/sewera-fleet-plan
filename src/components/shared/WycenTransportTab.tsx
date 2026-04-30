@@ -347,7 +347,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const inneNajblizsze = results
         .filter(r => !r.jestMojOddzial && (r.kosztWew || r.kosztZew))
         .sort((a, b) => a.km - b.km)
-        .slice(0, 4); // top 4 najbliższych (plus mój = max 5 wierszy)
+        .slice(0, 2); // top 2 najbliższych (plus mój = max 3 wiersze)
 
       const finalResults: WynikOddzialu[] = [];
       if (mojOddzial) finalResults.push(mojOddzial);
@@ -543,7 +543,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
             <p className="text-xs text-muted-foreground">
               Ceny netto w PLN (VAT 23%). Odległość w jedną stronę (OSRM).
-              Pokazujemy 4 najbliższe oddziały oraz Twój — niezależnie od km — bo bliższy oddział oznacza niższe koszty (zwłaszcza dla HDS).
+              Pokazujemy 2 najbliższe oddziały oraz Twój — niezależnie od km — bo bliższy oddział oznacza niższe koszty (zwłaszcza dla HDS).
             </p>
           </div>
         )}
