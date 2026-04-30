@@ -43,7 +43,6 @@ interface WynikOddzialu {
   zewTypy: string[];
 }
 
-const MAX_KM_INNE_ODDZIALY = 25;
 
 const ODDZIAL_COLORS: Record<string, string> = {
   KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
@@ -342,23 +341,20 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         });
       }
 
-      // 4. Filtruj
+      // 4. TOP najbliższych oddziałów (decyzja usera 30.04 — szczególnie HDS-y
+      // mają wysokie koszty, więc liczy się odległość. Ranking po km, nie po cenie.)
       const mojOddzial = results.find(r => r.jestMojOddzial);
-      const inne = results
-        .filter(r => !r.jestMojOddzial && r.km <= MAX_KM_INNE_ODDZIALY && (r.kosztWew || r.kosztZew))
-        .sort((a, b) => (a.kosztWew?.netto ?? a.kosztZew?.netto ?? 9999) - (b.kosztWew?.netto ?? b.kosztZew?.netto ?? 9999));
+      const inneNajblizsze = results
+        .filter(r => !r.jestMojOddzial && (r.kosztWew || r.kosztZew))
+        .sort((a, b) => a.km - b.km)
+        .slice(0, 4); // top 4 najbliższych (plus mój = max 5 wierszy)
 
       const finalResults: WynikOddzialu[] = [];
       if (mojOddzial) finalResults.push(mojOddzial);
-      for (const r of inne) {
-        finalResults.push(r);
-      }
+      finalResults.push(...inneNajblizsze);
 
-      finalResults.sort((a, b) => {
-        const priceA = Math.min(a.kosztWew?.netto ?? 9999, a.kosztZew?.netto ?? 9999);
-        const priceB = Math.min(b.kosztWew?.netto ?? 9999, b.kosztZew?.netto ?? 9999);
-        return priceA - priceB;
-      });
+      // Końcowe sortowanie po km — najbliższy pierwszy
+      finalResults.sort((a, b) => a.km - b.km);
 
       const jestZew = finalResults.some(r => r.kosztZew !== null);
       setPokazZew(jestZew);
@@ -547,7 +543,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
             <p className="text-xs text-muted-foreground">
               Ceny netto w PLN (VAT 23%). Odległość w jedną stronę (OSRM).
-              Oddziały z odległością {'>'} {MAX_KM_INNE_ODDZIALY} km od budowy nie są wyświetlane (oprócz Twojego).
+              Pokazujemy 4 najbliższe oddziały oraz Twój — niezależnie od km — bo bliższy oddział oznacza niższe koszty (zwłaszcza dla HDS).
             </p>
           </div>
         )}
