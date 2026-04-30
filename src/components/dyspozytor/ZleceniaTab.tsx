@@ -268,6 +268,7 @@ export function ZleceniaTab({
   const [sortBy, setSortBy] = useState<'dzien' | 'status' | 'godzina' | 'kg' | 'numer' | 'km'>('dzien');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showMap, setShowMap] = useState(false);
+  const [planerMode, setPlanerMode] = useState(false);
 
   const toggleSort = (col: typeof sortBy) => {
     if (sortBy === col) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
@@ -498,9 +499,13 @@ export function ZleceniaTab({
       {showMap && (
         <Suspense fallback={<div className="rounded-lg border bg-muted/50 p-6 text-center text-sm">Ładowanie mapy...</div>}>
           <ZleceniaMapView
-            zlecenia={bezKursu}
+            zlecenia={planerMode ? zlecenia : bezKursu}
             oddzialCoords={oddzialNazwa ? (ODDZIAL_COORDS[NAZWA_TO_KOD[oddzialNazwa] || ''] || null) : null}
             oddzialNazwa={oddzialNazwa || ''}
+            dzien={dzien}
+            oddzialId={oddzialId}
+            planerMode={planerMode}
+            onKursCreated={refetch}
           />
         </Suspense>
       )}
@@ -520,9 +525,20 @@ export function ZleceniaTab({
           </button>
         ))}
         <button
-          onClick={() => setShowMap(v => !v)}
+          onClick={() => { setShowMap(true); setPlanerMode(true); }}
           className={`ml-auto px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-            showMap
+            showMap && planerMode
+              ? 'bg-emerald-600 text-white'
+              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          }`}
+          title="Planer mapowy: klikaj markery na mapie, zbieraj zlecenia w koszyk i utwórz kurs"
+        >
+          🧺 Planer mapowy
+        </button>
+        <button
+          onClick={() => { setShowMap(v => !v); setPlanerMode(false); }}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            showMap && !planerMode
               ? 'bg-blue-600 text-white'
               : 'bg-muted text-muted-foreground hover:bg-muted/80'
           }`}

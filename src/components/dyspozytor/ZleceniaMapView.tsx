@@ -1,6 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
 import { ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useCreateKurs } from '@/hooks/useCreateKurs';
+import { toast } from 'sonner';
+
+// Hook do floty oddzialu i kierowcy — w jednym miejscu zeby nie obciazac
+import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
+import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
 
 // Kolory oddziałów — wyraziste, niepodobne do siebie
 const ODDZIAL_COLORS: Record<string, string> = {
@@ -38,16 +47,101 @@ interface Props {
   zlecenia: ZlecenieOddzialuDto[];
   oddzialCoords: { lat: number; lng: number } | null;
   oddzialNazwa: string;
+  /** Dzień (YYYY-MM-DD) — używany do tworzenia kursu w trybie planera. */
+  dzien?: string;
+  /** ID oddziału — używany do floty/kierowców w trybie planera. */
+  oddzialId?: number;
+  /** Włącza tryb planera mapowego: panel boczny + selekcja markerów + tworzenie kursu. */
+  planerMode?: boolean;
+  /** Callback po utworzeniu kursu (refetch listy zleceń itp.). */
+  onKursCreated?: () => void;
 }
 
-export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa }: Props) {
+export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa, dzien, oddzialId, planerMode, onKursCreated }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const pins = zlecenia.filter(z => z.lat != null && z.lng != null);
-  const bezAdresu = zlecenia.filter(z => !z.adres || z.adres.trim().length < 5);
-  const czekaNaGeocoding = zlecenia.filter(z => z.adres && z.adres.trim().length >= 5 && z.lat == null);
+  // Filtry trybu planera
+  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const baseDzien = dzien || today;
+  const [pokazZalegle, setPokazZalegle] = useState(false);
+
+  // Filtruj zlecenia wg trybu planera
+  const filteredZlecenia = useMemo(() => {
+    if (!planerMode) return zlecenia;
+    return zlecenia.filter(z => {
+      // Tylko bez kursu (jeszcze niezaplanowane)
+      if (z.kurs_numer || z.kurs_nrrej) return false;
+      if (z.status === 'anulowana') return false;
+      // Wybrany dzień zawsze + zaległe (z poprzednich dni) gdy checkbox włączony
+      if (z.dzien === baseDzien) return true;
+      if (pokazZalegle && z.dzien < baseDzien) return true;
+      return false;
+    });
+  }, [zlecenia, planerMode, baseDzien, pokazZalegle]);
+
+  const pins = filteredZlecenia.filter(z => z.lat != null && z.lng != null);
+  const bezAdresu = filteredZlecenia.filter(z => !z.adres || z.adres.trim().length < 5);
+  const czekaNaGeocoding = filteredZlecenia.filter(z => z.adres && z.adres.trim().length >= 5 && z.lat == null);
+
+  const toggleId = (id: string) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  // Koszyk — zlecenia zaznaczone
+  const koszyk = useMemo(
+    () => filteredZlecenia.filter(z => selectedIds.has(z.id)),
+    [filteredZlecenia, selectedIds]
+  );
+  const sumaKg = koszyk.reduce((s, z) => s + z.suma_kg, 0);
+  const sumaM3 = koszyk.reduce((s, z) => s + z.suma_m3, 0);
+  const sumaPal = koszyk.reduce((s, z) => s + z.suma_palet, 0);
+  const klasyfikacjeKoszyk = Array.from(new Set(koszyk.flatMap(z => z.klasyfikacje))).sort();
+
+  // Flota i kierowcy — tylko w trybie planera
+  const { flota } = useFlotaOddzialu(planerMode ? (oddzialId ?? null) : null);
+  const { kierowcy } = useKierowcyOddzialu(planerMode ? (oddzialId ?? null) : null);
+  const [pojazdId, setPojazdId] = useState<string>(''); // 'flota:UUID' lub 'zew:NR_REJ'
+  const [kierowcaId, setKierowcaId] = useState<string>('');
+
+  const pojazdWybrany = useMemo(() => {
+    if (!pojazdId) return null;
+    if (pojazdId.startsWith('flota:')) return flota.find(f => f.id === pojazdId.slice(6) && !f.jest_zewnetrzny) || null;
+    if (pojazdId.startsWith('zew:')) return flota.find(f => f.nr_rej_raw === pojazdId.slice(4) && f.jest_zewnetrzny) || null;
+    return null;
+  }, [pojazdId, flota]);
+
+  const procentPojazdu = pojazdWybrany ? (sumaKg / pojazdWybrany.ladownosc_kg) * 100 : 0;
+
+  const { create, submitting } = useCreateKurs(() => {
+    setSelectedIds(new Set());
+    setPojazdId('');
+    setKierowcaId('');
+    onKursCreated?.();
+  });
+
+  const handleUtworzKurs = async () => {
+    if (!oddzialId) { toast.error('Brak ID oddziału'); return; }
+    if (koszyk.length === 0) { toast.error('Wybierz przynajmniej jedno zlecenie'); return; }
+    if (!pojazdWybrany) { toast.error('Wybierz pojazd'); return; }
+
+    await create({
+      oddzial_id: oddzialId,
+      dzien: baseDzien,
+      kierowca_id: kierowcaId || null,
+      flota_id: pojazdWybrany.jest_zewnetrzny ? null : pojazdWybrany.id,
+      nr_rej_zewn: pojazdWybrany.jest_zewnetrzny ? (pojazdWybrany.nr_rej_raw ?? null) : null,
+      zlecenie_ids: koszyk.map(z => z.id),
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -115,19 +209,28 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
         groups.get(key)!.push(z);
       });
 
+      markersRef.current.clear();
       groups.forEach((groupPins) => {
         const first = groupPins[0];
         if (first.lat == null || first.lng == null) return;
         allPoints.push([first.lat, first.lng]);
 
+        // W trybie planera: marker zmienia kolor gdy zaznaczony (dowolny WZ z grupy)
+        const groupSelected = planerMode && groupPins.some(z => selectedIds.has(z.id));
+        const markerColor = groupSelected ? '#10b981' /* zielony */ : myColor;
+
         const count = groupPins.length;
         const badge = count > 1
-          ? '<span style="position:absolute;top:-6px;right:-6px;background:white;color:' + myColor + ';border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid ' + myColor + '">' + count + '</span>'
+          ? '<span style="position:absolute;top:-6px;right:-6px;background:white;color:' + markerColor + ';border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid ' + markerColor + '">' + count + '</span>'
+          : '';
+
+        const checkmark = groupSelected
+          ? '<span style="position:absolute;top:-2px;left:-2px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:bold">✓</span>'
           : '';
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="position:relative;background:' + myColor + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + badge + '</div>',
+          html: '<div style="position:relative;background:' + markerColor + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);' + (planerMode ? 'cursor:pointer' : '') + '">' + checkmark + badge + '</div>',
           iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13],
         });
 
@@ -137,8 +240,9 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
           const pal = z.suma_palet > 0 ? ' · ' + z.suma_palet + ' pal' : '';
           const km = z.dystans_km != null ? ' · ' + z.dystans_km + ' km' : '';
           const typLabel = z.typ_pojazdu ? ' [' + z.typ_pojazdu + ']' : '';
-          return '<div style="min-width:180px' + (groupPins.length > 1 ? ';padding:4px 0;border-bottom:1px solid #eee' : '') + '">'
-            + '<strong>' + (z.odbiorca || 'Brak odbiorcy') + '</strong>' + typLabel + '<br/>'
+          const isSel = planerMode && selectedIds.has(z.id);
+          return '<div style="min-width:180px' + (groupPins.length > 1 ? ';padding:4px 0;border-bottom:1px solid #eee' : '') + (isSel ? ';background:#d1fae5' : '') + '">'
+            + '<strong>' + (z.odbiorca || 'Brak odbiorcy') + '</strong>' + typLabel + (isSel ? ' <span style="color:#10b981">✓</span>' : '') + '<br/>'
             + '<span style="font-size:12px;color:#666">' + (z.adres || '') + '</span><br/>'
             + '<span style="font-size:12px">' + kg + ' kg' + m3 + pal + '</span><br/>'
             + '<span style="font-size:12px">' + (z.preferowana_godzina || 'Dowolna') + km + '</span><br/>'
@@ -146,7 +250,26 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
             + '</div>';
         });
 
-        L.marker([first.lat, first.lng], { icon: icon }).addTo(map).bindPopup(popupParts.join(''));
+        const marker = L.marker([first.lat, first.lng], { icon: icon }).addTo(map);
+        if (planerMode) {
+          // Klik = toggle WSZYSTKICH zleceń w tej grupie (ten sam adres)
+          marker.on('click', () => {
+            setSelectedIds(prev => {
+              const n = new Set(prev);
+              const allSelected = groupPins.every(z => n.has(z.id));
+              if (allSelected) {
+                groupPins.forEach(z => n.delete(z.id));
+              } else {
+                groupPins.forEach(z => n.add(z.id));
+              }
+              return n;
+            });
+          });
+          // Klucz markera — pierwszy id z grupy
+          markersRef.current.set(first.id, marker);
+        } else {
+          marker.bindPopup(popupParts.join(''));
+        }
       });
 
       if (allPoints.length > 1) {
@@ -160,14 +283,183 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa 
       cancelled = true;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
-  }, [pins.length, oddzialCoords?.lat, oddzialNazwa]);
+  }, [pins.length, oddzialCoords?.lat, oddzialNazwa, planerMode, selectedIds]);
 
   if (error) {
     return <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">{error}</div>;
   }
 
-  if (pins.length === 0) {
+  // W trybie planera: nie blokuj UI gdy brak pinów (może user filtruje datę)
+  if (pins.length === 0 && !planerMode) {
     return <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">Ladowanie wspolrzednych... Poczekaj chwile.</div>;
+  }
+
+  // Renderowanie z panelem bocznym tylko w trybie planera
+  if (planerMode) {
+    return (
+      <div className="space-y-2">
+        {/* Pasek filtrow */}
+        <div className="flex items-center gap-3 px-2 py-2 bg-muted/40 rounded-lg text-sm">
+          <span className="font-medium">Dzień: <b>{baseDzien}</b></span>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={pokazZalegle} onCheckedChange={(v) => setPokazZalegle(!!v)} />
+            <span>Pokaż także zaległe z poprzednich dni</span>
+          </label>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Klik markera = zaznacz / odznacz. Wszystkie zlecenia spod tego adresu wpadną do koszyka.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-2">
+          <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 600 }} />
+
+          {/* Panel boczny — koszyk */}
+          <div className="rounded-lg border bg-card flex flex-col" style={{ height: 600 }}>
+            <div className="px-3 py-2 border-b font-semibold text-sm flex items-center gap-2">
+              🧺 Koszyk ({koszyk.length})
+              {koszyk.length > 0 && (
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  Wyczyść
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {koszyk.length === 0 ? (
+                <div className="text-xs text-muted-foreground text-center py-8">
+                  Klik w marker na mapie, aby dodać zlecenie do koszyka.
+                </div>
+              ) : (
+                koszyk.map(z => (
+                  <div key={z.id} className="text-xs p-2 rounded border bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800">
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="font-medium truncate flex-1">{z.odbiorca || 'Brak odbiorcy'}</div>
+                      <button
+                        onClick={() => toggleId(z.id)}
+                        className="text-red-600 hover:text-red-800 text-xs font-bold"
+                        title="Usuń z koszyka"
+                      >✕</button>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{z.adres}</div>
+                    <div className="flex justify-between text-[10px] mt-0.5">
+                      <span>{Math.round(z.suma_kg)} kg{z.suma_palet > 0 ? ` • ${z.suma_palet} pal` : ''}</span>
+                      <span className="font-mono text-muted-foreground">{z.numer}</span>
+                    </div>
+                    {z.klasyfikacje.length > 0 && (
+                      <div className="flex gap-1 mt-0.5">
+                        {z.klasyfikacje.map(k => (
+                          <span key={k} className="text-[9px] px-1 rounded bg-white dark:bg-gray-800 border font-mono">{k}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Sumy + walidacja */}
+            <div className="px-3 py-2 border-t bg-muted/30 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span>Razem:</span>
+                <span className="font-semibold">
+                  {Math.round(sumaKg)} kg
+                  {sumaM3 > 0 && ` • ${Math.round(sumaM3 * 10) / 10} m³`}
+                  {sumaPal > 0 && ` • ${sumaPal} pal`}
+                </span>
+              </div>
+              {klasyfikacjeKoszyk.length > 0 && (
+                <div className="flex justify-between">
+                  <span>Klasy:</span>
+                  <span className="font-mono">{klasyfikacjeKoszyk.join(', ')}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Wybor pojazdu / kierowcy / godziny */}
+            <div className="px-3 py-2 border-t space-y-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground">Pojazd</label>
+                <Select value={pojazdId} onValueChange={setPojazdId}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Wybierz pojazd…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {flota.map(f => (
+                      <SelectItem
+                        key={(f.jest_zewnetrzny ? 'zew:' + f.nr_rej_raw : 'flota:' + f.id)}
+                        value={(f.jest_zewnetrzny ? 'zew:' + f.nr_rej_raw : 'flota:' + f.id)}
+                      >
+                        {f.nr_rej} • {f.typ} • {Math.round(f.ladownosc_kg / 1000 * 10) / 10}t
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {pojazdWybrany && (
+                  <div className="mt-1">
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full ${procentPojazdu > 100 ? 'bg-red-500' : procentPojazdu > 90 ? 'bg-orange-500' : 'bg-green-500'}`}
+                        style={{ width: `${Math.min(procentPojazdu, 100)}%` }}
+                      />
+                    </div>
+                    <div className={`text-[10px] mt-0.5 ${procentPojazdu > 100 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                      {Math.round(sumaKg)} / {pojazdWybrany.ladownosc_kg} kg ({Math.round(procentPojazdu)}%)
+                      {procentPojazdu > 100 && ' ⚠ przekroczona ładowność'}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-[10px] text-muted-foreground">Kierowca (opcjonalnie)</label>
+                <Select value={kierowcaId || '__none__'} onValueChange={(v) => setKierowcaId(v === '__none__' ? '' : v)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Wybierz kierowcę…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— bez kierowcy —</SelectItem>
+                    {kierowcy.map(k => (
+                      <SelectItem key={k.id} value={k.id}>
+                        {k.imie_nazwisko}{k.uprawnienia ? ` (${k.uprawnienia})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={handleUtworzKurs}
+                disabled={submitting || koszyk.length === 0 || !pojazdWybrany || procentPojazdu > 100}
+              >
+                {submitting ? 'Tworzenie…' : `✅ Utwórz kurs (${koszyk.length})`}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {bezAdresu.length > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-3 py-2 text-xs">
+            <span className="font-medium text-red-700 dark:text-red-400">
+              Brak adresu w WZ ({bezAdresu.length}) — uzupełnij w zleceniu:
+            </span>
+            <ul className="mt-1 space-y-0.5 text-red-600 dark:text-red-300">
+              {bezAdresu.map(z => (<li key={z.id}>{z.numer} — {z.odbiorca || '?'}</li>))}
+            </ul>
+          </div>
+        )}
+        {czekaNaGeocoding.length > 0 && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 px-3 py-2 text-xs">
+            <span className="font-medium text-orange-700 dark:text-orange-400">
+              ⚠️ Szukam lokalizacji ({czekaNaGeocoding.length})
+            </span>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
