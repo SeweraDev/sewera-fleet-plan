@@ -1122,12 +1122,17 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                   }
                 }
               }
-              if (topSugestie.length === 0) return null;
               return (
                 <div>
                   <h3 className="font-medium mb-2 text-blue-700 dark:text-blue-400">
                     💡 Sugerowane przeniesienia w obrębie planu ({topSugestie.length})
                   </h3>
+                  {topSugestie.length === 0 && (
+                    <div className="text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2 font-mono">
+                      DEBUG: kursów {planResult.kursy.length}, wykluczonych paczek (cross-branch): {wykluczonePaczki.size}, znalezione sugestie: {sugestie.length}.
+                      {sugestie.length === 0 && ' Sprawdź F12 Console — pełna diagnostyka tam.'}
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground mb-2">
                     Te zlecenia mogłyby pojechać innym kursem z tego planu — z minimalnym objazdem (haversine ×1.4 jako szacunek).
                   </p>
