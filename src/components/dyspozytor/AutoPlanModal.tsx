@@ -14,6 +14,21 @@ import { scalAdresy } from '@/lib/planTras';
 import { generateNumerKursu } from '@/lib/generateNumerZlecenia';
 import { AutoPlanMapa } from '@/components/dyspozytor/AutoPlanMapa';
 import { obliczKosztKursuPropozycji } from '@/lib/kosztAutoplan';
+import { useFlotaWszystkichOddzialow, findOddzialZTypem } from '@/hooks/useFlotaWszystkichOddzialow';
+import { haversineKm } from '@/lib/oddzialy-geo';
+
+// Ładowność per typ pojazdu (do heurystyki "co jeszcze może iść z tym kursem cross-branch")
+const LADOWNOSC_PER_TYP: Record<string, number> = {
+  'Dostawczy 1,2t': 1200,
+  'Winda 1,8t': 1800,
+  'Winda 6,3t': 6300,
+  'Winda MAX 15,8t': 15800,
+  'HDS 9,0t': 9000,
+  'HDS 12,0t': 12000,
+};
+
+/** Maksymalna odległość kandydata "do dorzucenia" w cross-branch (haversine km). */
+const MAX_DORZUCENIE_KM = 30;
 
 interface Props {
   open: boolean;
@@ -50,8 +65,8 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [sugestieDorzucenia, setSugestieDorzucenia] = useState<SugestiaDorzucenia[]>([]);
   const [progressMsg, setProgressMsg] = useState('');
-  const [algorytm, setAlgorytm] = useState<'savings' | 'clustering'>('savings');
-  const [maxObjazdKm, setMaxObjazdKm] = useState<number>(5);
+  const { typyPerOddzial, nazwyOddzialow } = useFlotaWszystkichOddzialow();
+  const literalTypySetOddzial = typyPerOddzial.get(oddzialId);
   /** Set kurs_id_tmp ktore zostaly zaakceptowane (zapisane do DB). */
   const [zaakceptowane, setZaakceptowane] = useState<Set<string>>(new Set());
   /** Map kurs_id_tmp -> realny kurs_id (po INSERT) — do generowania karty drogowej. */
@@ -422,8 +437,6 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         zlecenia: zleceniaPlanu,
         pojazdy: pojazdyDostepne,
         kierowcy: kierowcySloty,
-        algorytm,
-        max_objazd_km: maxObjazdKm,
       });
 
       // 9. Cross-branch — pobierz floty innych oddzialow ktore moga obsluzyc niezaplanowane
@@ -677,40 +690,6 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         {step === 'config' && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-medium mb-2">Sposób planowania tras</h3>
-              <div className="flex items-center gap-3 p-2 border rounded text-sm">
-                <Select value={algorytm} onValueChange={(v) => setAlgorytm(v as 'savings' | 'clustering')}>
-                  <SelectTrigger className="w-72">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="savings">Łączenie par tras (standardowy)</SelectItem>
-                    <SelectItem value="clustering">Konsolidacja kierunkowa (kotwica + objazd)</SelectItem>
-                  </SelectContent>
-                </Select>
-                {algorytm === 'clustering' && (
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    Maksymalny objazd:
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      step={1}
-                      value={maxObjazdKm}
-                      onChange={(e) => setMaxObjazdKm(Math.max(1, Math.min(20, Number(e.target.value) || 5)))}
-                      className="w-16 px-2 py-1 border rounded text-xs"
-                    />
-                    km
-                  </label>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {algorytm === 'savings'
-                  ? 'Łączy pary tras tam, gdzie połączenie daje największą oszczędność kilometrów.'
-                  : 'Zaczyna od najdalszego zlecenia (kotwica trasy), dorzuca po drodze pozostałe — gdy nadkładanie ≤ ustawiony limit km.'}
-              </p>
-            </div>
-            <div>
               <h3 className="font-medium mb-2">Dostępność kierowców i zmiany</h3>
               {loadingDane ? (
                 <p className="text-sm text-muted-foreground">Ładowanie kierowców...</p>
@@ -956,6 +935,111 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                   })}
                 </div>
               </div>
+              );
+            })()}
+
+            {/* Sugerowane przekazania (typ auta niedostepny u nas) */}
+            {literalTypySetOddzial && (() => {
+              type ProblemItem = {
+                paczka: typeof planResult.kursy[0]['przystanki'][0];
+                kursTmpId: string;
+                kursLabel: string;
+                target: { oddzial_id: number; nazwa: string };
+                kandydaci: typeof planResult.kursy[0]['przystanki'];
+                kosztAktualny: number | null;
+              };
+              const problemy: ProblemItem[] = [];
+              for (const kurs of planResult.kursy) {
+                const r = kosztyMap.get(kurs.kurs_id_tmp);
+                kurs.przystanki.forEach((paczka, pi) => {
+                  if (!paczka.wymagany_typ) return;
+                  if (literalTypySetOddzial.has(paczka.wymagany_typ)) return;
+                  const target = findOddzialZTypem(paczka.wymagany_typ, oddzialId, typyPerOddzial, nazwyOddzialow);
+                  if (!target) return;
+                  const targetMaxKg = LADOWNOSC_PER_TYP[paczka.wymagany_typ] ?? Infinity;
+                  const remainingKg = targetMaxKg - paczka.suma_kg;
+                  const kandydaci = planResult.kursy.flatMap((kOther) =>
+                    kOther.przystanki.filter((pOther) => {
+                      if (pOther.klucz_adresu === paczka.klucz_adresu) return false;
+                      if (pOther.suma_kg > remainingKg) return false;
+                      const dist = haversineKm(
+                        { lat: paczka.lat, lng: paczka.lng },
+                        { lat: pOther.lat, lng: pOther.lng }
+                      );
+                      return dist <= MAX_DORZUCENIE_KM;
+                    })
+                  );
+                  problemy.push({
+                    paczka,
+                    kursTmpId: kurs.kurs_id_tmp,
+                    kursLabel: `${kurs.pojazd.nr_rej} (${kurs.pojazd.typ}) • ${kurs.kierowca?.imie_nazwisko ?? '—'}`,
+                    target,
+                    kandydaci,
+                    kosztAktualny: r?.punkty[pi]?.koszt_punktu ?? null,
+                  });
+                });
+              }
+              if (problemy.length === 0) return null;
+              return (
+                <div>
+                  <h3 className="font-medium mb-2 text-amber-700 dark:text-amber-400">
+                    🔥 Sugerowane przekazania do innego oddziału ({problemy.length})
+                  </h3>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Te zlecenia mają wpisany typ auta, którego Twój oddział nie posiada.
+                    Powinny pojechać z oddziału, który ma odpowiedni pojazd.
+                  </p>
+                  <div className="space-y-2">
+                    {problemy.map((pr, idx) => (
+                      <div key={idx} className="text-sm border-2 border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 rounded p-3">
+                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                          <div className="font-semibold">
+                            ↗ {pr.paczka.odbiorca}
+                          </div>
+                          <div className="text-xs">
+                            Wymóg: <b>{pr.paczka.wymagany_typ}</b> • Twój oddział nie ma takiego auta
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mb-2">
+                          {pr.paczka.adres}
+                        </div>
+                        <div className="text-sm mb-2">
+                          → Przekaż do oddziału <b className="text-amber-800 dark:text-amber-300">{pr.target.nazwa}</b> (mają {pr.paczka.wymagany_typ})
+                        </div>
+                        <div className="text-xs text-muted-foreground mb-2">
+                          Aktualnie zaplanowane w: {pr.kursLabel}
+                          {pr.kosztAktualny != null && <> • klient zapłaci <b>{pr.kosztAktualny.toFixed(2)} zł</b></>}
+                        </div>
+                        {pr.kandydaci.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+                            <div className="text-xs font-medium mb-1">
+                              💡 Można dorzucić do tej dostawy (waga pasuje do {pr.paczka.wymagany_typ}, kierunek się zgadza):
+                            </div>
+                            <div className="space-y-0.5">
+                              {pr.kandydaci.map((k) => {
+                                const dist = haversineKm(
+                                  { lat: pr.paczka.lat, lng: pr.paczka.lng },
+                                  { lat: k.lat, lng: k.lng }
+                                );
+                                return (
+                                  <div key={k.klucz_adresu} className="text-xs flex justify-between gap-2">
+                                    <span className="truncate">• <b>{k.odbiorca}</b> — {k.adres}</span>
+                                    <span className="text-muted-foreground whitespace-nowrap">
+                                      {Math.round(k.suma_kg)} kg • {dist.toFixed(1)} km od głównego
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-1">
+                              Decyzję o dorzuceniu podejmuje dyspozytor docelowego oddziału — sprawdzi kompatybilność klasyfikacji i okno czasowe.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               );
             })()}
 
