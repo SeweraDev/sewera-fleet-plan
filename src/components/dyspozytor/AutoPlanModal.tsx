@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { geocodeAddress, NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import { ZMIANY, ZMIANA_DEFAULT, type ZmianaKod } from '@/lib/planConfig';
-import { planTras, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult, type KursPropozycja } from '@/lib/planTras';
+import { planTras, rankTypu, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult, type KursPropozycja } from '@/lib/planTras';
 import { suggestCrossBranchV2, type ObcyKurs } from '@/lib/crossBranchSuggest';
 import { proponujDorzucenie, type SugestiaDorzucenia, type PaczkaObca } from '@/lib/proponujDorzucenie';
 import { scalAdresy } from '@/lib/planTras';
@@ -29,6 +29,12 @@ const LADOWNOSC_PER_TYP: Record<string, number> = {
 
 /** Maksymalna odległość kandydata "do dorzucenia" w cross-branch (haversine km). */
 const MAX_DORZUCENIE_KM = 30;
+
+/** Limit nadkładania (objazd haversine ×1.4) przy przenoszeniu zlecenia do innego kursu w tym samym planie (km). */
+const MAX_OBJAZD_WEWN_KM = 15;
+
+/** Maksymalna liczba sugestii przeniesień wewn. pokazywanych w UI (top N po najmniejszym objezdzie). */
+const TOP_SUGESTII_WEWN = 5;
 
 interface Props {
   open: boolean;
@@ -1038,6 +1044,116 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                         )}
                       </div>
                     ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Sugerowane przeniesienia w obrębie planu (dorzucanie do innych kursów po drodze) */}
+            {planResult.kursy.length >= 2 && (() => {
+              const kodOddzL = NAZWA_TO_KOD[oddzialNazwa];
+              const bazaL = ODDZIAL_COORDS[kodOddzL];
+              if (!bazaL) return null;
+
+              type SugestiaWewn = {
+                paczka: typeof planResult.kursy[0]['przystanki'][0];
+                srcKursIdx: number;
+                tgtKursIdx: number;
+                pozycja: number; // kolejność wstawienia (1-based, widoczne dla usera)
+                objazdKm: number;
+              };
+              // Wykluczenie zleceń, które są w sekcji cross-branch (idą do innego oddziału)
+              const wykluczonePaczki = new Set<string>();
+              if (literalTypySetOddzial) {
+                for (const kurs of planResult.kursy) {
+                  for (const paczka of kurs.przystanki) {
+                    if (paczka.wymagany_typ && !literalTypySetOddzial.has(paczka.wymagany_typ)) {
+                      wykluczonePaczki.add(paczka.klucz_adresu);
+                    }
+                  }
+                }
+              }
+
+              const sugestie: SugestiaWewn[] = [];
+              for (let si = 0; si < planResult.kursy.length; si++) {
+                const srcKurs = planResult.kursy[si];
+                for (const paczka of srcKurs.przystanki) {
+                  if (wykluczonePaczki.has(paczka.klucz_adresu)) continue;
+                  for (let ti = 0; ti < planResult.kursy.length; ti++) {
+                    if (ti === si) continue;
+                    const tgtKurs = planResult.kursy[ti];
+                    // Pojazd target musi obsłużyć typ paczki (hierarchia)
+                    if (paczka.wymagany_typ && rankTypu(tgtKurs.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
+                    // Mieści się wagowo + m³ + palety w target?
+                    if (tgtKurs.suma_kg + paczka.suma_kg > tgtKurs.pojazd.ladownosc_kg) continue;
+                    if (tgtKurs.pojazd.objetosc_m3 != null && tgtKurs.suma_m3 + paczka.suma_m3 > tgtKurs.pojazd.objetosc_m3) continue;
+                    if (tgtKurs.pojazd.max_palet != null && tgtKurs.suma_palet + paczka.suma_palet > tgtKurs.pojazd.max_palet) continue;
+
+                    // Cheapest insertion w trasę target (haversine ×1.4 jako proxy OSRM)
+                    const punktyTrasy = [bazaL, ...tgtKurs.przystanki.map((p) => ({ lat: p.lat, lng: p.lng })), bazaL];
+                    let bestObjazd = Infinity;
+                    let bestPos = 0;
+                    for (let pos = 0; pos < punktyTrasy.length - 1; pos++) {
+                      const before = punktyTrasy[pos];
+                      const after = punktyTrasy[pos + 1];
+                      const oryg = haversineKm(before, after) * 1.4;
+                      const ndb = haversineKm(before, { lat: paczka.lat, lng: paczka.lng }) * 1.4;
+                      const nda = haversineKm({ lat: paczka.lat, lng: paczka.lng }, after) * 1.4;
+                      const objazd = ndb + nda - oryg;
+                      if (objazd < bestObjazd) {
+                        bestObjazd = objazd;
+                        bestPos = pos + 1; // 1-based pozycja
+                      }
+                    }
+                    if (bestObjazd <= MAX_OBJAZD_WEWN_KM) {
+                      sugestie.push({
+                        paczka,
+                        srcKursIdx: si,
+                        tgtKursIdx: ti,
+                        pozycja: bestPos,
+                        objazdKm: Math.round(bestObjazd * 10) / 10,
+                      });
+                    }
+                  }
+                }
+              }
+              sugestie.sort((a, b) => a.objazdKm - b.objazdKm);
+              const topSugestie = sugestie.slice(0, TOP_SUGESTII_WEWN);
+              if (topSugestie.length === 0) return null;
+              return (
+                <div>
+                  <h3 className="font-medium mb-2 text-blue-700 dark:text-blue-400">
+                    💡 Sugerowane przeniesienia w obrębie planu ({topSugestie.length})
+                  </h3>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Te zlecenia mogłyby pojechać innym kursem z tego planu — z minimalnym objazdem (haversine ×1.4 jako szacunek).
+                  </p>
+                  <div className="space-y-2">
+                    {topSugestie.map((s, idx) => {
+                      const src = planResult.kursy[s.srcKursIdx];
+                      const tgt = planResult.kursy[s.tgtKursIdx];
+                      return (
+                        <div key={idx} className="text-sm border-2 border-blue-300 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700 rounded p-3">
+                          <div className="font-semibold mb-1">
+                            ↻ {s.paczka.odbiorca} <span className="text-xs font-normal text-muted-foreground">({s.paczka.adres})</span>
+                          </div>
+                          <div className="text-xs">
+                            Z kursu <b>#{s.srcKursIdx + 1}</b> {src.pojazd.nr_rej} ({src.pojazd.typ}, {src.kierowca?.imie_nazwisko ?? '—'})
+                          </div>
+                          <div className="text-xs mb-1">
+                            → Dorzuć do kursu <b>#{s.tgtKursIdx + 1}</b> {tgt.pojazd.nr_rej} ({tgt.pojazd.typ}, {tgt.kierowca?.imie_nazwisko ?? '—'})
+                            {tgt.przystanki.length > 0 && (
+                              <span> między <b>{Math.max(1, s.pozycja - 1)}</b> a <b>{s.pozycja}</b> rozładunkiem</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Dodatkowy objazd: <b className="text-blue-700 dark:text-blue-400">~{s.objazdKm} km</b>
+                            {' • '}{Math.round(s.paczka.suma_kg)} kg
+                            {s.paczka.wymagany_typ && <> • wymóg: {s.paczka.wymagany_typ}</>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
