@@ -216,9 +216,8 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
 
 // Odległość po drogach → OSRM (darmowy publiczny serwer)
 
-// Zaokrąglenie km (bez korekty) — OSRM z alternatives=2 daje zwykle 2-3 trasy,
-// a pickKmFromAlternatives wybiera najdłuższą, co samo w sobie zabezpiecza
-// przed zaniżeniem fakturowania.
+// Zaokrąglenie km (bez globalnej korekty). Strategie km zależne od typu pojazdu
+// — patrz pickKmFromAlternatives().
 function roundKm(rawKm: number): number {
   return Math.round(rawKm);
 }
@@ -286,9 +285,39 @@ export function getKmProstaFromOddzial(
 // korektą ×1.1 w roundKm daje km porównywalne lub nieco wyższe niż Google,
 // co zabezpiecza fakturowanie przed zaniżeniem.
 
-export function pickKmFromAlternatives(alternatives: number[]): number {
+/**
+ * Strategia wyboru km z alternatyw OSRM zależna od typu pojazdu:
+ *
+ * - Dostawczy 1,2t (małe auto) → najkrótsza × 1.1
+ *   Logika: małe auta jadą bocznymi drogami (krótsze trasy), ale margines 10%
+ *   na zatory/manewry/parkowanie.
+ *
+ * - Pozostałe typy (Winda, HDS) → mediana z alternatyw — odrzucamy 2 skrajne
+ *   wartości z 3 alternatyw OSRM (najkrótsza i najdłuższa, zostaje środkowa).
+ *   Dla 2 alternatyw → średnia. Dla 1 → ta jedna.
+ *   Logika: większe auta jadą głównymi drogami, mediana = realny kompromis.
+ *
+ * @param alternatives lista km z OSRM (do 3 wariantów)
+ * @param typPojazdu opcjonalny typ — label cennikowy lub systemowy
+ */
+export function pickKmFromAlternatives(alternatives: number[], typPojazdu?: string | null): number {
+  if (alternatives.length === 0) return 0;
   const sorted = [...alternatives].sort((a, b) => a - b);
-  return sorted[sorted.length - 1]; // najdłuższa
+
+  // Małe auta — najkrótsza × 1.1
+  const tp = (typPojazdu || '').toLowerCase();
+  if (tp.includes('1,2t') || tp.includes('dostawczy')) {
+    return Math.round(sorted[0] * 1.1);
+  }
+
+  // Pozostałe — mediana / środkowa
+  if (sorted.length >= 3) {
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+  if (sorted.length === 2) {
+    return Math.round((sorted[0] + sorted[1]) / 2);
+  }
+  return sorted[0];
 }
 
 // Pobierz WSZYSTKIE warianty trasy z OSRM (do 3 alternatyw).

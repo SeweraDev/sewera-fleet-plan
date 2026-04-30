@@ -293,7 +293,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       for (const [kod, dane] of oddzialyFiltered) {
         const alternatives = await getRouteAlternatives(dane, coords);
         if (!alternatives || alternatives.length === 0) continue;
-        const km = pickKmFromAlternatives(alternatives);
+        const km = pickKmFromAlternatives(alternatives, typPojazdu);
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
         const bestType = findBestAvailableType(typPojazdu, wlasneTypy);
@@ -544,6 +544,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             <p className="text-xs text-muted-foreground">
               Ceny netto w PLN (VAT 23%). Odległość w jedną stronę (OSRM).
               Pokazujemy 2 najbliższe oddziały oraz Twój — niezależnie od km — bo bliższy oddział oznacza niższe koszty (zwłaszcza dla HDS).
+              Strategia km: dla 1,2t najkrótsza ×1,1 (małe auta — boczne drogi + margines), dla pozostałych mediana z alternatyw OSRM.
             </p>
           </div>
         )}
