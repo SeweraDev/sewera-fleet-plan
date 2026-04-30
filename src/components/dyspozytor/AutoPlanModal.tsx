@@ -1063,10 +1063,9 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                     if (tgtKurs.przystanki.length < srcKurs.przystanki.length) continue;
                     // Pojazd target musi obsłużyć typ paczki (hierarchia)
                     if (paczka.wymagany_typ && rankTypu(tgtKurs.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
-                    // Mieści się wagowo + m³ + palety w target?
+                    // Mieści się wagowo? (m³ i palety pomijamy — często szacowane z proxy
+                    // i blokują sensowne sugestie. Dyspozytor zweryfikuje wizualnie.)
                     if (tgtKurs.suma_kg + paczka.suma_kg > tgtKurs.pojazd.ladownosc_kg) continue;
-                    if (tgtKurs.pojazd.objetosc_m3 != null && tgtKurs.suma_m3 + paczka.suma_m3 > tgtKurs.pojazd.objetosc_m3) continue;
-                    if (tgtKurs.pojazd.max_palet != null && tgtKurs.suma_palet + paczka.suma_palet > tgtKurs.pojazd.max_palet) continue;
 
                     // Cheapest insertion w trasę target (haversine ×1.4 jako proxy OSRM)
                     const punktyTrasy = [bazaL, ...tgtKurs.przystanki.map((p) => ({ lat: p.lat, lng: p.lng })), bazaL];
