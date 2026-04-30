@@ -681,7 +681,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] overflow-y-auto sm:max-w-[95vw]">
         <DialogHeader>
           <DialogTitle>🤖 Auto-plan tras — {oddzialNazwa}, {dzien}</DialogTitle>
         </DialogHeader>
