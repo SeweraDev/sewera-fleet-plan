@@ -677,20 +677,20 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         {step === 'config' && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-medium mb-2">Algorytm planowania</h3>
+              <h3 className="font-medium mb-2">Sposób planowania tras</h3>
               <div className="flex items-center gap-3 p-2 border rounded text-sm">
                 <Select value={algorytm} onValueChange={(v) => setAlgorytm(v as 'savings' | 'clustering')}>
-                  <SelectTrigger className="w-64">
+                  <SelectTrigger className="w-72">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="savings">Savings (Clarke-Wright) — domyślny</SelectItem>
-                    <SelectItem value="clustering">Clustering (kotwica + objazd) — nowy</SelectItem>
+                    <SelectItem value="savings">Łączenie par tras (standardowy)</SelectItem>
+                    <SelectItem value="clustering">Konsolidacja kierunkowa (kotwica + objazd)</SelectItem>
                   </SelectContent>
                 </Select>
                 {algorytm === 'clustering' && (
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    Limit objazdu:
+                    Maksymalny objazd:
                     <input
                       type="number"
                       min={1}
@@ -706,8 +706,8 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {algorytm === 'savings'
-                  ? 'Łączy pary tras po największych oszczędnościach (sprawdzona, ~95-98% optimum).'
-                  : 'Zaczyna od najdalszej paczki jako kotwicy, dorzuca paczki po drodze (objazd ≤ X km).'}
+                  ? 'Łączy pary tras tam, gdzie połączenie daje największą oszczędność kilometrów.'
+                  : 'Zaczyna od najdalszego zlecenia (kotwica trasy), dorzuca po drodze pozostałe — gdy nadkładanie ≤ ustawiony limit km.'}
               </p>
             </div>
             <div>
