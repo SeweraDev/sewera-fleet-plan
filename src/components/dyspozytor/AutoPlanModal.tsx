@@ -1097,6 +1097,31 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
               }
               sugestie.sort((a, b) => a.objazdKm - b.objazdKm);
               const topSugestie = sugestie.slice(0, TOP_SUGESTII_WEWN);
+              // DEBUG: log do konsoli zeby zdiagnozowac dlaczego sugestie nie sie pojawiaja
+              console.log('[AutoPlan-Sugestie2] kursow:', planResult.kursy.length,
+                'wykluczone:', wykluczonePaczki.size,
+                'sugestii:', sugestie.length,
+                'top:', topSugestie);
+              if (sugestie.length === 0) {
+                console.log('[AutoPlan-Sugestie2] DEBUG: zadna sugestia nie wygenerowana. Probowane pary:');
+                for (let si = 0; si < planResult.kursy.length; si++) {
+                  const sk = planResult.kursy[si];
+                  for (const p of sk.przystanki) {
+                    if (wykluczonePaczki.has(p.klucz_adresu)) continue;
+                    console.log(`  Paczka ${p.odbiorca} (${p.suma_kg}kg, wymog=${p.wymagany_typ}) z kursu #${si+1} ${sk.pojazd.typ} (${sk.przystanki.length} przyst):`);
+                    for (let ti = 0; ti < planResult.kursy.length; ti++) {
+                      if (ti === si) continue;
+                      const tk = planResult.kursy[ti];
+                      const reasons: string[] = [];
+                      if (rankTypu(tk.pojazd.typ) < rankTypu(sk.pojazd.typ)) reasons.push('rank tgt < src');
+                      if (tk.przystanki.length < sk.przystanki.length) reasons.push('tgt count < src count');
+                      if (p.wymagany_typ && rankTypu(tk.pojazd.typ) < rankTypu(p.wymagany_typ)) reasons.push('rank tgt < paczka wymog');
+                      if (tk.suma_kg + p.suma_kg > tk.pojazd.ladownosc_kg) reasons.push(`waga (${tk.suma_kg}+${p.suma_kg}>${tk.pojazd.ladownosc_kg})`);
+                      console.log(`    -> kurs #${ti+1} ${tk.pojazd.typ} (${tk.przystanki.length} przyst, ${tk.suma_kg}kg): ${reasons.length ? 'ODRZUC: '+reasons.join(', ') : 'OK (sprawdz objazd)'}`);
+                    }
+                  }
+                }
+              }
               if (topSugestie.length === 0) return null;
               return (
                 <div>
