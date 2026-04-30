@@ -401,6 +401,14 @@ export async function buildDistanceMatrix(
  */
 function pojazdSpelniaTyp(pojazd: PojazdSlot, paczka: PaczkaPrzystankowa): boolean {
   if (!paczka.wymagany_typ) return true; // dowolny typ
+  // Strict family match — Dostawczy = waska uliczka (twardy maks),
+  // Winda = wymaga windy do rozladunku, HDS = wymaga dzwigu.
+  // Wieksze auto z innej rodziny NIE zastapi (np. MAX nie wjedzie w
+  // waska uliczke do 1,2t, Dostawczy nie ma windy ani dzwigu).
+  const rP = rodzinaTypu(paczka.wymagany_typ);
+  const rV = rodzinaTypu(pojazd.typ);
+  if (rP !== rV) return false;
+  // W ramach tej samej rodziny — wiekszy moze zastapic mniejszy
   return rankTypu(pojazd.typ) >= rankTypu(paczka.wymagany_typ);
 }
 
@@ -1014,7 +1022,7 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
 }
 
 // Pomocnicze do testowania jednostkowego (export internal helpers)
-export { normalizeAdres, rankTypu, maxTyp };
+export { normalizeAdres, rankTypu, rodzinaTypu, maxTyp };
 // timeStrToMin reexport dla wygody w UI
 export { timeStrToMin };
 // PLAN_CONFIG i getZmiana reexport zeby UI nie musial importu z dwoch plikow

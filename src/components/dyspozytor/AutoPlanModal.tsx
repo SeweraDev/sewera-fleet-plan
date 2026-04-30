@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { geocodeAddress, NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import { ZMIANY, ZMIANA_DEFAULT, type ZmianaKod } from '@/lib/planConfig';
-import { planTras, rankTypu, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult, type KursPropozycja } from '@/lib/planTras';
+import { planTras, rankTypu, rodzinaTypu, type ZlecenieDoPlanu, type WzDoPlanu, type PojazdSlot, type KierowcaSlot, type PlanResult, type KursPropozycja } from '@/lib/planTras';
 import { suggestCrossBranchV2, type ObcyKurs } from '@/lib/crossBranchSuggest';
 import { proponujDorzucenie, type SugestiaDorzucenia, type PaczkaObca } from '@/lib/proponujDorzucenie';
 import { scalAdresy } from '@/lib/planTras';
@@ -1061,8 +1061,11 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                     // i (b) więcej zleceń lub równo niż source.
                     if (rankTypu(tgtKurs.pojazd.typ) < rankTypu(srcKurs.pojazd.typ)) continue;
                     if (tgtKurs.przystanki.length < srcKurs.przystanki.length) continue;
-                    // Pojazd target musi obsłużyć typ paczki (hierarchia)
-                    if (paczka.wymagany_typ && rankTypu(tgtKurs.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
+                    // Pojazd target musi obsłużyć typ paczki — strict family match + rank w rodzinie
+                    if (paczka.wymagany_typ) {
+                      if (rodzinaTypu(tgtKurs.pojazd.typ) !== rodzinaTypu(paczka.wymagany_typ)) continue;
+                      if (rankTypu(tgtKurs.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
+                    }
                     // Mieści się wagowo? (m³ i palety pomijamy — często szacowane z proxy
                     // i blokują sensowne sugestie. Dyspozytor zweryfikuje wizualnie.)
                     if (tgtKurs.suma_kg + paczka.suma_kg > tgtKurs.pojazd.ladownosc_kg) continue;
