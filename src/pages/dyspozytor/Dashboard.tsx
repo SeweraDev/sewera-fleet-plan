@@ -395,29 +395,26 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                     </TableHeader>
                     <TableBody>
                       {(() => {
-                        // Klucz grupowania: dla zakończonych = adres (spójnie z algorytmem rozliczenia,
-                        // ten sam adres w różnych kolejnosc = jeden przystanek).
-                        // Dla planowanych/aktywnych — stary styl (po kolejnosc), bez zmian.
+                        // Klucz grupowania: ZAWSZE adres (spójnie z algorytmem rozliczenia
+                        // i mental modelem usera — ten sam adres w różnych zleceniach to
+                        // jeden przystanek dla kierowcy, niezależnie od statusu kursu).
                         const groupKeyOf = (w: { kolejnosc: number; adres: string }) =>
-                          isZakonczony ? normAdres(w.adres) : String(w.kolejnosc);
+                          normAdres(w.adres);
 
-                        // Dla zakończonych — posortuj WZ tak, żeby ten sam adres był
-                        // w ciągłym bloku (rowSpan musi być spójny). Zachowujemy kolejność
-                        // pierwszego wystąpienia adresu (stabilnie), by chronologia ogólna została.
-                        let kPrzSorted = kPrz;
-                        if (isZakonczony) {
-                          const firstIdxByKey = new Map<string, number>();
-                          kPrz.forEach((x, i) => {
-                            const k = groupKeyOf(x);
-                            if (!firstIdxByKey.has(k)) firstIdxByKey.set(k, i);
-                          });
-                          kPrzSorted = [...kPrz].sort((a, b) => {
-                            const ka = groupKeyOf(a);
-                            const kb = groupKeyOf(b);
-                            if (ka === kb) return 0; // stabilny — zachowaj porządek w grupie
-                            return (firstIdxByKey.get(ka)! - firstIdxByKey.get(kb)!);
-                          });
-                        }
+                        // Posortuj WZ tak, żeby ten sam adres był w ciągłym bloku
+                        // (rowSpan musi być spójny). Zachowujemy kolejność pierwszego
+                        // wystąpienia adresu — chronologia ogólna kursu pozostaje.
+                        const firstIdxByKey = new Map<string, number>();
+                        kPrz.forEach((x, i) => {
+                          const k = groupKeyOf(x);
+                          if (!firstIdxByKey.has(k)) firstIdxByKey.set(k, i);
+                        });
+                        const kPrzSorted = [...kPrz].sort((a, b) => {
+                          const ka = groupKeyOf(a);
+                          const kb = groupKeyOf(b);
+                          if (ka === kb) return 0; // stabilny — zachowaj porządek w grupie
+                          return (firstIdxByKey.get(ka)! - firstIdxByKey.get(kb)!);
+                        });
 
                         // Renumeracja # po kolejności grup
                         const displayNumMap = new Map<string, number>();

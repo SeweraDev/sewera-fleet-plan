@@ -300,26 +300,62 @@ export default function KartaDrogowa() {
             </tr>
           </thead>
           <tbody>
-            {przystanki.map((p) => (
-              <tr key={p.id}>
-                <td className="text-center">{p.kolejnosc}</td>
-                <td>{p.preferowana_godzina || '—'}</td>
-                <td className="truncate-cell">{p.odbiorca}</td>
-                <td className="font-mono text-[8pt]">
-                  {p.numer_wz || p.zl_numer}
-                  {p.nr_zamowienia && <div className="text-[7pt] text-muted-foreground">{p.nr_zamowienia}</div>}
-                </td>
-                <td>{p.adres}</td>
-                <td className="text-right">
-                  {p.km_prosta != null ? p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
-                </td>
-                <td className="text-center font-mono font-semibold">{p.klasyfikacja || ''}</td>
-                <td className="text-right">{Math.round(p.masa_kg)}</td>
-                <td className="text-right">{p.ilosc_palet || ''}</td>
-                <td className="text-[8pt]">{p.tel}</td>
-                <td className="cell-uwagi">{p.uwagi}</td>
-              </tr>
-            ))}
+            {(() => {
+              // Grupowanie WZ po adresie (ten sam adres = jeden przystanek dla
+              // kierowcy). Sortuj żeby grupy były ciągłe, numerację licz per grupę.
+              const normAdr = (a: string) => (a || '').trim().toLowerCase().replace(/\s+/g, ' ');
+              const firstIdxByKey = new Map<string, number>();
+              przystanki.forEach((x, i) => {
+                const k = normAdr(x.adres);
+                if (!firstIdxByKey.has(k)) firstIdxByKey.set(k, i);
+              });
+              const sorted = [...przystanki].sort((a, b) => {
+                const ka = normAdr(a.adres);
+                const kb = normAdr(b.adres);
+                if (ka === kb) return 0;
+                return (firstIdxByKey.get(ka)! - firstIdxByKey.get(kb)!);
+              });
+              const displayNumMap = new Map<string, number>();
+              sorted.forEach(x => {
+                const k = normAdr(x.adres);
+                if (!displayNumMap.has(k)) displayNumMap.set(k, displayNumMap.size + 1);
+              });
+              return sorted.map((p, idx) => {
+                const key = normAdr(p.adres);
+                const prevKey = idx > 0 ? normAdr(sorted[idx - 1].adres) : null;
+                const isFirst = idx === 0 || prevKey !== key;
+                const groupSize = sorted.filter(x => normAdr(x.adres) === key).length;
+                const displayNum = displayNumMap.get(key)!;
+                return (
+                  <tr key={p.id}>
+                    {isFirst ? (
+                      <td rowSpan={groupSize} className="text-center align-top">{displayNum}</td>
+                    ) : null}
+                    <td>{p.preferowana_godzina || '—'}</td>
+                    <td className="truncate-cell">{p.odbiorca}</td>
+                    <td className="font-mono text-[8pt]">
+                      {p.numer_wz || p.zl_numer}
+                      {p.nr_zamowienia && <div className="text-[7pt] text-muted-foreground">{p.nr_zamowienia}</div>}
+                    </td>
+                    {isFirst ? (
+                      <td rowSpan={groupSize} className="align-top">{p.adres}</td>
+                    ) : null}
+                    {isFirst ? (
+                      <td rowSpan={groupSize} className="text-right align-top">
+                        {p.km_prosta != null ? p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''}
+                      </td>
+                    ) : null}
+                    <td className="text-center font-mono font-semibold">{p.klasyfikacja || ''}</td>
+                    <td className="text-right">{Math.round(p.masa_kg)}</td>
+                    <td className="text-right">{p.ilosc_palet || ''}</td>
+                    {isFirst ? (
+                      <td rowSpan={groupSize} className="text-[8pt] align-top">{p.tel}</td>
+                    ) : null}
+                    <td className="cell-uwagi">{p.uwagi}</td>
+                  </tr>
+                );
+              });
+            })()}
           </tbody>
         </table>
 
