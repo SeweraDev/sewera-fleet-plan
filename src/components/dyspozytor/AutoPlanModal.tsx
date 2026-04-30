@@ -1062,7 +1062,7 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                 pozycja: number; // kolejność wstawienia (1-based, widoczne dla usera)
                 objazdKm: number;
               };
-              // Wykluczenie zleceń, które są w sekcji cross-branch (idą do innego oddziału)
+              // Krok 1: paczki cross-branch (idą do innego oddziału — wykluczone z dorzucania wewn.)
               const wykluczonePaczki = new Set<string>();
               if (literalTypySetOddzial) {
                 for (const kurs of planResult.kursy) {
@@ -1074,6 +1074,30 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                 }
               }
 
+              // Krok 2: kursy "ruchome" — wszystkie ich paczki da się usunąć (cross-branch
+              // lub mieszczą się gdziekolwiek indziej). Takie kursy znikają po akceptacji
+              // sugestii, więc NIE oferujemy ich jako TARGET dla innych zleceń.
+              const paczkaPasujeDoInnegoKursu = (
+                paczka: typeof planResult.kursy[0]['przystanki'][0],
+                wlasnyKursIdx: number
+              ): boolean => {
+                for (let ti = 0; ti < planResult.kursy.length; ti++) {
+                  if (ti === wlasnyKursIdx) continue;
+                  const o = planResult.kursy[ti];
+                  if (paczka.wymagany_typ && rankTypu(o.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
+                  if (o.suma_kg + paczka.suma_kg > o.pojazd.ladownosc_kg) continue;
+                  return true;
+                }
+                return false;
+              };
+              const kursyRuchome = new Set<string>();
+              planResult.kursy.forEach((k, ki) => {
+                const wszystkie = k.przystanki.every((p) =>
+                  wykluczonePaczki.has(p.klucz_adresu) || paczkaPasujeDoInnegoKursu(p, ki)
+                );
+                if (wszystkie) kursyRuchome.add(k.kurs_id_tmp);
+              });
+
               const sugestie: SugestiaWewn[] = [];
               for (let si = 0; si < planResult.kursy.length; si++) {
                 const srcKurs = planResult.kursy[si];
@@ -1082,6 +1106,9 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                   for (let ti = 0; ti < planResult.kursy.length; ti++) {
                     if (ti === si) continue;
                     const tgtKurs = planResult.kursy[ti];
+                    // Target nie może być "ruchomy" — czyli kurs który sam znika po
+                    // przeniesieniu wszystkich swoich zleceń
+                    if (kursyRuchome.has(tgtKurs.kurs_id_tmp)) continue;
                     // Pojazd target musi obsłużyć typ paczki (hierarchia)
                     if (paczka.wymagany_typ && rankTypu(tgtKurs.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
                     // Mieści się wagowo + m³ + palety w target?
