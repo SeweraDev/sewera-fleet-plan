@@ -288,9 +288,9 @@ export function getKmProstaFromOddzial(
 /**
  * Strategia wyboru km z alternatyw OSRM zależna od typu pojazdu:
  *
- * - Dostawczy 1,2t (małe auto) → najkrótsza × 1.1
- *   Logika: małe auta jadą bocznymi drogami (krótsze trasy), ale margines 10%
- *   na zatory/manewry/parkowanie.
+ * - Dostawczy 1,2t (małe auto) → najkrótsza + warunkowy mnożnik:
+ *   - dystans ≤ 10 km → ×1.1 (krótki dystans, ~1-2 km różnicy istotne w cenniku)
+ *   - dystans > 10 km → bez mnożnika (OSRM już dokładny)
  *
  * - Pozostałe typy (Winda, HDS) → mediana z alternatyw — odrzucamy 2 skrajne
  *   wartości z 3 alternatyw OSRM (najkrótsza i najdłuższa, zostaje środkowa).
@@ -304,10 +304,14 @@ export function pickKmFromAlternatives(alternatives: number[], typPojazdu?: stri
   if (alternatives.length === 0) return 0;
   const sorted = [...alternatives].sort((a, b) => a - b);
 
-  // Małe auta — najkrótsza × 1.1
+  // Małe auta — najkrótsza, ×1.1 tylko dla dystansu ≤ 10 km
   const tp = (typPojazdu || '').toLowerCase();
   if (tp.includes('1,2t') || tp.includes('dostawczy')) {
-    return Math.round(sorted[0] * 1.1);
+    const najkrotsza = sorted[0];
+    if (najkrotsza <= 10) {
+      return Math.round(najkrotsza * 1.1);
+    }
+    return najkrotsza;
   }
 
   // Pozostałe — mediana / środkowa

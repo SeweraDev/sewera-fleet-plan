@@ -544,7 +544,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             <p className="text-xs text-muted-foreground">
               Ceny netto w PLN (VAT 23%). Odległość w jedną stronę (OSRM).
               Pokazujemy 2 najbliższe oddziały oraz Twój — niezależnie od km — bo bliższy oddział oznacza niższe koszty (zwłaszcza dla HDS).
-              Strategia km: dla 1,2t najkrótsza ×1,1 (małe auta — boczne drogi + margines), dla pozostałych mediana z alternatyw OSRM.
+              Strategia km: dla 1,2t najkrótsza (×1,1 tylko dla dystansu ≤10 km), dla pozostałych mediana z alternatyw OSRM.
             </p>
           </div>
         )}
