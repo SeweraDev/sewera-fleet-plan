@@ -1016,32 +1016,6 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                           Aktualnie zaplanowane w: {pr.kursLabel}
                           {pr.kosztAktualny != null && <> • klient zapłaci <b>{pr.kosztAktualny.toFixed(2)} zł</b></>}
                         </div>
-                        {pr.kandydaci.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
-                            <div className="text-xs font-medium mb-1">
-                              💡 Można dorzucić do tej dostawy (waga pasuje do {pr.paczka.wymagany_typ}, kierunek się zgadza):
-                            </div>
-                            <div className="space-y-0.5">
-                              {pr.kandydaci.map((k) => {
-                                const dist = haversineKm(
-                                  { lat: pr.paczka.lat, lng: pr.paczka.lng },
-                                  { lat: k.lat, lng: k.lng }
-                                );
-                                return (
-                                  <div key={k.klucz_adresu} className="text-xs flex justify-between gap-2">
-                                    <span className="truncate">• <b>{k.odbiorca}</b> — {k.adres}</span>
-                                    <span className="text-muted-foreground whitespace-nowrap">
-                                      {Math.round(k.suma_kg)} kg • {dist.toFixed(1)} km od głównego
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground mt-1">
-                              Decyzję o dorzuceniu podejmuje dyspozytor docelowego oddziału — sprawdzi kompatybilność klasyfikacji i okno czasowe.
-                            </div>
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -1074,30 +1048,6 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                 }
               }
 
-              // Krok 2: kursy "ruchome" — wszystkie ich paczki da się usunąć (cross-branch
-              // lub mieszczą się gdziekolwiek indziej). Takie kursy znikają po akceptacji
-              // sugestii, więc NIE oferujemy ich jako TARGET dla innych zleceń.
-              const paczkaPasujeDoInnegoKursu = (
-                paczka: typeof planResult.kursy[0]['przystanki'][0],
-                wlasnyKursIdx: number
-              ): boolean => {
-                for (let ti = 0; ti < planResult.kursy.length; ti++) {
-                  if (ti === wlasnyKursIdx) continue;
-                  const o = planResult.kursy[ti];
-                  if (paczka.wymagany_typ && rankTypu(o.pojazd.typ) < rankTypu(paczka.wymagany_typ)) continue;
-                  if (o.suma_kg + paczka.suma_kg > o.pojazd.ladownosc_kg) continue;
-                  return true;
-                }
-                return false;
-              };
-              const kursyRuchome = new Set<string>();
-              planResult.kursy.forEach((k, ki) => {
-                const wszystkie = k.przystanki.every((p) =>
-                  wykluczonePaczki.has(p.klucz_adresu) || paczkaPasujeDoInnegoKursu(p, ki)
-                );
-                if (wszystkie) kursyRuchome.add(k.kurs_id_tmp);
-              });
-
               const sugestie: SugestiaWewn[] = [];
               for (let si = 0; si < planResult.kursy.length; si++) {
                 const srcKurs = planResult.kursy[si];
@@ -1106,9 +1056,6 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
                   for (let ti = 0; ti < planResult.kursy.length; ti++) {
                     if (ti === si) continue;
                     const tgtKurs = planResult.kursy[ti];
-                    // Target nie może być "ruchomy" — czyli kurs który sam znika po
-                    // przeniesieniu wszystkich swoich zleceń
-                    if (kursyRuchome.has(tgtKurs.kurs_id_tmp)) continue;
                     // Konsolidacja: tylko małe kursy → duże, nie odwrotnie.
                     // Wymagamy żeby target miał (a) większy lub równy pojazd
                     // i (b) więcej zleceń lub równo niż source.
