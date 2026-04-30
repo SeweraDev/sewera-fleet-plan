@@ -196,8 +196,13 @@ const TYP_RANK: Record<string, number> = {
   'Winda 1,8t': 2,
   'Winda 6,3t': 3,
   'Winda MAX': 4,
+  'Winda MAX 15,8t': 4,
+  'HDS 8,9t': 5,
   'HDS 9,0t': 5,
+  'HDS 9,1t': 5,
+  'HDS 11,7t': 6,
   'HDS 12,0t': 6,
+  'HDS 12T': 6,
 };
 
 /**
@@ -211,8 +216,13 @@ const TYP_RODZINA: Record<string, string> = {
   'Winda 1,8t': 'Winda',
   'Winda 6,3t': 'Winda',
   'Winda MAX': 'Winda',
+  'Winda MAX 15,8t': 'Winda',
+  'HDS 8,9t': 'HDS',
   'HDS 9,0t': 'HDS',
+  'HDS 9,1t': 'HDS',
+  'HDS 11,7t': 'HDS',
   'HDS 12,0t': 'HDS',
+  'HDS 12T': 'HDS',
 };
 
 function stripTyp(typ: string | null): string {
