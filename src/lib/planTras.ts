@@ -161,6 +161,14 @@ export interface PlanInput {
   zlecenia: ZlecenieDoPlanu[];
   pojazdy: PojazdSlot[];
   kierowcy: KierowcaSlot[];
+  /**
+   * Algorytm budowania tras wewnątrz jednej iteracji kurs/pojazd:
+   * - 'savings' (default) — Clarke-Wright savings + 2-opt (dotychczasowy)
+   * - 'clustering' — kotwica + objazd (nowy, wg decyzji user'a 30.04)
+   */
+  algorytm?: 'savings' | 'clustering';
+  /** Limit objazdu w km dla algorytmu 'clustering'. Default 5. */
+  max_objazd_km?: number;
 }
 
 // ============================================================
@@ -554,6 +562,106 @@ function savingsAlgorithm(
 }
 
 // ============================================================
+// CLUSTERING ALGORITHM (kotwica + objazd) — alternatywa do Savings
+// ============================================================
+// Idea biznesowa (decyzja usera 30.04):
+// 1. Wybierz najdalsza paczka kompatybilna z pojazdem = KOTWICA (cel trasy)
+// 2. Dla kazdej innej paczki sprawdz cheapest insertion w trase:
+//    objazd = dist(before,X) + dist(X,after) - dist(before,after)
+//    Jesli najlepszy objazd <= MAX_OBJAZD_KM -> dorzuc na tej pozycji
+// 3. Pakuj az capacity (kg/m3/palety) lub czas pracy sie zapcha
+// 4. 2-opt na koncu zeby zoptymalizowac kolejnosc
+
+function clusteringAlgorithm(
+  paczki: PaczkaPrzystankowa[],
+  pojazd: PojazdSlot,
+  distKm: number[][],
+  distMin: number[][],
+  maxCzasMin: number,
+  wracaDoBazy: boolean,
+  maxObjazdKm: number
+): Trasa[] {
+  // 1. Filtruj paczki kompatybilne z pojazdem (typowo + capacity per paczka)
+  const idxKompat: number[] = [];
+  for (let i = 0; i < paczki.length; i++) {
+    if (!pojazdSpelniaTyp(pojazd, paczki[i])) continue;
+    if (!miesciSieWPojezdzie(pojazd, [paczki[i]])) continue;
+    idxKompat.push(i + 1); // distMin: 0 = baza, 1..N = paczki
+  }
+  if (idxKompat.length === 0) return [];
+
+  // 2. KOTWICA = paczka najdalej od bazy (po km)
+  let kotwicaIdx = idxKompat[0];
+  let najdalej = distKm[0][kotwicaIdx];
+  for (const idx of idxKompat) {
+    if (distKm[0][idx] > najdalej) {
+      najdalej = distKm[0][idx];
+      kotwicaIdx = idx;
+    }
+  }
+
+  // 3. Inicjalizuj trase: [kotwica]
+  let trasa: number[] = [kotwicaIdx];
+  const dodane = new Set<number>([kotwicaIdx]);
+  let sum_kg = paczki[kotwicaIdx - 1].suma_kg;
+  let sum_m3 = paczki[kotwicaIdx - 1].suma_m3;
+  let sum_palet = paczki[kotwicaIdx - 1].suma_palet;
+
+  // 4. Iteracyjnie dorzucaj paczki o najmniejszym objezdzie
+  while (true) {
+    let bestIdx: number | null = null;
+    let bestPos: number | null = null;
+    let bestObjazd = Infinity;
+
+    for (const idx of idxKompat) {
+      if (dodane.has(idx)) continue;
+      const p = paczki[idx - 1];
+      if (sum_kg + p.suma_kg > pojazd.ladownosc_kg) continue;
+      if (pojazd.objetosc_m3 != null && sum_m3 + p.suma_m3 > pojazd.objetosc_m3) continue;
+      if (pojazd.max_palet != null && sum_palet + p.suma_palet > pojazd.max_palet) continue;
+
+      // Cheapest insertion: dla kazdej pozycji policz objazd
+      for (let pos = 0; pos <= trasa.length; pos++) {
+        const before = pos === 0 ? 0 : trasa[pos - 1];
+        // after: gdy pos === trasa.length to liczymy do bazy (jesli wracaDoBazy)
+        const after = pos === trasa.length
+          ? (wracaDoBazy ? 0 : null)
+          : trasa[pos];
+        const oryg = after === null ? 0 : distKm[before][after];
+        const noweDoBefore = distKm[before][idx];
+        const noweDoAfter = after === null ? 0 : distKm[idx][after];
+        const objazd = noweDoBefore + noweDoAfter - oryg;
+        if (objazd < bestObjazd) {
+          bestObjazd = objazd;
+          bestIdx = idx;
+          bestPos = pos;
+        }
+      }
+    }
+
+    if (bestIdx == null || bestPos == null) break;
+    if (bestObjazd > maxObjazdKm) break;
+
+    // Wstaw kandydata
+    const noweTrasa = [...trasa.slice(0, bestPos), bestIdx, ...trasa.slice(bestPos)];
+    const czasMin = obliczCzasKursu(noweTrasa, distMin, wracaDoBazy);
+    if (czasMin > maxCzasMin) break; // czas pracy przekroczony — zatrzymaj
+
+    trasa = noweTrasa;
+    dodane.add(bestIdx);
+    const p = paczki[bestIdx - 1];
+    sum_kg += p.suma_kg;
+    sum_m3 += p.suma_m3;
+    sum_palet += p.suma_palet;
+  }
+
+  // 5. 2-opt
+  const optTrasa = twoOpt(trasa, distKm);
+
+  return [{ paczki: optTrasa }];
+}
+
+// ============================================================
 // 2-OPT LOCAL SEARCH — popraw kolejnosc w kazdej trasie
 // ============================================================
 
@@ -800,14 +908,26 @@ export async function planTras(input: PlanInput): Promise<PlanResult> {
         }
       }
 
-      const trasy = savingsAlgorithm(
-        dostepneTeraz,
-        pojazd,
-        localDistKm,
-        localDistMin,
-        maxCzasMin,
-        PLAN_CONFIG.auto_wraca_do_bazy
-      );
+      const algorytmWybor = input.algorytm ?? 'savings';
+      const maxObjazdKm = input.max_objazd_km ?? 5;
+      const trasy = algorytmWybor === 'clustering'
+        ? clusteringAlgorithm(
+            dostepneTeraz,
+            pojazd,
+            localDistKm,
+            localDistMin,
+            maxCzasMin,
+            PLAN_CONFIG.auto_wraca_do_bazy,
+            maxObjazdKm
+          )
+        : savingsAlgorithm(
+            dostepneTeraz,
+            pojazd,
+            localDistKm,
+            localDistMin,
+            maxCzasMin,
+            PLAN_CONFIG.auto_wraca_do_bazy
+          );
       if (trasy.length === 0) break;
 
       // Wez trase z najwieksza waga

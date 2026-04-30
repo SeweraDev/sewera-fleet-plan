@@ -50,6 +50,8 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [sugestieDorzucenia, setSugestieDorzucenia] = useState<SugestiaDorzucenia[]>([]);
   const [progressMsg, setProgressMsg] = useState('');
+  const [algorytm, setAlgorytm] = useState<'savings' | 'clustering'>('savings');
+  const [maxObjazdKm, setMaxObjazdKm] = useState<number>(5);
   /** Set kurs_id_tmp ktore zostaly zaakceptowane (zapisane do DB). */
   const [zaakceptowane, setZaakceptowane] = useState<Set<string>>(new Set());
   /** Map kurs_id_tmp -> realny kurs_id (po INSERT) — do generowania karty drogowej. */
@@ -420,6 +422,8 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         zlecenia: zleceniaPlanu,
         pojazdy: pojazdyDostepne,
         kierowcy: kierowcySloty,
+        algorytm,
+        max_objazd_km: maxObjazdKm,
       });
 
       // 9. Cross-branch — pobierz floty innych oddzialow ktore moga obsluzyc niezaplanowane
@@ -672,6 +676,40 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
         {/* === STAGE: config === */}
         {step === 'config' && (
           <div className="space-y-4">
+            <div>
+              <h3 className="font-medium mb-2">Algorytm planowania</h3>
+              <div className="flex items-center gap-3 p-2 border rounded text-sm">
+                <Select value={algorytm} onValueChange={(v) => setAlgorytm(v as 'savings' | 'clustering')}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="savings">Savings (Clarke-Wright) — domyślny</SelectItem>
+                    <SelectItem value="clustering">Clustering (kotwica + objazd) — nowy</SelectItem>
+                  </SelectContent>
+                </Select>
+                {algorytm === 'clustering' && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    Limit objazdu:
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      step={1}
+                      value={maxObjazdKm}
+                      onChange={(e) => setMaxObjazdKm(Math.max(1, Math.min(20, Number(e.target.value) || 5)))}
+                      className="w-16 px-2 py-1 border rounded text-xs"
+                    />
+                    km
+                  </label>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {algorytm === 'savings'
+                  ? 'Łączy pary tras po największych oszczędnościach (sprawdzona, ~95-98% optimum).'
+                  : 'Zaczyna od najdalszej paczki jako kotwicy, dorzuca paczki po drodze (objazd ≤ X km).'}
+              </p>
+            </div>
             <div>
               <h3 className="font-medium mb-2">Dostępność kierowców i zmiany</h3>
               {loadingDane ? (
