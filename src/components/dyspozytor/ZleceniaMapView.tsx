@@ -67,7 +67,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
   // Filtry trybu planera
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
   const baseDzien = dzien || today;
-  const [pokazZalegle, setPokazZalegle] = useState(false);
+  const [pokazZalegle, setPokazZalegle] = useState(true);
 
   // Filtruj zlecenia wg trybu planera
   const filteredZlecenia = useMemo(() => {
@@ -309,6 +309,18 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
             Klik markera = zaznacz / odznacz. Wszystkie zlecenia spod tego adresu wpadną do koszyka.
           </span>
         </div>
+
+        {filteredZlecenia.length === 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            Brak zleceń bez kursu na ten dzień{pokazZalegle ? ' ani z poprzednich dni' : ''}.
+            {!pokazZalegle && ' Zaznacz checkbox „Pokaż także zaległe z poprzednich dni" powyżej, aby zobaczyć starsze zlecenia.'}
+          </div>
+        )}
+        {filteredZlecenia.length > 0 && pins.length === 0 && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 px-3 py-2 text-xs text-blue-700 dark:text-blue-400">
+            🔄 Ładuję współrzędne {filteredZlecenia.length} zleceń... To może potrwać kilkanaście sekund (Photon limit 1 req/s).
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-2">
           <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 600 }} />
