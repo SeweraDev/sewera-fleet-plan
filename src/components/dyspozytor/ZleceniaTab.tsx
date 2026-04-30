@@ -276,9 +276,14 @@ export function ZleceniaTab({
 
   const STATUS_ORDER: Record<string, number> = { robocza: 0, do_weryfikacji: 1, potwierdzona: 2, w_trasie: 3, dostarczona: 4, anulowana: 5 };
 
-  const filteredBase = statusFilter === 'bez_kursu' ? zlecenia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana')
-    : statusFilter === 'all' ? zlecenia.filter(z => z.status !== 'anulowana')
-    : zlecenia.filter(z => z.status === statusFilter);
+  // Strict filter po wybranym dniu — wszystko co widzi tabela jest TYLKO z wybranego dnia.
+  // Zlecenia z innych dni (zaległe) pojawiają się jako osobne banery powyżej.
+  const dzienAktualny = dzien || new Date().toISOString().split('T')[0];
+  const zleceniaDnia = zlecenia.filter(z => z.dzien === dzienAktualny);
+
+  const filteredBase = statusFilter === 'bez_kursu' ? zleceniaDnia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana')
+    : statusFilter === 'all' ? zleceniaDnia.filter(z => z.status !== 'anulowana')
+    : zleceniaDnia.filter(z => z.status === statusFilter);
   const filtered = [...filteredBase].sort((a, b) => {
     let cmp = 0;
     if (sortBy === 'dzien') cmp = a.dzien.localeCompare(b.dzien);
@@ -405,17 +410,62 @@ export function ZleceniaTab({
     refetch();
   };
 
-  // Podsumowanie ładunku (tylko zlecenia bez kursu, aktywne)
-  const bezKursu = zlecenia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana');
+  // Podsumowanie ładunku — tylko z wybranego dnia
+  const bezKursu = zleceniaDnia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana');
   const sumaKg = bezKursu.reduce((s, z) => s + z.suma_kg, 0);
   const sumaM3 = bezKursu.reduce((s, z) => s + z.suma_m3, 0);
   const sumaPal = bezKursu.reduce((s, z) => s + z.suma_palet, 0);
+
+  // Zaległe — zlecenia bez kursu z dni PRZED wybranym dniem, pogrupowane po dacie
+  type ZalegleGrupa = { dzien: string; zlecenia: typeof zlecenia; kg: number; m3: number; pal: number };
+  const zalegleByDayMap = new Map<string, ZalegleGrupa>();
+  for (const z of zlecenia) {
+    if (z.dzien >= dzienAktualny) continue;
+    if (z.kurs_numer || z.kurs_nrrej) continue;
+    if (z.status === 'anulowana') continue;
+    const g = zalegleByDayMap.get(z.dzien) || { dzien: z.dzien, zlecenia: [], kg: 0, m3: 0, pal: 0 };
+    g.zlecenia.push(z);
+    g.kg += z.suma_kg;
+    g.m3 += z.suma_m3;
+    g.pal += z.suma_palet;
+    zalegleByDayMap.set(z.dzien, g);
+  }
+  const zalegleGrupy = Array.from(zalegleByDayMap.values()).sort((a, b) => a.dzien.localeCompare(b.dzien));
 
   if (loading) return <p className="text-muted-foreground text-center py-8">Ładowanie zleceń...</p>;
 
   return (
     <div className="space-y-4">
-      {/* Baner podsumowania */}
+      {/* Banery zaległych zleceń z poprzednich dni (per dzień) */}
+      {zalegleGrupy.length > 0 && (
+        <div className="space-y-2">
+          {zalegleGrupy.map((g) => (
+            <div key={g.dzien} className="flex items-center justify-between rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-2 text-sm">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-semibold text-red-700 dark:text-red-400">
+                  ⏰ Zaległe z {new Date(g.dzien).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                </span>
+                <span className="text-red-600 dark:text-red-300">
+                  {g.zlecenia.length} {g.zlecenia.length === 1 ? 'zlecenie' : 'zleceń'}
+                  {' • '}{Math.round(g.kg).toLocaleString('pl-PL')} kg
+                  {g.m3 > 0 && ` • ${Math.round(g.m3 * 10) / 10} m³`}
+                  {g.pal > 0 && ` • ${Math.round(g.pal)} pal`}
+                </span>
+              </div>
+              {onOpenKursModal && (
+                <button
+                  onClick={() => onOpenKursModal(g.zlecenia.map(z => z.id))}
+                  className="text-sm font-semibold text-red-700 dark:text-red-400 hover:underline"
+                >
+                  Zaplanuj →
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Baner podsumowania (wybrany dzień) */}
       {bezKursu.length > 0 && (
         <div className="flex items-center justify-between rounded-lg bg-accent/15 border border-accent/30 px-4 py-3">
           <div className="flex items-center gap-4 flex-wrap text-sm">
