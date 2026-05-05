@@ -152,6 +152,8 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
           <CzasDostawyStep
             dzien={dzien} setDzien={setDzien}
             godzina={godzina} setGodzina={setGodzina}
+            oddzialId={oddzialId}
+            typPojazdu={typPojazdu}
             onBack={() => setStep(1)}
             onNext={() => setStep(3)}
           />
