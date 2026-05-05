@@ -1073,10 +1073,14 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
           <WzFormTabs wzList={wzList} setWzList={setWzList} error={error} submitting={submitting} onBack={() => setStep(2)} onSubmit={handleGoToCheck} typPojazdu={typPojazdu} />
         )}
         {step === 4 && oddzialId && (
-          <DostepnoscStep oddzialId={oddzialId} typPojazdu={typPojazdu} dzien={dzien} godzina={godzina} wzList={wzList}
+          <DostepnoscStep oddzialId={oddzialId}
+            oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
+            typPojazdu={typPojazdu} dzien={dzien} godzina={godzina} wzList={wzList}
+            oddzialy={oddzialy}
             onBack={() => setStep(3)} onSubmit={handleSubmit} submitting={submitting}
             onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(2); }}
-            onChangeGodzina={(newGodzina) => { setGodzina(newGodzina); setStep(2); }} />
+            onChangeGodzina={(newGodzina) => { setGodzina(newGodzina); setStep(2); }}
+            onChangeOddzial={(newOddzialId) => { setOddzialId(newOddzialId); setStep(1); }} />
         )}
       </CardContent>
     </Card>
