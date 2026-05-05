@@ -58,7 +58,10 @@ export function useQuickAvailability(
   useEffect(() => {
     let cancelled = false;
 
+    console.log('[useQuickAvailability] called with:', { oddzialId, typPojazdu, dzien });
+
     if (!oddzialId || !typPojazdu || typPojazdu === 'bez_preferencji' || !dzien) {
+      console.log('[useQuickAvailability] skipped - missing or generic input');
       setResult(EMPTY);
       return;
     }
@@ -77,7 +80,9 @@ export function useQuickAvailability(
       if (cancelled) return;
 
       const vehicleList = vehicles || [];
+      console.log('[useQuickAvailability] vehicles found:', vehicleList);
       if (vehicleList.length === 0) {
+        console.log('[useQuickAvailability] no vehicles of type', typPojazdu, 'in oddzial', oddzialId);
         setResult({ loading: false, totalCount: 0, availableCount: 0, blocked: [] });
         return;
       }
@@ -101,6 +106,8 @@ export function useQuickAvailability(
 
       if (cancelled) return;
 
+      console.log('[useQuickAvailability] blokady found:', blokady);
+
       // 3. Wyznacz blokady na wybrany dzień + ich datę "do kiedy"
       const blokadyByVehicle = new Map<string, Set<string>>();
       (blokady || []).forEach(b => {
@@ -120,12 +127,14 @@ export function useQuickAvailability(
         });
       }
 
-      setResult({
+      const finalResult = {
         loading: false,
         totalCount: vehicleList.length,
         availableCount: vehicleList.length - blocked.length,
         blocked,
-      });
+      };
+      console.log('[useQuickAvailability] result:', finalResult);
+      setResult(finalResult);
     })();
 
     return () => { cancelled = true; };
