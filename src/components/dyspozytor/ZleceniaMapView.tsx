@@ -82,7 +82,8 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
   // Filtry trybu planera
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
   const baseDzien = dzien || today;
-  const [pokazZalegle, setPokazZalegle] = useState(true);
+  // Domyślnie pokazuj TYLKO wybrany dzień; checkbox pozwala dodać zaległe z wcześniejszych dni
+  const [pokazZalegle, setPokazZalegle] = useState(false);
 
   // Filtruj zlecenia wg trybu planera
   const filteredZlecenia = useMemo(() => {
