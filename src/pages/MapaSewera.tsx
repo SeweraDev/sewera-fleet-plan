@@ -16,9 +16,9 @@ const ODDZIAL_COLORS: Record<string, string> = {
 const DEFAULT_COLOR = '#6b7280';
 
 // Ikony pojazdów per typ — pliki w public/icons/
-const ICON_VAN = '/icons/1200kg.PNG';
-const ICON_WINDA = '/icons/Winda.PNG';
-const ICON_HDS = '/icons/hds.PNG';
+const ICON_VAN = '/icons/van-12t.png';
+const ICON_WINDA = '/icons/winda.png';
+const ICON_HDS = '/icons/hds.png';
 
 /** Mapuje typ pojazdu (systemowy lub zewn. z prefiksem zew:) na ścieżkę ikony. */
 function getVehicleIcon(typ: string | null | undefined): string | null {
