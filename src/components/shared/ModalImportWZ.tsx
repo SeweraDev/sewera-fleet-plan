@@ -655,6 +655,34 @@ function decodePUA(text: string): string {
 }
 
 /* ─── cleanText — remove non-printable chars from PDF clipboard ─── */
+/**
+ * Słownik typowych pomyłek OCR (Tesseract) na polskich nazwach geograficznych
+ * i ulicach. Stosujemy DOPIERO po wyciągnięciu adresu — żeby nie psuć innych pól.
+ *
+ * Zasady:
+ * - Word boundary `\b` żeby nie psuć słów które w środku mają litery jak "Sla..."
+ * - Regex case-sensitive, ale obsługujemy kapitalizację przez funkcję replacer
+ * - Tylko WYSOKO PEWNE pomyłki — lepiej zostawić nieskorygowane niż uszkodzić poprawne dane
+ */
+function fixPolishOCRAddress(addr: string): string {
+  if (!addr) return addr;
+  return addr
+    // "Sląsk*" / "Slask*" → "Śląsk*" (Tesseract gubi Ś i ą)
+    // np. "Siemianowice Sląskie" → "Siemianowice Śląskie"
+    //     "Ruda Slaska" → "Ruda Śląska"
+    .replace(/\b([Ss])l([aą])sk/g, (_, s, a) => (s === 'S' ? 'Ś' : 'ś') + 'l' + (a === 'a' ? 'ą' : a) + 'sk')
+    // "Oświęd*" / "Oswied*" / "Oswięd*" → "Oświęcim*" (OCR myli "ci" jako "d")
+    // np. "Oświędmska" → "Oświęcimska"
+    .replace(/\b([Oo])święd(?=[mn])/g, (_, o) => o + 'święcim')
+    .replace(/\b([Oo])swięd(?=[mn])/g, (_, o) => o + 'święcim')
+    .replace(/\b([Oo])swied(?=[mn])/g, (_, o) => o + 'święcim')
+    // "Krakow" / "Kraków" — bez zmian, ale "Krakow" → "Kraków"
+    .replace(/\b([Kk])rakow\b/g, (_, k) => k + 'raków')
+    // Powszechne nazwy ulic które Tesseract psuje:
+    // "Lódz/Lódzka" → "Łódź/Łódzka"
+    .replace(/\b([Ll])(ó|o)dzk/g, (_, l, o) => (l === 'L' ? 'Ł' : 'ł') + 'ódzk');
+}
+
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
@@ -1586,10 +1614,14 @@ export function parseWZText(rawText: string): WZImportData {
   }
   // Uwagi — ZAWSZE zachowuj (nigdy nie zeruj)
 
+  // Korekta OCR dla adresu — typowe pomyłki Tesseractu na polskich nazwach
+  // ("Sląskie" → "Śląskie", "Oświędmska" → "Oświęcimska" itp.)
+  const adresFinal = adres ? fixPolishOCRAddress(adres) : adres;
+
   // DEBUG: zaloguj wynik parsowania (F12 Console) — pomocne do diagnozy bug-ow OCR
   if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
     console.groupCollapsed("[parseWZText] result");
-    console.log({ numer_wz, nr_zamowienia, odbiorca, adres, odbiornikAdres, tel, masa_kg });
+    console.log({ numer_wz, nr_zamowienia, odbiorca, adres: adresFinal, adresPrzedKorektaOCR: adres, odbiornikAdres, tel, masa_kg });
     console.groupEnd();
   }
 
@@ -1597,7 +1629,7 @@ export function parseWZText(rawText: string): WZImportData {
     numer_wz,
     nr_zamowienia,
     odbiorca,
-    adres,
+    adres: adresFinal,
     tel,
     osoba_kontaktowa,
     masa_kg,
