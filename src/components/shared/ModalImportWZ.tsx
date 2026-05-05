@@ -691,10 +691,13 @@ export function parseWZText(rawText: string): WZImportData {
     .filter(Boolean);
 
   // DEBUG: zaloguj raw text + linie do konsoli (F12 → Console) — pomocne przy diagnozie
-  // OCR-owych bug-ów. Zostawiam permanentnie, koszt 0 (tylko console.log).
+  // OCR-owych bug-ów. Wystaw też na window.__lastWZ żeby user mógł skopiować jednym
+  // poleceniem: copy(window.__lastWZ.lines.join('\n'))
   if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
+    (window as any).__lastWZ = { rawText, text, lines };
     console.groupCollapsed("[parseWZText] raw input");
     console.log("Lines:", lines);
+    console.log("→ aby skopiować raw text, wpisz w konsoli: copy(window.__lastWZ.lines.join('\\n'))");
     console.groupEnd();
   }
 
@@ -713,6 +716,19 @@ export function parseWZText(rawText: string): WZImportData {
     const formatM = text.match(/\b([A-Z]{2}\/\d{2,4}\/\d{2}\/\d{2}\/\d{4,8})\b/);
     if (formatM) {
       numer_wz = `WZ ${formatM[1]}`;
+    }
+  }
+  // Fallback 2 (Sewera Promak/Bxotech): OCR mangluje ostatni segment numeru WZ
+  // w obszarze barkodu — zamienia cyfry na litery, np. "WZ GL/312/26/05/ OOBE NUN".
+  // Łapiemy WZ + 3 segmenty cyfr (oddzial/rok/mies./numer) z opcjonalnym ostatnim
+  // segmentem cyfr lub gdy brakuje — bierzemy 3-segmentowy prefix.
+  if (!numer_wz) {
+    const partialM = text.match(/(WZS?|PZ)\s*([A-Z]{2}\/\d{1,4}\/\d{2}\/\d{2})(?:\s*\/\s*(\d{1,8}))?/i);
+    if (partialM) {
+      const prefix = partialM[1].toUpperCase();
+      const base = partialM[2].toUpperCase();
+      const lastSegment = partialM[3];
+      numer_wz = lastSegment ? `${prefix} ${base}/${lastSegment}` : `${prefix} ${base}`;
     }
   }
 
