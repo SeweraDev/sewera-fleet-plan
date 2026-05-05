@@ -26,6 +26,34 @@ interface WzFormTabsProps {
 }
 
 
+/**
+ * Łączy osobę kontaktową z numerem(-ami) telefonu, deduplikując numery które
+ * już występują w stringu osoby (osoba_kontaktowa parser zwraca format
+ * "Adrian Mróz tel. 697 002 147" — tel parser zwraca "697 002 147" — bez
+ * dedupu wychodzi "Adrian Mróz tel. 697 002 147, tel. 697 002 147").
+ *
+ * Porównanie po samych cyfrach (różne formatowania tego samego numeru).
+ */
+function combineKontaktTel(osoba: string | null | undefined, tel: string | null | undefined): string {
+  const o = (osoba || '').trim();
+  const t = (tel || '').trim();
+  if (!o) return t;
+  if (!t) return o;
+  // Wyciągnij cyfry obecne w osoba_kontaktowa (znormalizowane)
+  const osobaDigits = o.replace(/[^\d]/g, '');
+  // Rozdziel kandydatów telefonu po przecinku/średniku/spacji
+  const candidates = t.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  const newOnes: string[] = [];
+  for (const cand of candidates) {
+    const digits = cand.replace(/[^\d]/g, '');
+    if (digits.length < 7) continue; // za krótkie żeby było telefonem
+    if (osobaDigits.includes(digits)) continue; // już obecny w osoba
+    newOnes.push(cand);
+  }
+  if (newOnes.length === 0) return o;
+  return `${o}, tel. ${newOnes.join(', ')}`;
+}
+
 const EMPTY_WZ: WzInput = {
   numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
 };
@@ -188,7 +216,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         nr_zamowienia: mapped.nr_zamowienia || '',
         odbiorca: mapped.odbiorca || '',
         adres: mapped.adres || '',
-        tel: mapped.osoba_kontaktowa ? `${mapped.osoba_kontaktowa}${mapped.tel ? ', tel. ' + mapped.tel : ''}` : (mapped.tel || ''),
+        tel: combineKontaktTel(mapped.osoba_kontaktowa, mapped.tel),
         masa_kg: mapped.masa_kg || 0,
         objetosc_m3: mapped.objetosc_m3 || 0,
         ilosc_palet: mapped.ilosc_palet || 0,
@@ -596,7 +624,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       nr_zamowienia: mapped.nr_zamowienia || '',
       odbiorca: mapped.odbiorca || '',
       adres: mapped.adres || '',
-      tel: mapped.osoba_kontaktowa ? `${mapped.osoba_kontaktowa}${mapped.tel ? ', tel. ' + mapped.tel : ''}` : (mapped.tel || ''),
+      tel: combineKontaktTel(mapped.osoba_kontaktowa, mapped.tel),
       masa_kg: mapped.masa_kg || 0,
       objetosc_m3: mapped.objetosc_m3 || 0,
       ilosc_palet: mapped.ilosc_palet || 0,
@@ -966,7 +994,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
       nr_zamowienia: mapped.nr_zamowienia || '',
       odbiorca: mapped.odbiorca || '',
       adres: mapped.adres || '',
-      tel: mapped.osoba_kontaktowa ? `${mapped.osoba_kontaktowa}${mapped.tel ? ', tel. ' + mapped.tel : ''}` : (mapped.tel || ''),
+      tel: combineKontaktTel(mapped.osoba_kontaktowa, mapped.tel),
       masa_kg: mapped.masa_kg || 0,
       objetosc_m3: mapped.objetosc_m3 || 0,
       ilosc_palet: mapped.ilosc_palet || 0,

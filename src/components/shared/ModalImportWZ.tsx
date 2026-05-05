@@ -700,10 +700,11 @@ export function parseWZText(rawText: string): WZImportData {
 
   // 1. nr_wz — match WZ, WZS, or PZ prefixed document numbers
   // OCR (Promak/Bxotech) czesto zleja "WZ" + "RE/..." → \s* zamiast \s+
+  // Flag i — OCR czasem zwraca lowercase "Wz" zamiast "WZ"
   let numer_wz: string | null = null;
-  const wzM = text.match(/(WZS?|PZ)\s*([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/);
+  const wzM = text.match(/(WZS?|PZ)\s*([A-Z]{2}\/\d+\/\d+\/\d+\/\d+)/i);
   if (wzM) {
-    numer_wz = `${wzM[1]} ${wzM[2]}`;
+    numer_wz = `${wzM[1].toUpperCase()} ${wzM[2].toUpperCase()}`;
   }
   // Fallback: OCR czasem psuje prefix "WZ" (W→V, Z→I/2). Szukamy SAMEGO formatu
   // dokumentu WZ Promak: 'RE/112/26/04/0002236' lub podobnego (3+ /-rozdzielonych
@@ -1029,6 +1030,11 @@ export function parseWZText(rawText: string): WZImportData {
       // (gdy OCR zleja kolumny: po Adres dostawy mogą przyjść Forma/Magazyn/Wydano zanim zacznie się adres)
       const SKIP = /^(Forma\s+płatn|Magazyn|Wydano\s+na|NIP:|NR\s*BDO:|HR\s*BDO:|Waga\s+netto|Termin|Informacje|e\s+wydaj|Cennik)/i;
       const addrParts: string[] = [];
+      // preBuffer: linie PRZED pierwsza "rdzenna" linia adresu (ul./postcode) — np.
+      // nazwa lokalu/budynku "PANORAMA PARK", "GALERIA X" itp. które OCR często
+      // umieszcza nad ulicą. Po znalezieniu rdzenia (ul. lub kod poczt.) flushujemy buffer.
+      const preBuffer: string[] = [];
+      let foundCore = false;
       for (let i = adresIdx + 1; i < lines.length && i <= adresIdx + 12; i++) {
         const l = lines[i].trim();
         if (!l) continue;
@@ -1037,14 +1043,26 @@ export function parseWZText(rawText: string): WZImportData {
         // Skip lines that are clearly product data (digit + SZT/KG etc)
         if (/^\d+\s+(SZT|KG|M|OP|KPL)/i.test(l)) break;
         if (/^\d+\.\s/.test(l)) break; // product line "1. ..."
-        // Zbieraj tylko linie wyglądające na adres / nazwę: ul./al./kod poczt./miasto-caps
-        // lub w OCR postać zmasakrowana "0.748 Katowice" (zamiast "40-748 Katowice")
-        const looksLikeAddr =
+        // RDZEŃ adresu: ulica lub kod pocztowy
+        const isCore =
           /(?:ul|al|os|pl)\.\s/i.test(l) ||
-          /\d{1,2}[-.]\d{3}\s/.test(l) ||
-          /^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+\s+[A-ZĄĆĘŁŃÓŚŹŻ]/.test(l);
-        if (looksLikeAddr || addrParts.length > 0) {
+          /\d{1,2}[-.]\d{3}\s/.test(l);
+        if (isCore) {
+          if (!foundCore) {
+            // Pierwszy rdzeń — flushuj preBuffer (nazwa lokalu/budynku PRZED ulicą)
+            addrParts.push(...preBuffer);
+            foundCore = true;
+          }
           addrParts.push(l);
+        } else if (foundCore) {
+          // Po rdzeniu — przyjmuj kolejne linie jako dopełnienie adresu
+          addrParts.push(l);
+        } else {
+          // Przed rdzeniem — buforuj jako potencjalna nazwa lokalu
+          // Filtruj tylko linie wyglądające na sensowny tekst (nie liczby/cyfry)
+          if (/[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]/.test(l) && l.length < 60) {
+            preBuffer.push(l);
+          }
         }
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
