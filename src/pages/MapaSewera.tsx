@@ -15,6 +15,26 @@ const ODDZIAL_COLORS: Record<string, string> = {
 };
 const DEFAULT_COLOR = '#6b7280';
 
+// Ikony pojazdów per typ — pliki w public/icons/
+const ICON_VAN = '/icons/1200kg.PNG';
+const ICON_WINDA = '/icons/Winda.PNG';
+const ICON_HDS = '/icons/hds.PNG';
+
+/** Mapuje typ pojazdu (systemowy lub zewn. z prefiksem zew:) na ścieżkę ikony. */
+function getVehicleIcon(typ: string | null | undefined): string | null {
+  if (!typ) return null;
+  const t = typ.toLowerCase().replace(/^zew:/, '').trim();
+  if (t.includes('1,2') || t.includes('1.2') || t.includes('dostawcz')) return ICON_VAN;
+  if (t.includes('hds')) return ICON_HDS;
+  if (t.includes('winda')) return ICON_WINDA;
+  return null;
+}
+
+/** Wybiera typ do wyświetlenia: rzeczywisty z kursu (jeśli jest), inaczej wymagany ze zlecenia. */
+function pickTypForIcon(z: MapaZlecenieDto): string | null {
+  return z.kurs_pojazd_typ || z.typ_pojazdu || null;
+}
+
 let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
   if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
@@ -142,7 +162,7 @@ export default function MapaSewera() {
 
         const count = groupPins.length;
 
-        // Kolor pinu = oddział (dominujący w grupie)
+        // Kolor obwódki = oddział (dominujący w grupie)
         const oddzialCounts = new Map<string, number>();
         groupPins.forEach(z => {
           oddzialCounts.set(z.oddzial_kod, (oddzialCounts.get(z.oddzial_kod) || 0) + 1);
@@ -152,15 +172,31 @@ export default function MapaSewera() {
         oddzialCounts.forEach((cnt, kod) => { if (cnt > maxCnt) { maxCnt = cnt; dominantKod = kod; } });
         const pinColor = ODDZIAL_COLORS[dominantKod] || DEFAULT_COLOR;
 
+        // Ikona pojazdu (dominująca w grupie)
+        const typCounts = new Map<string, number>();
+        groupPins.forEach(z => {
+          const t = pickTypForIcon(z);
+          const iconUrl = getVehicleIcon(t);
+          if (iconUrl) typCounts.set(iconUrl, (typCounts.get(iconUrl) || 0) + 1);
+        });
+        let dominantIcon: string | null = null;
+        let maxIconCnt = 0;
+        typCounts.forEach((cnt, url) => { if (cnt > maxIconCnt) { maxIconCnt = cnt; dominantIcon = url; } });
+
         // Badge z ilością
         const badge = count > 1
-          ? '<span style="position:absolute;top:-6px;right:-6px;background:white;color:' + pinColor + ';border-radius:50%;width:18px;height:18px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid ' + pinColor + '">' + count + '</span>'
+          ? '<span style="position:absolute;top:-8px;right:-8px;background:' + pinColor + ';color:white;border-radius:50%;min-width:18px;height:18px;padding:0 4px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);z-index:2">' + count + '</span>'
           : '';
+
+        // Pin: białe koło z obwódką oddziału + ikona pojazdu w środku
+        const inner = dominantIcon
+          ? '<img src="' + dominantIcon + '" style="width:26px;height:26px;object-fit:contain;display:block" alt=""/>'
+          : '<div style="width:14px;height:14px;border-radius:50%;background:' + pinColor + '"></div>';
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="position:relative;background:' + pinColor + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + badge + '</div>',
-          iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13],
+          html: '<div style="position:relative;background:white;width:36px;height:36px;border-radius:50%;border:3px solid ' + pinColor + ';box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center">' + inner + badge + '</div>',
+          iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
         });
 
         // Popup — header z adresem i podsumowaniem
@@ -297,6 +333,23 @@ export default function MapaSewera() {
               </span>
             </div>
           ))}
+        </div>
+
+        {/* Legenda typów pojazdów */}
+        <div className="flex flex-wrap items-center gap-4 px-1 pt-1 border-t pt-2">
+          <span className="text-xs text-muted-foreground font-medium">Typy pojazdów:</span>
+          <div className="flex items-center gap-1.5 text-xs">
+            <img src={ICON_VAN} alt="Dostawczy 1,2t" className="w-6 h-6 object-contain" />
+            <span>Dostawczy 1,2t</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <img src={ICON_WINDA} alt="Winda" className="w-6 h-6 object-contain" />
+            <span>Winda</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <img src={ICON_HDS} alt="HDS" className="w-6 h-6 object-contain" />
+            <span>HDS</span>
+          </div>
         </div>
 
         {/* Kursy dnia — lista kursów wszystkich oddziałów na wybrany dzień */}
