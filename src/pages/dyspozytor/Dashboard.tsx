@@ -1068,7 +1068,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
           <TypPojazduStep oddzialId={oddzialId} setOddzialId={setOddzialId} typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
             oddzialy={oddzialy} loadingOddzialy={loadingOddzialy} flota={flotaList} loadingFlota={loadingFlota} onNext={() => setStep(2)} />
         )}
-        {step === 2 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
+        {step === 2 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step === 3 && (
           <WzFormTabs wzList={wzList} setWzList={setWzList} error={error} submitting={submitting} onBack={() => setStep(2)} onSubmit={handleGoToCheck} typPojazdu={typPojazdu} />
         )}
