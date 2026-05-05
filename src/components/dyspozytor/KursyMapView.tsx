@@ -14,6 +14,21 @@ const DEFAULT_COLOR = '#6b7280';
 // Kolory tras kursów — cykliczne
 const KURS_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#ca8a04'];
 
+// Ikony pojazdów per typ — pliki w public/icons/
+const ICON_VAN = '/icons/van-12t.png';
+const ICON_WINDA = '/icons/winda.png';
+const ICON_HDS = '/icons/hds.png';
+
+/** Mapuje typ pojazdu (systemowy lub zewn. z prefiksem zew:) na ścieżkę ikony. */
+function getVehicleIcon(typ: string | null | undefined): string | null {
+  if (!typ) return null;
+  const t = typ.toLowerCase().replace(/^zew:/, '').trim();
+  if (t.includes('1,2') || t.includes('1.2') || t.includes('dostawcz')) return ICON_VAN;
+  if (t.includes('hds')) return ICON_HDS;
+  if (t.includes('winda')) return ICON_WINDA;
+  return null;
+}
+
 let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
   if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
@@ -150,6 +165,7 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
       // Piny i linie per kurs
       kursy.forEach((kurs, kIdx) => {
         const kursColor = KURS_COLORS[kIdx % KURS_COLORS.length];
+        const vehicleIcon = getVehicleIcon(kurs.pojazd_typ);
         const kPrz = przystanki
           .filter(p => p.kurs_id === kurs.id)
           .sort((a, b) => a.kolejnosc - b.kolejnosc);
@@ -184,10 +200,15 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
           const totalM3 = wzForStop.reduce((s, p) => s + p.objetosc_m3, 0);
           const totalPal = wzForStop.reduce((s, p) => s + p.ilosc_palet, 0);
 
+          // Numer przystanku w środku + ikona pojazdu jako badge w prawym górnym rogu
+          const iconBadge = vehicleIcon
+            ? '<img src="' + vehicleIcon + '" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;background:white;border-radius:50%;padding:1px;box-shadow:0 1px 3px rgba(0,0,0,.4);object-fit:contain"/>'
+            : '';
+
           const icon = L.divIcon({
             className: '',
-            html: '<div style="position:relative;background:' + kursColor + ';width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:bold">' + stop.kolejnosc + '</div>',
-            iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -14],
+            html: '<div style="position:relative;background:' + kursColor + ';width:26px;height:26px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:bold">' + stop.kolejnosc + iconBadge + '</div>',
+            iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -15],
           });
 
           const popupLines = wzForStop.map(w => {
