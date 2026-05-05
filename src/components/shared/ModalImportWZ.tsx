@@ -673,9 +673,10 @@ function fixPolishOCRAddress(addr: string): string {
     .replace(/\b([Ss])l([aą])sk/g, (_, s, a) => (s === 'S' ? 'Ś' : 'ś') + 'l' + (a === 'a' ? 'ą' : a) + 'sk')
     // "Oświęd*" / "Oswied*" / "Oswięd*" → "Oświęcim*" (OCR myli "ci" jako "d")
     // np. "Oświędmska" → "Oświęcimska"
-    .replace(/\b([Oo])święd(?=[mn])/g, (_, o) => o + 'święcim')
-    .replace(/\b([Oo])swięd(?=[mn])/g, (_, o) => o + 'święcim')
-    .replace(/\b([Oo])swied(?=[mn])/g, (_, o) => o + 'święcim')
+    // Uwaga: replace zwraca "święci" (BEZ m) bo lookahead nie konsumuje "m" — ono zostaje w źródle.
+    .replace(/\b([Oo])święd(?=m)/g, (_, o) => o + 'święci')
+    .replace(/\b([Oo])swięd(?=m)/g, (_, o) => o + 'święci')
+    .replace(/\b([Oo])swied(?=m)/g, (_, o) => o + 'święci')
     // "Krakow" / "Kraków" — bez zmian, ale "Krakow" → "Kraków"
     .replace(/\b([Kk])rakow\b/g, (_, k) => k + 'raków')
     // Powszechne nazwy ulic które Tesseract psuje:
