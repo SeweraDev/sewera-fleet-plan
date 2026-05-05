@@ -24,6 +24,21 @@ const ODDZIAL_COLORS: Record<string, string> = {
 };
 const DEFAULT_COLOR = '#6b7280';
 
+// Ikony pojazdów per typ — pliki w public/icons/
+const ICON_VAN = '/icons/van-12t.png';
+const ICON_WINDA = '/icons/winda.png';
+const ICON_HDS = '/icons/hds.png';
+
+/** Mapuje typ pojazdu (systemowy lub zewn. z prefiksem zew:) na ścieżkę ikony. */
+function getVehicleIcon(typ: string | null | undefined): string | null {
+  if (!typ) return null;
+  const t = typ.toLowerCase().replace(/^zew:/, '').trim();
+  if (t.includes('1,2') || t.includes('1.2') || t.includes('dostawcz')) return ICON_VAN;
+  if (t.includes('hds')) return ICON_HDS;
+  if (t.includes('winda')) return ICON_WINDA;
+  return null;
+}
+
 let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
   if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
@@ -215,23 +230,38 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
         if (first.lat == null || first.lng == null) return;
         allPoints.push([first.lat, first.lng]);
 
-        // W trybie planera: marker zmienia kolor gdy zaznaczony (dowolny WZ z grupy)
+        // W trybie planera: obwódka zmienia kolor gdy zaznaczony (dowolny WZ z grupy)
         const groupSelected = planerMode && groupPins.some(z => selectedIds.has(z.id));
         const markerColor = groupSelected ? '#10b981' /* zielony */ : myColor;
 
+        // Ikona pojazdu (dominująca w grupie)
+        const typCounts = new Map<string, number>();
+        groupPins.forEach(z => {
+          const iconUrl = getVehicleIcon(z.typ_pojazdu);
+          if (iconUrl) typCounts.set(iconUrl, (typCounts.get(iconUrl) || 0) + 1);
+        });
+        let dominantIcon: string | null = null;
+        let maxIconCnt = 0;
+        typCounts.forEach((cnt, url) => { if (cnt > maxIconCnt) { maxIconCnt = cnt; dominantIcon = url; } });
+
         const count = groupPins.length;
         const badge = count > 1
-          ? '<span style="position:absolute;top:-6px;right:-6px;background:white;color:' + markerColor + ';border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid ' + markerColor + '">' + count + '</span>'
+          ? '<span style="position:absolute;top:-8px;right:-8px;background:' + markerColor + ';color:white;border-radius:50%;min-width:18px;height:18px;padding:0 4px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:bold;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);z-index:2">' + count + '</span>'
           : '';
 
         const checkmark = groupSelected
-          ? '<span style="position:absolute;top:-2px;left:-2px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:bold">✓</span>'
+          ? '<span style="position:absolute;bottom:-4px;right:-4px;width:16px;height:16px;background:#10b981;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:bold;border:2px solid white;z-index:3">✓</span>'
           : '';
+
+        // Pin: białe koło z obwódką oddziału + ikona pojazdu w środku (jeśli typ rozpoznany)
+        const inner = dominantIcon
+          ? '<img src="' + dominantIcon + '" style="width:26px;height:26px;object-fit:contain;display:block" alt=""/>'
+          : '<div style="width:14px;height:14px;border-radius:50%;background:' + markerColor + '"></div>';
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="position:relative;background:' + markerColor + ';width:22px;height:22px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);' + (planerMode ? 'cursor:pointer' : '') + '">' + checkmark + badge + '</div>',
-          iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13],
+          html: '<div style="position:relative;background:white;width:36px;height:36px;border-radius:50%;border:3px solid ' + markerColor + ';box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;' + (planerMode ? 'cursor:pointer' : '') + '">' + inner + checkmark + badge + '</div>',
+          iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
         });
 
         const popupParts = groupPins.map(z => {
