@@ -282,7 +282,7 @@ export default function MapaSewera() {
 
         {/* Statystyki */}
         <div className="flex flex-wrap gap-4 text-sm">
-          <span><strong>{zlecenia.length}</strong> zlece\u0144</span>
+          <span><strong>{zlecenia.length}</strong> zleceń</span>
           <span><strong>{Math.round(totalKg)}</strong> kg</span>
           <span className="text-green-700"><strong>{wKursach.length}</strong> w kursach</span>
           {bezKursu.length > 0 && (
@@ -317,7 +317,7 @@ export default function MapaSewera() {
         {mapError ? (
           <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">{mapError}</div>
         ) : loading && zlecenia.length === 0 ? (
-          <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">\u0141adowanie zlece\u0144...</div>
+          <div className="rounded-lg border bg-muted/50 p-6 text-center text-sm text-muted-foreground">Ładowanie zleceń...</div>
         ) : (
           <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 'calc(100vh - 220px)', minHeight: 400 }} />
         )}
