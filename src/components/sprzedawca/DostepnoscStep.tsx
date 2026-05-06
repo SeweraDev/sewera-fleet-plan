@@ -1,14 +1,41 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSprawdzDostepnosc, pctColor, pctBg, type VehicleOccupancy } from '@/hooks/useSprawdzDostepnosc';
 import { useCostComparison } from '@/hooks/useCostComparison';
+import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 
 /** Próg w zł netto — banner pojawia się gdy alternatywa jest tańsza o tyle. */
 const COST_THRESHOLD_PLN = 30;
+
+/** Kolory pinów oddziałów na mapie — spójne z resztą aplikacji. */
+const ODDZIAL_COLORS: Record<string, string> = {
+  KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
+  DG: '#ea580c', TG: '#0891b2', CH: '#be185d', OS: '#ca8a04',
+};
+
+// Leaflet lazy load (z CDN, jak w innych mapach w projekcie)
+let leafletLoaded = false;
+function loadLeaflet(): Promise<any> {
+  if (leafletLoaded && (window as any).L) return Promise.resolve((window as any).L);
+  return new Promise((resolve, reject) => {
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    if ((window as any).L) { leafletLoaded = true; resolve((window as any).L); return; }
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => { leafletLoaded = true; resolve((window as any).L); };
+    script.onerror = () => reject(new Error('Leaflet CDN error'));
+    document.head.appendChild(script);
+  });
+}
 
 interface DostepnoscStepProps {
   oddzialId: number;
@@ -111,11 +138,100 @@ export function DostepnoscStep({
   const adresDostawy = wzList[0]?.adres || '';
   const cmp = useCostComparison(oddzialNazwa, typPojazdu, adresDostawy);
 
+  // Wybór oddziału w dropdown przy bannerze. Default = najtańszy (cmp.cheapest).
+  // Reset gdy zmieni się ranking oddziałów.
+  const [selectedZmianaKod, setSelectedZmianaKod] = useState<string | null>(null);
+  useEffect(() => {
+    if (cmp.cheapest && !cmp.cheapest.isCurrent) {
+      setSelectedZmianaKod(cmp.cheapest.oddzialKod);
+    } else {
+      setSelectedZmianaKod(null);
+    }
+  }, [cmp.cheapest?.oddzialKod, cmp.current?.oddzialKod]);
+
+  // Mini-mapa: container ref + instance ref
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+
   useEffect(() => {
     if (oddzialId && dzien) {
       check(oddzialId, typPojazdu, dzien, totalKg, totalM3, totalPalet, godzina);
     }
   }, [oddzialId, typPojazdu, dzien, godzina, totalKg, totalM3, totalPalet, check]);
+
+  // Render mini-mapy gdy mamy wyniki porównania
+  useEffect(() => {
+    if (!cmp.coords || cmp.rows.length === 0 || !mapContainerRef.current) return;
+
+    let cancelled = false;
+    loadLeaflet().then(L => {
+      if (cancelled || !mapContainerRef.current) return;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      const map = L.map(mapContainerRef.current, { zoomControl: true, attributionControl: false });
+      mapInstanceRef.current = map;
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+
+      const bounds: [number, number][] = [];
+
+      // Pin dostawy (czerwony)
+      const deliveryIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:28px;height:28px;background:#dc2626;border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:bold;">📍</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      L.marker([cmp.coords!.lat, cmp.coords!.lng], { icon: deliveryIcon })
+        .addTo(map)
+        .bindPopup(`<b>Dostawa</b><br/>${adresDostawy}`);
+      bounds.push([cmp.coords!.lat, cmp.coords!.lng]);
+
+      // Piny oddziałów (top 5 najtańszych — żeby nie zaśmiecać mapy gdy oddział daleko)
+      const top = cmp.rows.slice(0, 5);
+      // ...plus zawsze obecny i wybrany w dropdown
+      const visibleSet = new Set(top.map(r => r.oddzialKod));
+      if (cmp.current) visibleSet.add(cmp.current.oddzialKod);
+      if (selectedZmianaKod) visibleSet.add(selectedZmianaKod);
+
+      for (const r of cmp.rows) {
+        if (!visibleSet.has(r.oddzialKod)) continue;
+        const coord = ODDZIAL_COORDS[r.oddzialKod];
+        if (!coord) continue;
+        const color = ODDZIAL_COLORS[r.oddzialKod] || '#6b7280';
+        const isSelected = r.oddzialKod === selectedZmianaKod;
+        const isCurrent = r.isCurrent;
+        const size = isCurrent || isSelected ? 28 : 22;
+        const ring = isSelected ? '4px solid #f59e0b' : isCurrent ? '3px solid #fb923c' : '2px solid white';
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:${size}px;height:${size}px;background:${color};border:${ring};border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:bold;">${r.oddzialKod}</div>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+        const tag = isCurrent ? ' (Twój)' : isSelected ? ' (wybrany)' : '';
+        L.marker([coord.lat, coord.lng], { icon })
+          .addTo(map)
+          .bindPopup(`<b>${r.oddzialNazwa}${tag}</b><br/>${r.km} km`);
+        bounds.push([coord.lat, coord.lng]);
+      }
+
+      if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [25, 25] });
+      } else if (bounds.length === 1) {
+        map.setView(bounds[0], 12);
+      }
+    }).catch(console.error);
+
+    return () => {
+      cancelled = true;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [cmp.coords, cmp.rows, selectedZmianaKod, adresDostawy]);
 
   if (loading) {
     return <p className="text-center text-muted-foreground py-8">Sprawdzanie dostępności floty...</p>;
@@ -125,8 +241,15 @@ export function DostepnoscStep({
 
   // Banner porównania kosztów: pokazuj tylko gdy istnieje tańsza alternatywa o > próg
   const showCostBanner = !!cmp.savings && cmp.savings >= COST_THRESHOLD_PLN && !!cmp.cheapest && !!cmp.current;
-  const cheapestOddzialId = cmp.cheapest
-    ? oddzialy.find(o => o.nazwa === cmp.cheapest!.oddzialNazwa)?.id
+
+  // Lista alternatyw (bez obecnego) do dropdown — tylko te z policzonym kosztem,
+  // posortowane jak rows (najtańsze pierwsze).
+  const alternatywyDoDropdown = cmp.rows.filter(r => !r.isCurrent && r.minNetto != null);
+  const selectedAlt = selectedZmianaKod
+    ? cmp.rows.find(r => r.oddzialKod === selectedZmianaKod) || null
+    : null;
+  const selectedOddzialId = selectedAlt
+    ? oddzialy.find(o => o.nazwa === selectedAlt.oddzialNazwa)?.id ?? null
     : null;
 
   return (
@@ -165,6 +288,7 @@ export function DostepnoscStep({
               <thead className="bg-muted/50">
                 <tr>
                   <th className="text-left px-2 py-1 font-medium">Oddział</th>
+                  <th className="text-center px-2 py-1 font-medium">Auto {typPojazdu}</th>
                   <th className="text-right px-2 py-1 font-medium">km</th>
                   <th className="text-right px-2 py-1 font-medium">Sewera (netto)</th>
                   <th className="text-right px-2 py-1 font-medium">Zewn. (netto)</th>
@@ -193,6 +317,13 @@ export function DostepnoscStep({
                         {r.oddzialNazwa}
                         {r.isCurrent && <span className="text-muted-foreground"> (Twój)</span>}
                       </td>
+                      <td className="text-center px-2 py-1.5">
+                        {r.hasPojazdTypu ? (
+                          <span title="Oddział posiada pojazd tego typu">✅</span>
+                        ) : (
+                          <span title="Brak pojazdu tego typu w oddziale" className="text-muted-foreground">❌</span>
+                        )}
+                      </td>
                       <td className="text-right px-2 py-1.5 text-muted-foreground">{r.km} km</td>
                       <td className="text-right px-2 py-1.5">
                         {r.kosztWew ? fmtPLN(r.kosztWew.netto) : '—'}
@@ -207,20 +338,57 @@ export function DostepnoscStep({
             </table>
           </div>
 
-          <div className="flex gap-2 flex-wrap">
-            {onChangeOddzial && cheapestOddzialId && (
+          {/* Mini-mapa: pokazuje gdzie jest dostawa i gdzie są oddziały */}
+          <div className="rounded border bg-white/70 dark:bg-black/20 overflow-hidden">
+            <div ref={mapContainerRef} className="w-full h-[220px]" />
+          </div>
+
+          {/* Wybór oddziału do zmiany — dropdown z propozycjami */}
+          {onChangeOddzial && alternatywyDoDropdown.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-amber-800 dark:text-amber-300">Zmień oddział na:</span>
+              <Select
+                value={selectedZmianaKod ?? undefined}
+                onValueChange={(v) => setSelectedZmianaKod(v)}
+              >
+                <SelectTrigger className="h-8 w-[260px] bg-white dark:bg-black/40">
+                  <SelectValue placeholder="Wybierz oddział..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {alternatywyDoDropdown.map((r) => (
+                    <SelectItem key={r.oddzialKod} value={r.oddzialKod}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-2 h-2 rounded-full"
+                          style={{ background: ODDZIAL_COLORS[r.oddzialKod] || '#6b7280' }}
+                        />
+                        <span>{r.oddzialNazwa}</span>
+                        <span className="text-muted-foreground text-xs">
+                          · {r.km} km · {fmtPLN(r.minNetto!)}
+                        </span>
+                        {r.hasPojazdTypu ? (
+                          <span title="Ma pojazd typu">✅</span>
+                        ) : (
+                          <span title="Brak pojazdu typu" className="opacity-60">❌</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 size="sm"
-                onClick={() => onChangeOddzial(cheapestOddzialId)}
+                disabled={!selectedOddzialId}
+                onClick={() => selectedOddzialId && onChangeOddzial(selectedOddzialId)}
                 className="bg-amber-600 hover:bg-amber-700 text-white"
               >
-                ← Zmień oddział na {cmp.cheapest!.oddzialNazwa}
+                ← Zmień oddział{selectedAlt ? ` na ${selectedAlt.oddzialNazwa}` : ''}
               </Button>
-            )}
-            <p className="text-xs text-muted-foreground self-center">
-              lub zignoruj i kontynuuj poniżej z {cmp.current!.oddzialNazwa}
-            </p>
-          </div>
+              <p className="text-xs text-muted-foreground self-center">
+                lub zignoruj i kontynuuj poniżej z {cmp.current!.oddzialNazwa}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
