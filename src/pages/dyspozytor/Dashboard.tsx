@@ -1134,7 +1134,14 @@ export default function DyspozytorDashboard() {
         <PageSidebar
           items={SIDEBAR_ITEMS.map(s => {
             if (s.id === 'kursy') return { ...s, badge: kursy.filter(k => k.status === 'zaplanowany').length || undefined };
-            if (s.id === 'zlecenia') return { ...s, badge: zlBezKursu.length || undefined };
+            if (s.id === 'zlecenia') {
+              // Badge zlicza zlecenia bez kursu TYLKO z bieżącego dnia (spójne z lista w ZleceniaTab).
+              // Zaległe z innych dni są komunikowane osobnym bannerem "Zaległe z DD.MM" w ZleceniaTab.
+              const dzienOd = dzien;
+              const dzienAfter = rangeMode ? dzienDo : dzien;
+              const liczbaWZakresie = zlBezKursu.filter(z => z.dzien >= dzienOd && z.dzien <= dzienAfter).length;
+              return { ...s, badge: liczbaWZakresie || undefined };
+            }
             return s;
           })}
           activeId={activeId}

@@ -298,10 +298,13 @@ export function ZleceniaTab({
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
+  // Counts spojne z lista — zliczamy tylko zlecenia bieZACEGO dnia (filtr po dzien).
+  // Zaleg!e z innych dni komunikujemy osobnym bannerem ("Zaleg!e z DD.MM"), nie w badge'u tabu —
+  // inaczej user widzi "Bez kursu (9)" a lista pusta (zaleg!e nie pasuja do filtra dnia).
   const counts: Record<ZlStatusFilter, number> = {
-    bez_kursu: zlecenia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana').length,
-    all: zlecenia.filter(z => z.status !== 'anulowana').length,
-    anulowana: zlecenia.filter(z => z.status === 'anulowana').length,
+    bez_kursu: zleceniaDnia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana').length,
+    all: zleceniaDnia.filter(z => z.status !== 'anulowana').length,
+    anulowana: zleceniaDnia.filter(z => z.status === 'anulowana').length,
   };
 
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
