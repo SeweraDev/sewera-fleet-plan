@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSprawdzDostepnosc, pctColor, pctBg, type VehicleOccupancy } from '@/hooks/useSprawdzDostepnosc';
 import { useCostComparison } from '@/hooks/useCostComparison';
 import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
@@ -119,13 +118,11 @@ export function DostepnoscStep({
   dzien,
   godzina,
   wzList,
-  oddzialy,
   onBack,
   onSubmit,
   submitting,
   onChangeDzien,
   onChangeGodzina,
-  onChangeOddzial,
 }: DostepnoscStepProps) {
   const { vehicles, anyFits, loading, check, nextAvailable, searchingNext, freeSlots } = useSprawdzDostepnosc();
 
@@ -137,17 +134,6 @@ export function DostepnoscStep({
   // mają ten sam adres dostawy)
   const adresDostawy = wzList[0]?.adres || '';
   const cmp = useCostComparison(oddzialNazwa, typPojazdu, adresDostawy);
-
-  // Wybór oddziału w dropdown przy bannerze. Default = najtańszy (cmp.cheapest).
-  // Reset gdy zmieni się ranking oddziałów.
-  const [selectedZmianaKod, setSelectedZmianaKod] = useState<string | null>(null);
-  useEffect(() => {
-    if (cmp.cheapest && !cmp.cheapest.isCurrent) {
-      setSelectedZmianaKod(cmp.cheapest.oddzialKod);
-    } else {
-      setSelectedZmianaKod(null);
-    }
-  }, [cmp.cheapest?.oddzialKod, cmp.current?.oddzialKod]);
 
   // Mini-mapa: container ref + instance ref
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -189,28 +175,26 @@ export function DostepnoscStep({
       bounds.push([cmp.coords!.lat, cmp.coords!.lng]);
 
       // Piny oddziałów (top 5 najtańszych — żeby nie zaśmiecać mapy gdy oddział daleko)
+      // ...plus zawsze obecny (Twój)
       const top = cmp.rows.slice(0, 5);
-      // ...plus zawsze obecny i wybrany w dropdown
       const visibleSet = new Set(top.map(r => r.oddzialKod));
       if (cmp.current) visibleSet.add(cmp.current.oddzialKod);
-      if (selectedZmianaKod) visibleSet.add(selectedZmianaKod);
 
       for (const r of cmp.rows) {
         if (!visibleSet.has(r.oddzialKod)) continue;
         const coord = ODDZIAL_COORDS[r.oddzialKod];
         if (!coord) continue;
         const color = ODDZIAL_COLORS[r.oddzialKod] || '#6b7280';
-        const isSelected = r.oddzialKod === selectedZmianaKod;
         const isCurrent = r.isCurrent;
-        const size = isCurrent || isSelected ? 28 : 22;
-        const ring = isSelected ? '4px solid #f59e0b' : isCurrent ? '3px solid #fb923c' : '2px solid white';
+        const size = isCurrent ? 28 : 22;
+        const ring = isCurrent ? '3px solid #fb923c' : '2px solid white';
         const icon = L.divIcon({
           className: '',
           html: `<div style="width:${size}px;height:${size}px;background:${color};border:${ring};border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:bold;">${r.oddzialKod}</div>`,
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],
         });
-        const tag = isCurrent ? ' (Twój)' : isSelected ? ' (wybrany)' : '';
+        const tag = isCurrent ? ' (Twój)' : '';
         L.marker([coord.lat, coord.lng], { icon })
           .addTo(map)
           .bindPopup(`<b>${r.oddzialNazwa}${tag}</b><br/>${r.km} km`);
@@ -231,7 +215,7 @@ export function DostepnoscStep({
         mapInstanceRef.current = null;
       }
     };
-  }, [cmp.coords, cmp.rows, selectedZmianaKod, adresDostawy]);
+  }, [cmp.coords, cmp.rows, adresDostawy]);
 
   if (loading) {
     return <p className="text-center text-muted-foreground py-8">Sprawdzanie dostępności floty...</p>;
@@ -239,18 +223,13 @@ export function DostepnoscStep({
 
   const isExternalOrNoPref = !typPojazdu || typPojazdu === 'bez_preferencji' || typPojazdu === 'zewnetrzny';
 
-  // Banner porównania kosztów: pokazuj tylko gdy istnieje tańsza alternatywa o > próg
+  // Banner porównania kosztów: pokazuj tylko gdy istnieje tańsza alternatywa o > próg.
+  // UWAGA biznesowa: zlecenie zawsze startuje z oddziału który wystawia WZ — żeby
+  // marża na fakturze i koszt transportu pozostały po tej samej stronie. Banner
+  // jest tylko INFORMACYJNY (świadomość kosztu); dyspozytor może po utworzeniu
+  // zlecenia świadomie skorzystać z funkcji "Przekaż do oddziału", która przenosi
+  // całe zlecenie wraz z towarem.
   const showCostBanner = !!cmp.savings && cmp.savings >= COST_THRESHOLD_PLN && !!cmp.cheapest && !!cmp.current;
-
-  // Lista alternatyw (bez obecnego) do dropdown — tylko te z policzonym kosztem,
-  // posortowane jak rows (najtańsze pierwsze).
-  const alternatywyDoDropdown = cmp.rows.filter(r => !r.isCurrent && r.minNetto != null);
-  const selectedAlt = selectedZmianaKod
-    ? cmp.rows.find(r => r.oddzialKod === selectedZmianaKod) || null
-    : null;
-  const selectedOddzialId = selectedAlt
-    ? oddzialy.find(o => o.nazwa === selectedAlt.oddzialNazwa)?.id ?? null
-    : null;
 
   return (
     <div className="space-y-4">
@@ -276,8 +255,9 @@ export function DostepnoscStep({
                 Inny oddział byłby tańszy o {fmtPLN(Math.round(cmp.savings!))}
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                Adres dostawy jest bliżej oddziału {cmp.cheapest!.oddzialNazwa}. Możesz zmienić oddział
-                z którego startuje zlecenie — dane WZ zostaną zachowane.
+                Adres dostawy jest bliżej oddziału {cmp.cheapest!.oddzialNazwa} (informacyjnie).
+                Zlecenie i tak zostanie utworzone w Twoim oddziale, żeby marża i koszt transportu
+                pozostały razem.
               </p>
             </div>
           </div>
@@ -342,53 +322,6 @@ export function DostepnoscStep({
           <div className="rounded border bg-white/70 dark:bg-black/20 overflow-hidden">
             <div ref={mapContainerRef} className="w-full h-[220px]" />
           </div>
-
-          {/* Wybór oddziału do zmiany — dropdown z propozycjami */}
-          {onChangeOddzial && alternatywyDoDropdown.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-amber-800 dark:text-amber-300">Zmień oddział na:</span>
-              <Select
-                value={selectedZmianaKod ?? undefined}
-                onValueChange={(v) => setSelectedZmianaKod(v)}
-              >
-                <SelectTrigger className="h-8 w-[260px] bg-white dark:bg-black/40">
-                  <SelectValue placeholder="Wybierz oddział..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {alternatywyDoDropdown.map((r) => (
-                    <SelectItem key={r.oddzialKod} value={r.oddzialKod}>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="inline-block w-2 h-2 rounded-full"
-                          style={{ background: ODDZIAL_COLORS[r.oddzialKod] || '#6b7280' }}
-                        />
-                        <span>{r.oddzialNazwa}</span>
-                        <span className="text-muted-foreground text-xs">
-                          · {r.km} km · {fmtPLN(r.minNetto!)}
-                        </span>
-                        {r.hasPojazdTypu ? (
-                          <span title="Ma pojazd typu">✅</span>
-                        ) : (
-                          <span title="Brak pojazdu typu" className="opacity-60">❌</span>
-                        )}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                disabled={!selectedOddzialId}
-                onClick={() => selectedOddzialId && onChangeOddzial(selectedOddzialId)}
-                className="bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                ← Zmień oddział{selectedAlt ? ` na ${selectedAlt.oddzialNazwa}` : ''}
-              </Button>
-              <p className="text-xs text-muted-foreground self-center">
-                lub zignoruj i kontynuuj poniżej z {cmp.current!.oddzialNazwa}
-              </p>
-            </div>
-          )}
         </div>
       )}
 
