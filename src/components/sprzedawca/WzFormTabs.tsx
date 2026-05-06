@@ -152,6 +152,17 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   // Plik PDF zachowujemy do archiwum (po zatwierdzeniu WZ — upload JPEG do Storage)
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  // Podglad pierwszej strony PDF (data URL z canvas) — pokazujemy obok formularza
+  // żeby user mógł porównać wartości pól z oryginalem (analogicznie do OCR taba).
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  // Object URL do pelnego PDF (otwierany w nowej karcie po kliknieciu podgladu).
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  // Zwalnianie blob URL przy zmianie pliku / unmount
+  useEffect(() => {
+    return () => {
+      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+    };
+  }, [pdfBlobUrl]);
 
   const handleFile = useCallback(async (file: File) => {
     const name = file.name.toLowerCase();
@@ -167,13 +178,39 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setError(null);
     setPreview(null);
     setPdfFile(file);
+    // Reset podgladow z poprzedniego pliku
+    if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+    setPdfBlobUrl(null);
+    setPdfPreviewUrl(null);
 
     try {
       const pdfjs = await import('pdfjs-dist');
       pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
 
       const arrayBuffer = await file.arrayBuffer();
+      // Object URL do otwarcia w nowej karcie po kliknieciu podgladu
+      setPdfBlobUrl(URL.createObjectURL(file));
+
       const pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+
+      // Render pierwszej strony jako obraz do podgladu (scale 1.5 dla czytelnosci na 400-600px szer.)
+      try {
+        const page1 = await pdfDoc.getPage(1);
+        const viewport = page1.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          await page1.render({ canvasContext: ctx, viewport }).promise;
+          // JPEG 80% — wystarczajace do podgladu, znacznie mniejsze niz PNG
+          setPdfPreviewUrl(canvas.toDataURL('image/jpeg', 0.8));
+        }
+      } catch (renderErr) {
+        // Render moze sie nie powiesc np. dla zaszyfrowanego PDF — nie blokujemy parsowania
+        console.warn('[WzPdfTab] render preview failed:', renderErr);
+      }
+
       const pages: string[] = [];
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         const page = await pdfDoc.getPage(i);
@@ -241,6 +278,8 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     }
     setPreview(null);
     setPdfFile(null);
+    setPdfPreviewUrl(null);
+    if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
   };
 
   return (
@@ -271,11 +310,40 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
       {preview && (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">Sprawdź i popraw dane z PDF:</p>
-          <PreviewFields preview={preview} setPreview={setPreview} />
+          <p className="text-xs text-muted-foreground">Sprawdź i popraw dane (oryginał obok dla porównania):</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <PreviewFields preview={preview} setPreview={setPreview} />
+            </div>
+            {pdfPreviewUrl && (
+              <div className="border rounded-md p-2 bg-muted/20 sticky top-2 self-start max-h-[70vh] overflow-auto">
+                <p className="text-xs text-muted-foreground mb-1.5">📄 Oryginał (kliknij aby otworzyć PDF):</p>
+                {pdfBlobUrl ? (
+                  <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer" className="block">
+                    <img
+                      src={pdfPreviewUrl}
+                      alt="Oryginał WZ (PDF)"
+                      className="w-full h-auto rounded shadow-sm hover:shadow-md transition-shadow"
+                    />
+                  </a>
+                ) : (
+                  <img
+                    src={pdfPreviewUrl}
+                    alt="Oryginał WZ (PDF)"
+                    className="w-full h-auto rounded shadow-sm"
+                  />
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setPreview(null); setError(null); }}>Nowy plik</Button>
+            <Button size="sm" variant="ghost" onClick={() => {
+              setPreview(null);
+              setError(null);
+              setPdfPreviewUrl(null);
+              if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
+            }}>Nowy plik</Button>
           </div>
         </div>
       )}
