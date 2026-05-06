@@ -1295,7 +1295,35 @@ export function parseWZText(rawText: string): WZImportData {
     }
   }
 
-  // Fallback: brak sekcji "Adres dostawy" — użyj adresu z sekcji odbiorcy
+  // Wariant 5 (heurystyka anty-OCR): szukaj sekwencji 3 linii [Miasto, ul. Nazwa N, KOD MIASTO]
+  // gdziekolwiek w dokumencie. Uruchamia sie gdy parser nie wykryl labela "Adres dostawy"
+  // (OCR czesto przekrecza go np. "Aoires dostawy", "Adros dostowy"). Sekwencja 3-liniowa to
+  // typowy uklad sekcji adresu na WZ (Zabrze / ul. Wodnika 6 / 41-818 ZABRZE).
+  if (!adres) {
+    for (let i = 0; i < lines.length - 2; i++) {
+      const l1 = lines[i].trim();
+      const l2 = lines[i + 1].trim();
+      const l3 = lines[i + 2].trim();
+      const isCityOnly = /^[A-ZŁŚŻŹĆ][a-ząęółśźćń\-]{2,20}$/.test(l1);
+      const isStreet = /^(?:ul|al|os|pl)\.\s+[A-ZŁŚŻŹĆa-ząęółśźćń0-9]/i.test(l2);
+      const isPostcode = /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/.test(l3);
+      if (!(isCityOnly && isStreet && isPostcode)) continue;
+      const blok = `${l1} ${l2} ${l3}`;
+      // Filtr: pomijamy adres Sewery (siedziby/oddzialow)
+      if (/Ko[śs]ciuszki|40[-]?608\s+Katowice|41[-]?214\s+Sosnowiec|44[-]?100\s+Gliwice|41[-]?303\s+D[ąa]browa|42[-]?600\s+Tarnowskie|32[-]?500\s+Chrzan[oó]w|32[-]?600\s+O[śs]wi[ęe]cim|Rudna\s+14|Dojazdowa\s+11|Kasprzaka\s+33|Nakielska\s+24|[ŚS]l[ąa]ska\s+64a|Wyzwolenia\s+19/i.test(blok)) continue;
+      adres = `${l1}, ${l2}, ${l3}`;
+      console.log(`[parseWZText] adres z heurystyki 3-linii (wariant 5):`, adres);
+      break;
+    }
+  }
+
+  // Fallback: spróbuj wyciągnąć adres z pola Uwagi (klient czesto wpisuje
+  // "Dostawa do: Zabrze ul. Wodnika 6 tel. ...") — ZANIM spadniemy do siedziby odbiorcy.
+  // Patrz feedback_oddzial_wz_marza.md: priorytet to faktyczny adres dostawy, nie siedziba.
+  // UWAGA: sprawdzenie wykonujemy DOPIERO po inicjalizacji "uwagi" (linia ~1500), wiec
+  // tu tylko zaznaczamy intencje — fallback z Uwag jest dalej.
+
+  // Fallback: brak sekcji "Adres dostawy" i Uwag — użyj adresu z sekcji odbiorcy
   if (!adres && odbiornikAdres) {
     adres = odbiornikAdres;
   }
@@ -1590,16 +1618,16 @@ export function parseWZText(rawText: string): WZImportData {
     adres = null;
   }
 
-  // Heurystyka: gdy "adres" pochodzi z fallbacku siedziby odbiorcy (czyli adres
-  // dostawy NIE byl jawnie podany w sekcji "Adres dostawy"), a w uwagach klient
-  // wpisal inny adres dostawy — preferuj uwagi. Klient czesto uzywa Uwag aby
-  // przekierowac transport ("Dostawa do: Zabrze ul. Wodnika 6 tel. ..."), gdy
-  // siedziba firmy jest gdzie indziej. Bez tego fix-a parser zwracalby siedzibe
-  // jako miejsce dostawy.
-  if (adres && odbiornikAdres && adres === odbiornikAdres && uwagi) {
+  // Priorytet fallbacków (zasada od usera 06.05): jesli sekcja "Adres dostawy" nie dala
+  // pelnego adresu, NAJPIERW prubujemy Uwagi (klient czesto pisze "Dostawa do: Miasto ul. X 6"),
+  // dopiero potem siedziba odbiorcy. Powod: siedziba ≠ miejsce dostawy.
+  // Dotyczy obu przypadkow:
+  //   (a) adres = odbiornikAdres (wpadl w fallback siedziba) — zastap Uwagami jesli sa
+  //   (b) adres pusty (parser w ogole nie znalazl) — prubuj Uwagi
+  if (uwagi && (!adres || (odbiornikAdres && adres === odbiornikAdres))) {
     const adresZUwag = extractDeliveryAddressFromUwagi(uwagi);
     if (adresZUwag) {
-      console.log(`[parseWZText] adres siedziby zastapiony adresem z Uwag: "${adres}" -> "${adresZUwag}"`);
+      console.log(`[parseWZText] adres z Uwag (priorytet nad siedziba): "${adres ?? '(pusty)'}" -> "${adresZUwag}"`);
       adres = adresZUwag;
     }
   }
