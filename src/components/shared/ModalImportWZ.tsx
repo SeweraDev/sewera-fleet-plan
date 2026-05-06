@@ -702,7 +702,15 @@ function fixPolishOCROdbiorca(name: string): string {
     .replace(/\b(Sp[oóò]lka)\s+z\s*0\.0\.?/gi, 'Spółka z o.o.')
     // OCR myli "S.A" jako "S.4" / "5.A" — rzadkie, ale akceptujemy
     .replace(/\bS\.4\.\b/g, 'S.A.')
-    .replace(/\b5\.A\.\b/g, 'S.A.');
+    .replace(/\b5\.A\.\b/g, 'S.A.')
+    // ============================================================
+    // Znane firmy / klienci Sewery — Tesseract czesto myli "m" jako "rn"
+    // (uklad pikseli "rn" wyglada jak "m" w niskiej rozdzielczosci).
+    // Dodajemy konkretne nazwy ZAMIAST globalnego "rn → m" (false positives w
+    // polskich slowach jak "kanon", "ramy", "Bernhard" itp.).
+    // ============================================================
+    .replace(/\bAdarnietz\b/g, 'Adamietz')
+    .replace(/\bADARNIETZ\b/g, 'ADAMIETZ');
 }
 
 /**
