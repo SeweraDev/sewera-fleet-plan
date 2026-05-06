@@ -153,14 +153,68 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   // Plik PDF zachowujemy do archiwum (po zatwierdzeniu WZ — upload JPEG do Storage)
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  // Podglad WSZYSTKICH stron PDF (data URL z canvas per strona) — pokazujemy obok
-  // formularza żeby user mógł porównać wartości pól z oryginalem (analogicznie do OCR taba).
-  // Multi-strona: kazdy URL w array = jedna strona, renderowana w pionowym scrollu z numerem.
+  // Podglad WSZYSTKICH stron PDF — MINIATURY (low-res, scale ~0.8). Skalowalne na
+  // dowolnie wieloostronne PDF (renderujemy maly canvas zeby uniknac OOM/canvas limit).
   const [pdfPreviewUrls, setPdfPreviewUrls] = useState<string[]>([]);
+  // Cache renderow HIGH-RES (scale 2.0) dla modala — renderujemy on-demand po klikniciu
+  // miniatury, cache'ujemy zeby ponowne otwarcie tej samej strony bylo natychmiastowe.
+  // Klucz = index strony (0-based), wartosc = data URL JPEG.
+  const [pdfHighResCache, setPdfHighResCache] = useState<Map<number, string>>(new Map());
+  // Loading flag dla high-res render (pokazujemy spinner w modalu)
+  const [zoomLoading, setZoomLoading] = useState(false);
+  // Reference do pdfDoc — trzymamy zeby moc renderowac high-res strony on-demand.
+  // Resetujemy przy "Nowy plik" / unmount (pdfDoc.destroy()).
+  const pdfDocRef = useRef<any>(null);
   // Object URL do pelnego PDF (otwierany w nowej karcie po kliknieciu "Otworz pelny PDF").
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   // Index strony pokazywanej w modalu powiekszenia (null = modal zamkniety)
   const [zoomedPageIdx, setZoomedPageIdx] = useState<number | null>(null);
+
+  // Cleanup pdfDoc przy unmount
+  useEffect(() => {
+    return () => {
+      if (pdfDocRef.current) {
+        try { pdfDocRef.current.destroy(); } catch { /* ignore */ }
+        pdfDocRef.current = null;
+      }
+    };
+  }, []);
+
+  // Lazy render high-res strony gdy user kliknie miniature (otwarcie modala).
+  // Cache'ujemy w pdfHighResCache zeby ponowne otwarcie tej samej strony bylo natychmiastowe.
+  useEffect(() => {
+    if (zoomedPageIdx === null) return;
+    if (pdfHighResCache.has(zoomedPageIdx)) return; // juz wyrenderowane
+    if (!pdfDocRef.current) return;
+
+    let cancelled = false;
+    setZoomLoading(true);
+    (async () => {
+      try {
+        const pageNum = zoomedPageIdx + 1; // pdfjs jest 1-indexed
+        const page = await pdfDocRef.current.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx || cancelled) return;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        if (cancelled) return;
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setPdfHighResCache(prev => {
+          const next = new Map(prev);
+          next.set(zoomedPageIdx, dataUrl);
+          return next;
+        });
+      } catch (err) {
+        console.warn(`[WzPdfTab] hi-res render strony ${zoomedPageIdx + 1} failed:`, err);
+      } finally {
+        if (!cancelled) setZoomLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [zoomedPageIdx, pdfHighResCache]);
   // Zwalnianie blob URL przy zmianie pliku / unmount
   useEffect(() => {
     return () => {
@@ -186,6 +240,13 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
     setPdfBlobUrl(null);
     setPdfPreviewUrls([]);
+    setPdfHighResCache(new Map());
+    setZoomedPageIdx(null);
+    // Zwolnij poprzedni pdfDoc jesli byl
+    if (pdfDocRef.current) {
+      try { pdfDocRef.current.destroy(); } catch { /* ignore */ }
+      pdfDocRef.current = null;
+    }
 
     try {
       const pdfjs = await import('pdfjs-dist');
@@ -196,8 +257,12 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       setPdfBlobUrl(URL.createObjectURL(file));
 
       const pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+      // Trzymamy ref do pdfDoc zeby renderowac high-res on-demand po klikniciu miniatury
+      pdfDocRef.current = pdfDoc;
 
-      // Render WSZYSTKICH stron jako obrazy do podgladu (scale 1.5 dla czytelnosci).
+      // Render WSZYSTKICH stron jako MINIATURY (scale 0.8 — niska rozdzielczosc, oszczedne
+      // pamieciowo, skalowalne na 10+ stron). High-res rendering odbywa sie ON-DEMAND
+      // gdy user kliknie miniature (modal powiekszenia) — patrz useEffect ponizej.
       // Pierwsza strona renderowana natychmiast (zeby user widzial cos szybko), pozostale
       // zbieramy do array i ustawiamy hurtem (mniej re-renderow Reacta).
       const previewUrls: string[] = [];
@@ -205,26 +270,23 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         const page = await pdfDoc.getPage(i);
 
-        // 1) Render obrazu strony do podgladu — scale 1.5 (bezpieczna rozdzielczosc
-        // dla wielo-stronnych PDF, scale 2.0 powodowala ze druga strona nie renderowala
-        // sie na niektorych przegladarkach przez limit canvas/pamieci).
-        // Modal powiekszenia pokazuje ten sam obraz przeskalowany CSS — 1.5x A4
-        // (~1240x1750 px) pozostaje czytelny przy zoom.
+        // 1) Render miniatury (scale 0.8 — A4 daje canvas ~660x935, ~620 KB jpeg w pamieci
+        // przy 80% quality). Dla 20-stronnego PDF zsumowanie miniatur < 15 MB w state.
         try {
-          const viewport = page.getViewport({ scale: 1.5 });
+          const viewport = page.getViewport({ scale: 0.8 });
           const canvas = document.createElement('canvas');
           canvas.width = Math.floor(viewport.width);
           canvas.height = Math.floor(viewport.height);
           const ctx = canvas.getContext('2d');
           if (ctx) {
             await page.render({ canvasContext: ctx, viewport }).promise;
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
             previewUrls.push(dataUrl);
             // Po pierwszej stronie pokaz juz cos userowi — kolejne dolaczymy w pelni na koncu
             if (i === 1) setPdfPreviewUrls([dataUrl]);
           }
         } catch (renderErr) {
-          console.warn(`[WzPdfTab] render strony ${i} failed:`, renderErr);
+          console.warn(`[WzPdfTab] render miniatury strony ${i} failed:`, renderErr);
         }
 
         // 2) Tekst do parsowania
@@ -295,7 +357,9 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setPreview(null);
     setPdfFile(null);
     setPdfPreviewUrls([]);
+    setPdfHighResCache(new Map());
     setZoomedPageIdx(null);
+    if (pdfDocRef.current) { try { pdfDocRef.current.destroy(); } catch { /* ignore */ } pdfDocRef.current = null; }
     if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
   };
 
@@ -380,8 +444,14 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
                 {zoomedPageIdx !== null && pdfPreviewUrls[zoomedPageIdx] && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3 px-2">
-                      <p className="text-sm font-medium">
+                      <p className="text-sm font-medium flex items-center gap-2">
                         Strona {zoomedPageIdx + 1} {pdfPreviewUrls.length > 1 && `/ ${pdfPreviewUrls.length}`}
+                        {zoomLoading && (
+                          <span className="text-xs text-muted-foreground">
+                            <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin mr-1 align-middle" />
+                            ładuję wysoką rozdzielczość…
+                          </span>
+                        )}
                       </p>
                       <div className="flex items-center gap-2">
                         {pdfPreviewUrls.length > 1 && (
@@ -416,8 +486,9 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
                         )}
                       </div>
                     </div>
+                    {/* Pokaz hi-res z cache jesli jest, inaczej miniature jako placeholder */}
                     <img
-                      src={pdfPreviewUrls[zoomedPageIdx]}
+                      src={pdfHighResCache.get(zoomedPageIdx) || pdfPreviewUrls[zoomedPageIdx]}
                       alt={`Oryginał WZ — strona ${zoomedPageIdx + 1} (powiększenie)`}
                       className="w-full h-auto rounded"
                     />
@@ -432,7 +503,9 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               setPreview(null);
               setError(null);
               setPdfPreviewUrls([]);
+              setPdfHighResCache(new Map());
               setZoomedPageIdx(null);
+              if (pdfDocRef.current) { try { pdfDocRef.current.destroy(); } catch { /* ignore */ } pdfDocRef.current = null; }
               if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
             }}>Nowy plik</Button>
           </div>
