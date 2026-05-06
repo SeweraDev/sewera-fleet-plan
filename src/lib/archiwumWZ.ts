@@ -21,35 +21,54 @@ async function getPdfjs() {
 
 /**
  * Renderuje pierwsza strone PDF do JPEG Blob (niska jakosc, do podgladu).
- * Zwraca null jesli render sie nie powiedzie (nie blokuje importu).
+ * @deprecated Uzywaj pdfToJpegBlobs (multi-page).
  */
 export async function pdfToJpegBlob(file: File): Promise<Blob | null> {
+  const blobs = await pdfToJpegBlobs(file);
+  return blobs[0] || null;
+}
+
+/**
+ * Renderuje WSZYSTKIE strony PDF do JPEG Blob'ow (po jednym na strone).
+ * Skala 1.5 = ~900px szerokosci dla A4 — kompromis miedzy ostroscia a rozmiarem.
+ * Zwraca pusta tablice jesli render sie nie powiedzie (nie blokuje importu).
+ */
+export async function pdfToJpegBlobs(file: File): Promise<Blob[]> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await getPdfjs();
     const pdfDoc = await pdf.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-    const page = await pdfDoc.getPage(1);
 
-    // Scale 1.2 = ~720px szerokosci dla A4 - wystarczy do podgladu, lekkie
-    const viewport = page.getViewport({ scale: 1.2 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
+    const blobs: Blob[] = [];
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      try {
+        const page = await pdfDoc.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) continue;
 
-    // Bialy background (niektore PDFy maja transparentne tlo)
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Bialy background (niektore PDFy maja transparentne tlo)
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
+        await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
 
-    return await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.6);
-    });
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob((b) => resolve(b), "image/jpeg", 0.7);
+        });
+        if (blob) blobs.push(blob);
+      } catch (pageErr) {
+        console.warn(`[archiwumWZ] render strony ${i} failed:`, pageErr);
+      }
+    }
+    try { pdfDoc.destroy(); } catch { /* ignore */ }
+    return blobs;
   } catch (err) {
-    console.error("[archiwumWZ] pdfToJpegBlob failed:", err);
-    return null;
+    console.error("[archiwumWZ] pdfToJpegBlobs failed:", err);
+    return [];
   }
 }
 
@@ -99,12 +118,23 @@ export async function imageToJpegBlob(input: File | Blob): Promise<Blob | null> 
 }
 
 /**
- * Generuje sciezke archiwum: YYYY-MM/{wz_id}.jpg
+ * Generuje sciezke archiwum (single-page legacy): YYYY-MM/{wz_id}.jpg
+ * Uzywane dla obrazow z OCR (skan/foto/clipboard) — zawsze 1 strona.
  */
 export function buildArchiwumPath(wzId: string, date: Date = new Date()): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   return `${yyyy}-${mm}/${wzId}.jpg`;
+}
+
+/**
+ * Generuje sciezke archiwum dla strony wielo-stronicowego PDF:
+ * YYYY-MM/{wz_id}/strona_N.jpg (N = 1, 2, 3, ...)
+ */
+export function buildArchiwumPathPage(wzId: string, pageIdx: number, date: Date = new Date()): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  return `${yyyy}-${mm}/${wzId}/strona_${pageIdx + 1}.jpg`;
 }
 
 /**
@@ -151,12 +181,70 @@ export async function getArchiwumSignedUrl(path: string): Promise<string | null>
 }
 
 /**
- * Helper: konwertuje + uploaduje + zwraca path. Wszystko w tle, nie throw.
+ * Helper: konwertuje WSZYSTKIE strony PDF + uploaduje + zwraca path do PIERWSZEJ strony.
+ * Path do pierwszej strony jest zapisywany w `zlecenia_wz.archiwum_path` jako referencja —
+ * `listArchiwumPages()` rozwija go do listy wszystkich stron przez listowanie folderu.
+ *
+ * Format: YYYY-MM/{wzId}/strona_N.jpg (multi-page) — strona_1, strona_2, ...
+ *
+ * Wszystko w tle, nie throw. Zwraca null gdy zaden upload sie nie powiodl.
  */
 export async function archiwizujWZ(wzId: string, file: File): Promise<string | null> {
-  const blob = await pdfToJpegBlob(file);
-  if (!blob) return null;
-  return await uploadArchiwumJpeg(wzId, blob);
+  const blobs = await pdfToJpegBlobs(file);
+  if (blobs.length === 0) return null;
+
+  let firstPath: string | null = null;
+  for (let i = 0; i < blobs.length; i++) {
+    const path = buildArchiwumPathPage(wzId, i);
+    try {
+      const { error } = await supabase.storage.from(BUCKET_NAME).upload(path, blobs[i], {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+      if (error) {
+        console.error(`[archiwumWZ] upload strony ${i + 1} failed:`, error);
+        continue;
+      }
+      if (i === 0) firstPath = path;
+    } catch (err) {
+      console.error(`[archiwumWZ] upload strony ${i + 1} exception:`, err);
+    }
+  }
+  return firstPath;
+}
+
+/**
+ * Listuje wszystkie strony archiwum dla danego archiwum_path.
+ * - Multi-page (nowy format): "YYYY-MM/{wzId}/strona_1.jpg" → ["YYYY-MM/{wzId}/strona_1.jpg",
+ *   "YYYY-MM/{wzId}/strona_2.jpg", ...] (z listowania folderu, posortowane)
+ * - Single (legacy/OCR): "YYYY-MM/{wzId}.jpg" → ten sam path w 1-elementowej tablicy
+ */
+export async function listArchiwumPages(archiwumPath: string): Promise<string[]> {
+  if (!archiwumPath) return [];
+  // Multi-page: zawiera "/strona_N.jpg" — wyciagamy folder i listujemy
+  const multiMatch = archiwumPath.match(/^(.+)\/strona_\d+\.jpg$/);
+  if (multiMatch) {
+    const folder = multiMatch[1];
+    try {
+      const { data, error } = await supabase.storage.from(BUCKET_NAME).list(folder, { limit: 100 });
+      if (error || !data) return [archiwumPath];
+      const pages = data
+        .filter((f: any) => /^strona_\d+\.jpg$/.test(f.name))
+        .map((f: any) => `${folder}/${f.name}`)
+        .sort((a, b) => {
+          // Sortuj numerycznie po numerze strony (zeby strona_2 byla przed strona_10)
+          const ai = parseInt(a.match(/strona_(\d+)/)?.[1] || "0", 10);
+          const bi = parseInt(b.match(/strona_(\d+)/)?.[1] || "0", 10);
+          return ai - bi;
+        });
+      return pages.length > 0 ? pages : [archiwumPath];
+    } catch (err) {
+      console.warn("[archiwumWZ] listArchiwumPages failed:", err);
+      return [archiwumPath];
+    }
+  }
+  // Legacy single-page: zwroc ten sam path
+  return [archiwumPath];
 }
 
 /**
