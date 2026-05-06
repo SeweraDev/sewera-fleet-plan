@@ -11,18 +11,8 @@ import {
   obliczKosztWew,
   obliczKosztZew,
   mapTypNaCennikowy,
+  findBestAvailableType,
 } from '@/lib/stawki-transportowe';
-
-// Mapowanie typu cennikowego → typy systemowe we flocie (zbieżne z CENNIKOWY_TO_SYSTEMOWE
-// w stawki-transportowe.ts; trzymamy tu kopię żeby uniknąć zależności od prywatnego eksportu).
-const TYPY_FLOTY_DLA_CENNIKOWEGO: Record<string, string[]> = {
-  'do 1,2t bez windy': ['Dostawczy 1,2t'],
-  'z windą do 1,8t': ['Winda 1,8t'],
-  'z windą do 6t': ['Winda 6,3t'],
-  'z windą do 15t': ['Winda MAX 15,8t'],
-  'HDS 9,0t': ['HDS 9,0t', 'HDS 8,9t', 'HDS 9,1t'],
-  'HDS 12,0t': ['HDS 12,0t', 'HDS 11,7t', 'HDS 12T'],
-};
 
 export interface CostComparisonRow {
   oddzialKod: string;
@@ -37,15 +27,23 @@ export interface CostComparisonRow {
   kosztZew: { netto: number; brutto: number } | null;
   /** min(kosztWew?.netto, kosztZew?.netto) — używamy do rankingu i porównania. */
   minNetto: number | null;
-  /** Czy oddział ma aktywny pojazd dokładnie tego typu (lub jego rodziny — np. HDS 9,0t/8,9t/9,1t). */
-  hasPojazdTypu: boolean;
+  /** Typ cennikowy faktycznie użyty (po fallbacku, np. "z windą do 1,8t" gdy żądano "do 1,2t bez windy"). */
+  uzytTyp: string | null;
+  /** Czy typ to fallback (oddział nie ma dokładnie żądanego typu, ale ma podobny). */
+  isFallback: boolean;
+  /** Kierunek fallbacku: 'down' = mniejszy niż żądany, 'up' = większy, null = dokładny. */
+  fallbackDirection: 'down' | 'up' | null;
+  /** Lista typów systemowych z floty WŁASNEJ obsługujących wybrany typ cennikowy (np. ["Dostawczy 1,2t"]). */
+  wewTypy: string[];
+  /** Lista typów systemowych z floty ZEWNĘTRZNEJ obsługujących wybrany typ cennikowy. */
+  zewTypy: string[];
 }
 
 export interface CostComparisonResult {
   loading: boolean;
-  /** Wszystkie oddziały, posortowane od najtańszego do najdroższego. */
+  /** Top oddziały: obecny + 2 najbliższych z dostępnym typem (max 3 wiersze, sortowane po km). */
   rows: CostComparisonRow[];
-  /** Najtańszy oddział (rows[0]) — null gdy brak danych. */
+  /** Najtańszy oddział z `rows` — null gdy brak danych. */
   cheapest: CostComparisonRow | null;
   /** Bieżący oddział user'a (current=true). */
   current: CostComparisonRow | null;
@@ -74,11 +72,8 @@ const EMPTY: CostComparisonResult = {
 
 /**
  * Porównuje koszt transportu z każdego oddziału do podanego adresu dostawy.
- * Używane w DostepnoscStep żeby user widział czy obecny oddział jest najtańszy.
- *
- * @param currentOddzialNazwa — nazwa oddziału z którego user tworzy zlecenie (np. "Gliwice")
- * @param typPojazduSystemowy — typ wybrany w kroku 1 (np. "Dostawczy 1,2t")
- * @param adres — adres dostawy z pierwszej WZ-tki
+ * Logika identyczna z `WycenTransportTab` (sesja 30.04 — top 2 najbliższych + mój,
+ * fallback typu wew/zew, merge KAT+R, flota własna i zewnętrzna).
  */
 export function useCostComparison(
   currentOddzialNazwa: string,
@@ -95,7 +90,6 @@ export function useCostComparison(
       return;
     }
 
-    // Pomijamy generyczne typy — porównanie ma sens tylko dla konkretnego typu cennikowego
     if (typPojazduSystemowy === 'bez_preferencji' || typPojazduSystemowy === 'zewnetrzny') {
       setResult(EMPTY);
       return;
@@ -112,26 +106,28 @@ export function useCostComparison(
     setResult(prev => ({ ...prev, loading: true }));
 
     (async () => {
-      // 1. Geocode adresu + równolegle pobierz flotę wszystkich oddziałów
-      const flotaTypySystemowe = TYPY_FLOTY_DLA_CENNIKOWEGO[typCennikowy] || [];
+      // 1. Geocode adresu + równolegle pobierz flotę własną, zewn., oddziały
+      const flotaPromise = supabase
+        .from('flota')
+        .select('typ, oddzial_id')
+        .eq('aktywny', true)
+        .then(r => (r.data || []) as Array<{ typ: string; oddzial_id: number | null }>);
 
-      const flotaPromise = flotaTypySystemowe.length > 0
-        ? supabase
-            .from('flota')
-            .select('oddzial_id, typ')
-            .eq('aktywny', true)
-            .in('typ', flotaTypySystemowe)
-            .then(r => (r.data || []) as Array<{ oddzial_id: number | null; typ: string }>)
-        : Promise.resolve([] as Array<{ oddzial_id: number | null; typ: string }>);
+      const flotaZewPromise = supabase
+        .from('flota_zewnetrzna')
+        .select('typ, oddzial_id')
+        .eq('aktywny', true)
+        .then(r => (r.data || []) as Array<{ typ: string; oddzial_id: number | null }>);
 
       const oddzialyPromise = supabase
         .from('oddzialy')
         .select('id, nazwa')
         .then(r => (r.data || []) as Array<{ id: number; nazwa: string }>);
 
-      const [coords, flotaRows, oddzialyRows] = await Promise.all([
+      const [coords, flotaRows, flotaZewRows, oddzialyRows] = await Promise.all([
         geocodeAddress(adres),
         flotaPromise,
+        flotaZewPromise,
         oddzialyPromise,
       ]);
       if (cancelled) return;
@@ -140,48 +136,96 @@ export function useCostComparison(
         return;
       }
 
-      // Mapowanie nazwa → id i odwrotne id → kod (do oznaczenia hasPojazdTypu)
-      const idToKod = new Map<number, string>();
+      // Mapowanie id oddziału → kod
+      const oddzialIdToKod = new Map<number, string>();
       for (const o of oddzialyRows) {
         const kod = NAZWA_TO_KOD[o.nazwa];
-        if (kod) idToKod.set(o.id, kod);
-      }
-      const kodyZPojazdem = new Set<string>();
-      for (const f of flotaRows) {
-        if (f.oddzial_id == null) continue;
-        const kod = idToKod.get(f.oddzial_id);
-        if (kod) kodyZPojazdem.add(kod);
-      }
-      // KAT i R współdzielą flotę (ten sam adres) — jeśli któryś ma, oba mają
-      if (kodyZPojazdem.has('KAT') || kodyZPojazdem.has('R')) {
-        kodyZPojazdem.add('KAT');
-        kodyZPojazdem.add('R');
+        if (kod) oddzialIdToKod.set(o.id, kod);
       }
 
-      // 2. Dla każdego oddziału: pobierz km (OSRM) + oblicz koszty
-      const oddzialy = Object.entries(ODDZIAL_COORDS);
-      const rows: CostComparisonRow[] = [];
+      // Mapy typów per oddział: kod → Set<typ_systemowy>
+      const buildTypMap = (data: Array<{ typ: string; oddzial_id: number | null }>) => {
+        const map = new Map<string, Set<string>>();
+        for (const f of data) {
+          if (f.oddzial_id == null) continue;
+          const kod = oddzialIdToKod.get(f.oddzial_id);
+          if (!kod) continue;
+          if (!map.has(kod)) map.set(kod, new Set());
+          map.get(kod)!.add(f.typ);
+        }
+        return map;
+      };
+      const flotaWlasna = buildTypMap(flotaRows);
+      const flotaZew = buildTypMap(flotaZewRows);
+
+      // KAT i R współdzielą flotę (ten sam adres, te same auta)
+      const mergeKATR = (map: Map<string, Set<string>>) => {
+        const kat = map.get('KAT') || new Set<string>();
+        const r = map.get('R') || new Set<string>();
+        const merged = new Set<string>([...kat, ...r]);
+        if (merged.size > 0) {
+          map.set('KAT', merged);
+          map.set('R', merged);
+        }
+      };
+      mergeKATR(flotaWlasna);
+      mergeKATR(flotaZew);
+
+      // 2. Dla każdego oddziału: pobierz km (OSRM) + oblicz koszty (z fallbackiem typu)
+      const oddzialy = Object.entries(ODDZIAL_COORDS).filter(([kod]) => {
+        // KAT i R to ten sam adres — pomiń R gdy current ≠ R, KAT gdy current = R
+        if (kod === 'R' && currentKod !== 'R') return false;
+        if (kod === 'KAT' && currentKod === 'R') return false;
+        return true;
+      });
+
+      const allRows: CostComparisonRow[] = [];
 
       for (const [kod, dane] of oddzialy) {
         if (cancelled) return;
-        // KAT i R to ten sam adres — pomiń R żeby nie duplikować (chyba że current=R)
-        if (kod === 'R' && currentKod !== 'R') continue;
-        if (kod === 'KAT' && currentKod === 'R') continue;
-
         try {
           const alternatives = await getRouteAlternatives(dane, coords);
           if (!alternatives || alternatives.length === 0) continue;
           const km = pickKmFromAlternatives(alternatives, typPojazduSystemowy);
 
-          const kosztWew = obliczKosztWew(km, typCennikowy);
-          const kosztZew = obliczKosztZew(km, typCennikowy, kod);
+          const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
+          const bestType = findBestAvailableType(typCennikowy, wlasneTypy);
+
+          let kosztWew: { netto: number; brutto: number } | null = null;
+          let uzytTyp: string | null = null;
+          let isFallback = false;
+          let fallbackDirection: 'down' | 'up' | null = null;
+
+          if (bestType) {
+            kosztWew = obliczKosztWew(km, bestType.typ);
+            uzytTyp = bestType.typ;
+            isFallback = bestType.fallback;
+            fallbackDirection = bestType.direction;
+          }
+
+          const matchingWewTypy = bestType
+            ? [...wlasneTypy].filter(t => {
+                const mapped = mapTypNaCennikowy(t);
+                return mapped === typCennikowy || mapped === bestType.typ;
+              })
+            : [];
+
+          const zewTypySet = flotaZew.get(kod) || new Set<string>();
+          const bestZewType = findBestAvailableType(typCennikowy, zewTypySet);
+          const kosztZew = bestZewType ? obliczKosztZew(km, bestZewType.typ, kod) : null;
+          const matchingZewTypy = bestZewType
+            ? [...zewTypySet].filter(t => {
+                const mapped = mapTypNaCennikowy(t);
+                return mapped === typCennikowy || mapped === bestZewType.typ;
+              })
+            : [];
 
           const minNetto = (() => {
             const candidates = [kosztWew?.netto, kosztZew?.netto].filter((n): n is number => n != null);
             return candidates.length ? Math.min(...candidates) : null;
           })();
 
-          rows.push({
+          allRows.push({
             oddzialKod: kod,
             oddzialNazwa: KOD_TO_NAZWA[kod] || kod,
             isCurrent: kod === currentKod,
@@ -189,7 +233,11 @@ export function useCostComparison(
             kosztWew,
             kosztZew,
             minNetto,
-            hasPojazdTypu: kodyZPojazdem.has(kod),
+            uzytTyp,
+            isFallback,
+            fallbackDirection,
+            wewTypy: matchingWewTypy,
+            zewTypy: matchingZewTypy,
           });
         } catch {
           // pomiń oddział gdy OSRM/cennik failuje
@@ -198,16 +246,30 @@ export function useCostComparison(
 
       if (cancelled) return;
 
-      // 3. Sortuj po min koszcie (rosnąco), oddziały bez kosztu na koniec
-      rows.sort((a, b) => {
+      // 3. Filtruj: tylko oddziały z dostępnym typem (kosztWew lub kosztZew != null)
+      // — czyli musi być choć jeden pojazd dokładny lub fallback. Wyjątek: obecny
+      // oddział pokazujemy zawsze (user musi widzieć z czego startuje).
+      const dostepne = allRows.filter(r => r.kosztWew != null || r.kosztZew != null);
+      const mojOddzial = allRows.find(r => r.isCurrent) || null;
+      const inneNajblizsze = dostepne
+        .filter(r => !r.isCurrent)
+        .sort((a, b) => a.km - b.km)
+        .slice(0, 2);
+
+      const finalRows: CostComparisonRow[] = [];
+      if (mojOddzial) finalRows.push(mojOddzial);
+      finalRows.push(...inneNajblizsze);
+      finalRows.sort((a, b) => a.km - b.km);
+
+      // 4. cheapest = najtańszy z `rows` (po minNetto), current = obecny
+      const sortedByCost = [...finalRows].sort((a, b) => {
         if (a.minNetto == null && b.minNetto == null) return 0;
         if (a.minNetto == null) return 1;
         if (b.minNetto == null) return -1;
         return a.minNetto - b.minNetto;
       });
-
-      const cheapest = rows.find(r => r.minNetto != null) || null;
-      const current = rows.find(r => r.isCurrent) || null;
+      const cheapest = sortedByCost.find(r => r.minNetto != null) || null;
+      const current = finalRows.find(r => r.isCurrent) || null;
 
       let savings: number | null = null;
       if (cheapest && current && !cheapest.isCurrent && cheapest.minNetto != null && current.minNetto != null) {
@@ -216,7 +278,7 @@ export function useCostComparison(
 
       setResult({
         loading: false,
-        rows,
+        rows: finalRows,
         cheapest,
         current,
         savings,

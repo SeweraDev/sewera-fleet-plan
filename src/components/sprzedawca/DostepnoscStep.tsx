@@ -262,58 +262,66 @@ export function DostepnoscStep({
             </div>
           </div>
 
-          {/* Tabelka 3 najtańszych + obecny */}
+          {/* Tabelka: obecny + top najbliższych (zgodnie z logiką z Wycen Transport) */}
           <div className="rounded border bg-white/70 dark:bg-black/20 overflow-hidden">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left px-2 py-1 font-medium">Oddział</th>
-                  <th className="text-center px-2 py-1 font-medium">Auto {typPojazdu}</th>
+                  <th className="text-left px-2 py-1 font-medium">Oddział / pojazd</th>
                   <th className="text-right px-2 py-1 font-medium">km</th>
                   <th className="text-right px-2 py-1 font-medium">Sewera (netto)</th>
                   <th className="text-right px-2 py-1 font-medium">Zewn. (netto)</th>
                 </tr>
               </thead>
               <tbody>
-                {(() => {
-                  // Pokaż top 3 + obecny (jeśli nie w top 3)
-                  const top3 = cmp.rows.slice(0, 3);
-                  const inTop3 = top3.some(r => r.isCurrent);
-                  const visible = inTop3 ? top3 : [...top3, cmp.current!];
-                  return visible.map((r, idx) => (
+                {cmp.rows.map(r => {
+                  const isCheapest = !!cmp.cheapest && r.oddzialKod === cmp.cheapest.oddzialKod && !r.isCurrent;
+                  return (
                     <tr
                       key={r.oddzialKod}
                       className={
                         r.isCurrent
                           ? 'bg-orange-100 dark:bg-orange-900/30 font-medium'
-                          : idx === 0
+                          : isCheapest
                           ? 'bg-green-100 dark:bg-green-900/30'
                           : ''
                       }
                     >
-                      <td className="px-2 py-1.5">
-                        {idx === 0 && !r.isCurrent && '🟢 '}
-                        {r.isCurrent && '📍 '}
-                        {r.oddzialNazwa}
-                        {r.isCurrent && <span className="text-muted-foreground"> (Twój)</span>}
-                      </td>
-                      <td className="text-center px-2 py-1.5">
-                        {r.hasPojazdTypu ? (
-                          <span title="Oddział posiada pojazd tego typu">✅</span>
-                        ) : (
-                          <span title="Brak pojazdu tego typu w oddziale" className="text-muted-foreground">❌</span>
+                      <td className="px-2 py-1.5 align-top">
+                        <div>
+                          {isCheapest && '🟢 '}
+                          {r.isCurrent && '📍 '}
+                          {r.oddzialNazwa}
+                          {r.isCurrent && <span className="text-muted-foreground"> (Twój)</span>}
+                          {r.isFallback && r.uzytTyp && (
+                            <span
+                              className="ml-1 text-[10px] text-amber-700 dark:text-amber-400"
+                              title={`Brak żądanego typu — używamy ${r.uzytTyp} (fallback ${r.fallbackDirection === 'down' ? 'mniejszy' : 'większy'})`}
+                            >
+                              {r.fallbackDirection === 'down' ? '↓' : '↑'} {r.uzytTyp}
+                            </span>
+                          )}
+                        </div>
+                        {r.wewTypy.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground">🟢 Sewera: {r.wewTypy.join(', ')}</div>
+                        )}
+                        {r.zewTypy.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground">🟡 zew: {r.zewTypy.join(', ')}</div>
+                        )}
+                        {r.wewTypy.length === 0 && r.zewTypy.length === 0 && (
+                          <div className="text-[10px] text-destructive">brak pojazdu typu</div>
                         )}
                       </td>
-                      <td className="text-right px-2 py-1.5 text-muted-foreground">{r.km} km</td>
-                      <td className="text-right px-2 py-1.5">
+                      <td className="text-right px-2 py-1.5 text-muted-foreground align-top">{r.km} km</td>
+                      <td className="text-right px-2 py-1.5 align-top">
                         {r.kosztWew ? fmtPLN(r.kosztWew.netto) : '—'}
                       </td>
-                      <td className="text-right px-2 py-1.5">
+                      <td className="text-right px-2 py-1.5 align-top">
                         {r.kosztZew ? fmtPLN(r.kosztZew.netto) : '—'}
                       </td>
                     </tr>
-                  ));
-                })()}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -343,7 +351,7 @@ export function DostepnoscStep({
           <div className="flex gap-2 mt-4">
             <Button variant="outline" onClick={onBack}>← Zmień typ / termin</Button>
             <Button variant="secondary" onClick={() => onSubmit(true)} disabled={submitting}>
-              {submitting ? 'Wysyłanie...' : '⚠️ Złóż mimo to (do weryfikacji)'}
+              {submitting ? 'Wysyłanie...' : '✅ Załóż zlecenie'}
             </Button>
           </div>
         </div>
@@ -418,7 +426,7 @@ export function DostepnoscStep({
                   Zmień termin / pojazd
                 </Button>
                 <Button variant="secondary" onClick={() => onSubmit(true)} disabled={submitting}>
-                  {submitting ? 'Wysyłanie...' : 'Złóż mimo to (do weryfikacji)'}
+                  {submitting ? 'Wysyłanie...' : '✅ Załóż zlecenie'}
                 </Button>
               </div>
             </div>
