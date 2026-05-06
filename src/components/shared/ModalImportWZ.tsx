@@ -1347,6 +1347,13 @@ export function parseWZText(rawText: string): WZImportData {
   const budowaIdx = lines.findIndex((l) => /^Budowa/i.test(l));
   const deliveryAnchor = Math.max(budowaIdx, adresIdx >= 0 ? adresIdx : 0);
 
+  // STOPKA dokumentu — telefon osoby wystawiającej/drukujacej/Ekonomu (pracownik Sewera)
+  // NIE jest kontaktem do dostawy. Obcinamy text PRZED stopka, zeby nie lapac
+  // "Tel.: 662 201 092" obok "Wystawil: Agata Zadecka" / "Czas wydruku".
+  const footerMatch = text.match(/(Wystawi[lł]:|Wydruk\s+z\s+programu|Osoba\s+drukuj|Czas\s+wydruku)/i);
+  const textBeforeFooter = footerMatch ? text.slice(0, footerMatch.index) : text;
+  const footerLineIdx = lines.findIndex((l) => /Wystawi[lł]:|Wydruk\s+z\s+programu|Osoba\s+drukuj|Czas\s+wydruku/i.test(l));
+
   const phoneFound: string[] = [];
   // Patterny dla precyzyjnego matchu (g flag - znajdz wszystkie wystapienia)
   // Limit dlugosci 8-15 znakow lapie nr telefonu z separatorami (601 521 859, 32-391-01-05)
@@ -1358,7 +1365,7 @@ export function parseWZText(rawText: string): WZImportData {
   for (const pat of phonePatterns) {
     pat.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = pat.exec(text)) !== null) {
+    while ((m = pat.exec(textBeforeFooter)) !== null) {
       const cand = m[1].replace(/[\s\-]+$/, "").trim();
       const digits = cand.replace(/[\s\-]/g, "");
       // Filtr: 9-11 cyfr (komorkowy 9, stacjonarny + miasto 9-11), odrzucamy NIP (10) ktory
@@ -1374,7 +1381,10 @@ export function parseWZText(rawText: string): WZImportData {
   // jako osobna linia). Lapie tez 'Tel.' z malej litery i bez dwukropka.
   // Filtr 8-11 cyfr — OCR czasem urywa koncowa cyfre, akceptujemy nieco krotsze.
   const telPrefixLine = /(?:Tel\.|tel\.|Os\.\s*kontaktowa|telefon)/i;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    // Pomijaj stopke dokumentu (Wystawil: / Wydruk z programu / Osoba drukujaca)
+    if (footerLineIdx >= 0 && i >= footerLineIdx) break;
+    const line = lines[i];
     if (!telPrefixLine.test(line)) continue;
     const matches = line.matchAll(/([\d][\d\s\-]{6,14}\d)/g);
     for (const m of matches) {
@@ -1434,9 +1444,28 @@ export function parseWZText(rawText: string): WZImportData {
   // Akceptujemy , . ; ' ' " (typowe pomyłki OCR dla przecinka)
   const wagaExplicit = text.match(/Wag[a4]?\s*ne[t]+o?\s*raze\w*[:\s]*([\d\s]+)[,.;'`"](\d{1,3})\b/i);
   if (wagaExplicit) {
-    const intPart = wagaExplicit[1].replace(/\s/g, "");
+    const intPartRaw = wagaExplicit[1];
     const decPart = wagaExplicit[2];
-    const val = parseFloat(`${intPart}.${decPart}`);
+    let val = parseFloat(`${intPartRaw.replace(/\s/g, "")}.${decPart}`);
+
+    // Sanity check: pojedyncze WZ rzadko > 50 ton (50000 kg). Jesli match dal wieksza liczbe,
+    // to PDF/OCR skleil dwie wartosci z tabeli (np. "RAZEM: 131  Waga netto razem: 699,876"
+    // → "131 699,876" → 131699.876). Probujemy wziac TYLKO OSTATNI fragment przed przecinkiem.
+    if (val > 50000) {
+      const lastFragment = intPartRaw.trim().split(/\s+/).pop() || "";
+      if (/^\d+$/.test(lastFragment)) {
+        const fixedVal = parseFloat(`${lastFragment}.${decPart}`);
+        if (fixedVal > 0 && fixedVal < 50000) {
+          console.log(`[parseWZText] masa: skleilo dwie liczby ${val}, biore ostatni fragment ${fixedVal}`);
+          val = fixedVal;
+        } else {
+          val = 0; // odrzuc match — strategy B/C/D sprobuja
+        }
+      } else {
+        val = 0;
+      }
+    }
+
     if (val > 0) masa_kg = Math.ceil(val);
   }
 
