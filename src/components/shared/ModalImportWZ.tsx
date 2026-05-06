@@ -684,6 +684,41 @@ function fixPolishOCRAddress(addr: string): string {
     .replace(/\b([Ll])(ó|o)dzk/g, (_, l, o) => (l === 'L' ? 'Ł' : 'ł') + 'ódzk');
 }
 
+/**
+ * Wyciąga adres dostawy z pola Uwagi.
+ * Wzorzec: [Miasto z dużej] + ul./al./os./pl. + nazwa_ulicy [+ numer]
+ *
+ * Klienci często wpisują w uwagach: "Dostawa do: Zabrze ul. Wodnika 6 tel. ..."
+ * gdy adres dostawy ≠ adres siedziby firmy. OCR potrafi zlepić poprzedni tekst
+ * z miastem (np. "nettoZabrze") — pattern szuka dużej litery jako początek miasta,
+ * więc działa również w sklejce.
+ *
+ * Przycina end-of-string przy "tel.", "kont(akt)", przecinku i nowej linii —
+ * żeby do adresu nie trafił numer telefonu ani inne adnotacje.
+ */
+function extractDeliveryAddressFromUwagi(uwagi: string | null): string | null {
+  if (!uwagi) return null;
+  // Pattern bez flagi 'i' — wymagamy DUŻEJ litery na początku miasta, żeby nie
+  // łapać przypadkiem fragmentów typu "do ul. ..." (gdy "do" pełni rolę przyimka).
+  const m = uwagi.match(/([A-ZŁŚŻŹĆ][a-ząęółśżźćń]{2,})\s+(ul|al|os|pl)\.\s+([^\n]+)/);
+  if (!m) return null;
+  const miasto = m[1];
+  const prefix = m[2].toLowerCase();
+  let ulica = m[3];
+  // Usuń ogon: "tel...", "kont...", przecinek, średnik, nawias
+  ulica = ulica
+    .replace(/\s+tel[\.:].*$/i, '')
+    .replace(/\s+kont(akt)?.*$/i, '')
+    .replace(/[,;].*$/, '')
+    .replace(/\s+\(.*$/, '')
+    .trim()
+    // ucięcie końcowych nie-alfanumerycznych znaków
+    .replace(/[^A-Za-z0-9ĄĆĘŁŃÓŚŹŻąćęłńóśźż]+$/, '')
+    .trim();
+  if (!ulica || ulica.length < 2) return null;
+  return `${miasto}, ${prefix}. ${ulica}`;
+}
+
 function cleanText(text: string): string {
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
@@ -1553,6 +1588,20 @@ export function parseWZText(rawText: string): WZImportData {
   // Jeśli tak — to nie jest prawdziwy adres dostawy, wyczyść
   if (adres && odbiorca && odbiorca.includes(adres.split(',')[0].trim())) {
     adres = null;
+  }
+
+  // Heurystyka: gdy "adres" pochodzi z fallbacku siedziby odbiorcy (czyli adres
+  // dostawy NIE byl jawnie podany w sekcji "Adres dostawy"), a w uwagach klient
+  // wpisal inny adres dostawy — preferuj uwagi. Klient czesto uzywa Uwag aby
+  // przekierowac transport ("Dostawa do: Zabrze ul. Wodnika 6 tel. ..."), gdy
+  // siedziba firmy jest gdzie indziej. Bez tego fix-a parser zwracalby siedzibe
+  // jako miejsce dostawy.
+  if (adres && odbiornikAdres && adres === odbiornikAdres && uwagi) {
+    const adresZUwag = extractDeliveryAddressFromUwagi(uwagi);
+    if (adresZUwag) {
+      console.log(`[parseWZText] adres siedziby zastapiony adresem z Uwag: "${adres}" -> "${adresZUwag}"`);
+      adres = adresZUwag;
+    }
   }
 
   // Jeśli JEST sekcja "Adres dostawy" I mamy PRAWDZIWY adres dostawy — obetnij adres z odbiorca
