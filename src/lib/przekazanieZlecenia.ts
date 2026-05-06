@@ -42,3 +42,40 @@ export function buildAuditDopisek(kodZ: string, kodDo: string, data = new Date()
   const mn = String(data.getMinutes()).padStart(2, '0');
   return `[Przekazane ${kodZ}→${kodDo} ${dd}.${mm} ${hh}:${mn}]`;
 }
+
+// ============================================================
+// FILTR PRZEKAZANIA — TYLKO PARA KAT ↔ REDYSTRYBUCJA
+// ============================================================
+// Zasada biznesowa: zlecenie musi pozostać w oddziale, który wystawił WZ —
+// inaczej rozliczenie marży się rozjeżdża (oddział A wystawia fakturę / zysk,
+// transport B → koszt B). Wyjątek: KAT i R mają TEN SAM adres fizyczny
+// (ul. Kościuszki 326, Katowice) i wspólną flotę — przekazanie między nimi
+// jest księgowo neutralne. Dla pozostałych oddziałów funkcja przekazania
+// nie powinna być dostępna w UI.
+
+const KAT_R_NAZWY = new Set(['Katowice', 'Redystrybucja']);
+
+/**
+ * Czy z oddziału `obecnyOddzialId` wolno przekazać zlecenie do innego oddziału?
+ * TRUE wyłącznie dla pary Katowice ↔ Redystrybucja.
+ */
+export function canPrzekazZlecenie(
+  obecnyOddzialId: number | null | undefined,
+  oddzialy: Array<{ id: number; nazwa: string }>
+): boolean {
+  if (obecnyOddzialId == null) return false;
+  const obecny = oddzialy.find(o => o.id === obecnyOddzialId);
+  return !!obecny && KAT_R_NAZWY.has(obecny.nazwa);
+}
+
+/**
+ * Lista dozwolonych oddziałów docelowych dla przekazania.
+ * Dla user'a w KAT → [Redystrybucja]; dla R → [Katowice]; dla innych → [].
+ */
+export function getDozwoloneOddzialyDocelowe(
+  obecnyOddzialId: number | null | undefined,
+  oddzialy: Array<{ id: number; nazwa: string }>
+): Array<{ id: number; nazwa: string }> {
+  if (!canPrzekazZlecenie(obecnyOddzialId, oddzialy)) return [];
+  return oddzialy.filter(o => o.id !== obecnyOddzialId && KAT_R_NAZWY.has(o.nazwa));
+}

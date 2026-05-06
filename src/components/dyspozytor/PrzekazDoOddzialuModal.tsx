@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { usePrzekazZlecenie } from '@/hooks/usePrzekazZlecenie';
+import { canPrzekazZlecenie, getDozwoloneOddzialyDocelowe } from '@/lib/przekazanieZlecenia';
 
 interface Props {
   zlecenieId: string | null;
@@ -27,8 +28,9 @@ export function PrzekazDoOddzialuModal({ zlecenieId, zlecenieNumer, obecnyOddzia
     if (open) setDocelowy('');
   }, [open]);
 
-  const dostepne = oddzialy.filter(o => o.id !== obecnyOddzialId);
+  const dostepne = getDozwoloneOddzialyDocelowe(obecnyOddzialId, oddzialy);
   const obecnyNazwa = oddzialy.find(o => o.id === obecnyOddzialId)?.nazwa || '—';
+  const moznaPrzekaz = canPrzekazZlecenie(obecnyOddzialId, oddzialy);
 
   const handleSubmit = () => {
     if (!zlecenieId || !docelowy) return;
@@ -53,28 +55,50 @@ export function PrzekazDoOddzialuModal({ zlecenieId, zlecenieNumer, obecnyOddzia
             <div className="font-medium">{obecnyNazwa}</div>
           </div>
 
-          <div>
-            <Label>Przekaż do</Label>
-            <Select value={docelowy} onValueChange={setDocelowy}>
-              <SelectTrigger><SelectValue placeholder="Wybierz oddział docelowy" /></SelectTrigger>
-              <SelectContent>
-                {dostepne.map(o => (
-                  <SelectItem key={o.id} value={String(o.id)}>{o.nazwa}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {moznaPrzekaz ? (
+            <>
+              <div>
+                <Label>Przekaż do</Label>
+                <Select value={docelowy} onValueChange={setDocelowy}>
+                  <SelectTrigger><SelectValue placeholder="Wybierz oddział docelowy" /></SelectTrigger>
+                  <SelectContent>
+                    {dostepne.map(o => (
+                      <SelectItem key={o.id} value={String(o.id)}>{o.nazwa}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <p className="text-xs text-muted-foreground">
-            Zlecenie zostanie przeniesione do wybranego oddziału. Jeśli było przypisane do kursu — zostanie z niego odpięte. Numer zlecenia pozostaje bez zmian.
-          </p>
+              <p className="text-xs text-muted-foreground">
+                Zlecenie zostanie przeniesione do wybranego oddziału. Jeśli było przypisane do kursu — zostanie z niego odpięte. Numer zlecenia pozostaje bez zmian.
+              </p>
+            </>
+          ) : (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 space-y-2">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                Funkcja niedostępna dla tego oddziału
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Przekazanie zlecenia jest możliwe wyłącznie między <b>Katowice ↔ Redystrybucja</b>
+                (ten sam adres, wspólna flota — księgowo neutralne).
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Dla pozostałych oddziałów zlecenie musi pozostać w oddziale, który wystawił WZ —
+                inaczej rozliczenie marży i koszt transportu się rozjeżdżają.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>Anuluj</Button>
-          <Button onClick={handleSubmit} disabled={!docelowy || submitting}>
-            {submitting ? 'Przekazywanie...' : '↗ Przekaż'}
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
+            {moznaPrzekaz ? 'Anuluj' : 'Zamknij'}
           </Button>
+          {moznaPrzekaz && (
+            <Button onClick={handleSubmit} disabled={!docelowy || submitting}>
+              {submitting ? 'Przekazywanie...' : '↗ Przekaż'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

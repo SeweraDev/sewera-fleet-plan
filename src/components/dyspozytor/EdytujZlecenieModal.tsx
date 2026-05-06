@@ -14,6 +14,8 @@ import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
 import { KLASYFIKACJE } from '@/lib/klasyfikacje';
 import { geocodeAddress } from '@/lib/oddzialy-geo';
+import { canPrzekazZlecenie } from '@/lib/przekazanieZlecenia';
+import { useOddzialy } from '@/hooks/useOddzialy';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -86,6 +88,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const [showPrzekaz, setShowPrzekaz] = useState(false);
   const [podgladWZ, setPodgladWZ] = useState<{ path: string; numer: string } | null>(null);
   const originalWzRef = useRef<WzData[]>([]);
+  const { oddzialy: wszystkieOddzialy } = useOddzialy();
 
   // Walidacja adresu (geocoding on blur): per index WZ
   type AdresStatus = 'idle' | 'checking' | 'ok' | 'fail';
@@ -579,9 +582,11 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           {zlecenie && !['dostarczona', 'anulowana'].includes(zlecenie.status) && (
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Anuluj</Button>
-              <Button variant="secondary" onClick={() => setShowPrzekaz(true)} disabled={saving || loading}>
-                ↗ Przekaż do oddziału
-              </Button>
+              {canPrzekazZlecenie(zlecenie?.oddzial_id ?? null, wszystkieOddzialy) && (
+                <Button variant="secondary" onClick={() => setShowPrzekaz(true)} disabled={saving || loading}>
+                  ↗ Przekaż do oddziału
+                </Button>
+              )}
               <Button onClick={handleSaveClick} disabled={saving || loading || showResztaChoice} variant={isOverloaded ? 'destructive' : 'default'}>
                 {saving ? 'Zapisywanie...' : isOverloaded ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)` : `Zapisz zmiany (${wzList.length} WZ)`}
               </Button>

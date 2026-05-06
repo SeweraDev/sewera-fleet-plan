@@ -23,7 +23,7 @@ import { NAZWA_TO_KOD, ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
 import { TYP_CAPACITY } from '@/lib/suggestRoutes';
 import { SuggestionPanel } from '@/components/dyspozytor/SuggestionPanel';
 import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
-import { isPrzekazane, parseKodZNumer } from '@/lib/przekazanieZlecenia';
+import { isPrzekazane, parseKodZNumer, canPrzekazZlecenie, getDozwoloneOddzialyDocelowe } from '@/lib/przekazanieZlecenia';
 import { usePrzekazZlecenie } from '@/hooks/usePrzekazZlecenie';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -75,6 +75,7 @@ function ZlSzczegolyDialog({
   onAssignToKurs,
   onDelete,
   onPrzekaz,
+  moznaPrzekazac,
 }: {
   zlecenie: ZlecenieOddzialuDto | null;
   open: boolean;
@@ -83,6 +84,7 @@ function ZlSzczegolyDialog({
   onAssignToKurs: (id: string) => void;
   onDelete: (id: string) => void;
   onPrzekaz: (id: string) => void;
+  moznaPrzekazac: boolean;
 }) {
   const { wz, loading } = useZlecenieWz(open && zlecenie ? zlecenie.id : null);
 
@@ -177,7 +179,7 @@ function ZlSzczegolyDialog({
               Edytuj zlecenie
             </Button>
           )}
-          {['robocza', 'do_weryfikacji', 'potwierdzona', 'w_trasie'].includes(zlecenie.status) && (
+          {moznaPrzekazac && ['robocza', 'do_weryfikacji', 'potwierdzona', 'w_trasie'].includes(zlecenie.status) && (
             <Button variant="secondary" onClick={() => { onClose(); onPrzekaz(zlecenie.id); }}>
               ↗ Przekaż do oddziału
             </Button>
@@ -334,6 +336,12 @@ export function ZleceniaTab({
   const [bulkPrzekazujac, setBulkPrzekazujac] = useState(false);
   const { oddzialy: wszystkieOddzialy } = useOddzialy();
   const { przekaz: przekazPojedyncze } = usePrzekazZlecenie();
+
+  // Funkcja "Przekaż do oddziału" jest dostępna TYLKO między Katowice ↔ Redystrybucja
+  // (ten sam adres fizyczny + wspólna flota — księgowo neutralne). Dla pozostałych
+  // oddziałów rozliczenie marży i koszt transportu rozjechałoby się między oddziały.
+  const moznaPrzekazac = canPrzekazZlecenie(oddzialId, wszystkieOddzialy);
+  const dozwoloneDocelowe = getDozwoloneOddzialyDocelowe(oddzialId, wszystkieOddzialy);
 
   const handleDelete = (id: string) => {
     setDeleteZlId(id);
@@ -568,9 +576,11 @@ export function ZleceniaTab({
           >
             Przypisz do kursu →
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => setShowBulkPrzekaz(true)}>
-            ↗ Przekaż do oddziału
-          </Button>
+          {moznaPrzekazac && (
+            <Button size="sm" variant="secondary" onClick={() => setShowBulkPrzekaz(true)}>
+              ↗ Przekaż do oddziału
+            </Button>
+          )}
           <Button size="sm" variant="destructive" onClick={() => setShowBulkDelete(true)}>
             Usuń zaznaczone
           </Button>
@@ -734,6 +744,7 @@ export function ZleceniaTab({
         onAssignToKurs={(id) => onOpenKursModal?.([id])}
         onDelete={handleDelete}
         onPrzekaz={(id) => setPrzekazZlId(id)}
+        moznaPrzekazac={moznaPrzekazac}
       />
 
       <PrzekazDoOddzialuModal
@@ -792,13 +803,11 @@ export function ZleceniaTab({
                   <SelectValue placeholder="Wybierz oddział..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {wszystkieOddzialy
-                    .filter((o) => o.id !== oddzialId)
-                    .map((o) => (
-                      <SelectItem key={o.id} value={o.id.toString()}>
-                        {o.nazwa}
-                      </SelectItem>
-                    ))}
+                  {dozwoloneDocelowe.map((o) => (
+                    <SelectItem key={o.id} value={o.id.toString()}>
+                      {o.nazwa}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
