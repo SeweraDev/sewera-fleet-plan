@@ -49,29 +49,80 @@ export default function MapaSewera() {
   const [dzien, setDzien] = useState(today);
   const { zlecenia, kursyDnia, loading } = useMapaZlecen(dzien);
 
+  // FILTRY: ktore oddzialy pokazac + status (w kursach / bez kursu).
+  // null = "wszystkie" (jeszcze nie zainicjalizowane lub user kliknal "Wszystkie")
+  const [filterOddzialy, setFilterOddzialy] = useState<Set<string> | null>(null);
+  const [showWKursach, setShowWKursach] = useState(true);
+  const [showBezKursu, setShowBezKursu] = useState(true);
+
+  // Lista wszystkich oddzialow (kodow) ktore wystepuja w danych — do chipow filtrowania
+  const oddzialyDostepne = useMemo(() => {
+    const s = new Set<string>();
+    zlecenia.forEach(z => { if (z.oddzial_kod) s.add(z.oddzial_kod); });
+    return [...s].sort();
+  }, [zlecenia]);
+
+  // Filtrowanie zlecen: po oddziale + statusie kursu
+  const zleceniaFiltered = useMemo(() => {
+    return zlecenia.filter(z => {
+      const oddzialOK = filterOddzialy === null || filterOddzialy.has(z.oddzial_kod);
+      if (!oddzialOK) return false;
+      const wKursie = !!z.kurs_id;
+      if (wKursie && !showWKursach) return false;
+      if (!wKursie && !showBezKursu) return false;
+      return true;
+    });
+  }, [zlecenia, filterOddzialy, showWKursach, showBezKursu]);
+
+  function toggleOddzial(kod: string) {
+    setFilterOddzialy(prev => {
+      const current = prev ?? new Set(oddzialyDostepne);
+      const next = new Set(current);
+      if (next.has(kod)) next.delete(kod); else next.add(kod);
+      // Jesli zaznaczone == wszystkie dostepne -> ustaw null (oznacza "wszystkie")
+      if (next.size === oddzialyDostepne.length) return null;
+      return next;
+    });
+  }
+  function selectAllOddzialy() { setFilterOddzialy(null); }
+  function clearAllOddzialy() { setFilterOddzialy(new Set()); }
+
+  // Czy oddzial jest wybrany (do podswietlenia chipa)
+  function isOddzialSelected(kod: string): boolean {
+    if (filterOddzialy === null) return true;
+    return filterOddzialy.has(kod);
+  }
+
   // Podliczenie przystanków per kurs (do karty kursu pod mapą)
   const przystankiPoKursie = useMemo(() => {
     const m = new Map<string, MapaZlecenieDto[]>();
-    zlecenia.forEach(z => {
+    zleceniaFiltered.forEach(z => {
       if (!z.kurs_id) return;
       if (!m.has(z.kurs_id)) m.set(z.kurs_id, []);
       m.get(z.kurs_id)!.push(z);
     });
     return m;
-  }, [zlecenia]);
+  }, [zleceniaFiltered]);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
-  const pins = zlecenia.filter(z => z.lat != null && z.lng != null);
-  const bezAdresu = zlecenia.filter(z => !z.adres || z.adres.trim().length < 5);
-  const czekaNaGeo = zlecenia.filter(z => z.adres && z.adres.trim().length >= 5 && z.lat == null);
+  const pins = zleceniaFiltered.filter(z => z.lat != null && z.lng != null);
+  const bezAdresu = zleceniaFiltered.filter(z => !z.adres || z.adres.trim().length < 5);
+  const czekaNaGeo = zleceniaFiltered.filter(z => z.adres && z.adres.trim().length >= 5 && z.lat == null);
 
-  // Statystyki
-  const totalKg = zlecenia.reduce((s, z) => s + z.suma_kg, 0);
-  const wKursach = zlecenia.filter(z => z.kurs_id);
-  const bezKursu = zlecenia.filter(z => !z.kurs_id);
-  const oddzialySet = new Set(zlecenia.map(z => z.oddzial_kod).filter(Boolean));
+  // Statystyki (po filtrze)
+  const totalKg = zleceniaFiltered.reduce((s, z) => s + z.suma_kg, 0);
+  const wKursach = zleceniaFiltered.filter(z => z.kurs_id);
+  const bezKursu = zleceniaFiltered.filter(z => !z.kurs_id);
+  // Liczniki PRZED filtrem — do wyswietlenia w chipach (np. "GL (3)") niezaleznie od filtru
+  const liczbaPerOddzial = useMemo(() => {
+    const m = new Map<string, number>();
+    zlecenia.forEach(z => { if (z.oddzial_kod) m.set(z.oddzial_kod, (m.get(z.oddzial_kod) || 0) + 1); });
+    return m;
+  }, [zlecenia]);
+  const liczbaWKursach = zlecenia.filter(z => z.kurs_id).length;
+  const liczbaBezKursu = zlecenia.filter(z => !z.kurs_id).length;
 
   function shiftDay(delta: number) {
     const d = new Date(dzien);
@@ -217,7 +268,12 @@ export default function MapaSewera() {
       cancelled = true;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
-  }, [pins.length, dzien]);
+  }, [pins.length, dzien, filterOddzialy, showWKursach, showBezKursu]);
+
+  // Kursy dnia po filtrze oddzialow (przyciski/chipy filtrujace pokrywaja zarowno mape jak i liste kursow ponizej)
+  const kursyDniaFiltered = useMemo(() => {
+    return kursyDnia.filter(k => filterOddzialy === null || filterOddzialy.has(k.oddzial_kod));
+  }, [kursyDnia, filterOddzialy]);
 
   return (
     <AppLayout>
@@ -243,6 +299,80 @@ export default function MapaSewera() {
 
           <span className="text-sm text-muted-foreground">{formatDatePL(dzien)}</span>
         </div>
+
+        {/* FILTRY: oddzialy (chipy) + status (W kursach / Bez kursu) */}
+        {oddzialyDostepne.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Oddziały:</span>
+              {oddzialyDostepne.map(kod => {
+                const selected = isOddzialSelected(kod);
+                const color = ODDZIAL_COLORS[kod] || DEFAULT_COLOR;
+                const liczba = liczbaPerOddzial.get(kod) || 0;
+                return (
+                  <button
+                    key={kod}
+                    onClick={() => toggleOddzial(kod)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                      selected
+                        ? 'bg-white dark:bg-black/40 shadow-sm'
+                        : 'bg-muted/40 opacity-50 hover:opacity-75'
+                    }`}
+                    style={{
+                      borderColor: selected ? color : 'transparent',
+                      color: selected ? color : undefined,
+                    }}
+                    title={selected ? `Kliknij aby ukryć ${kod}` : `Kliknij aby pokazać ${kod}`}
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full"
+                      style={{ background: color }}
+                    />
+                    <span>{kod}</span>
+                    <span className="text-muted-foreground">({liczba})</span>
+                  </button>
+                );
+              })}
+              <div className="flex gap-1 ml-1">
+                <Button variant="outline" size="sm" className="h-7 text-[11px] px-2"
+                  onClick={selectAllOddzialy}
+                  disabled={filterOddzialy === null}>
+                  Wszystkie
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-[11px] px-2"
+                  onClick={clearAllOddzialy}>
+                  Żaden
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Status:</span>
+              <button
+                onClick={() => setShowWKursach(v => !v)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                  showWKursach
+                    ? 'bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 shadow-sm'
+                    : 'bg-muted/40 border-transparent opacity-50 hover:opacity-75'
+                }`}
+                title="Zlecenia przypisane do kursu (zaplanowane)"
+              >
+                🚛 W kursach <span className="text-muted-foreground">({liczbaWKursach})</span>
+              </button>
+              <button
+                onClick={() => setShowBezKursu(v => !v)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                  showBezKursu
+                    ? 'bg-orange-50 dark:bg-orange-950/30 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-400 shadow-sm'
+                    : 'bg-muted/40 border-transparent opacity-50 hover:opacity-75'
+                }`}
+                title="Zlecenia bez przypisanego kursu (do zaplanowania)"
+              >
+                ⚠️ Bez kursu <span className="text-muted-foreground">({liczbaBezKursu})</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Statystyki */}
         <div className="flex flex-wrap gap-4 text-sm">
@@ -286,27 +416,15 @@ export default function MapaSewera() {
           <div ref={containerRef} className="rounded-lg border overflow-hidden" style={{ height: 'calc(100vh - 220px)', minHeight: 400 }} />
         )}
 
-        {/* Legenda oddziałów */}
-        <div className="flex flex-wrap gap-3 px-1">
-          {Array.from(oddzialySet).sort().map(kod => (
-            <div key={kod} className="flex items-center gap-1.5 text-xs">
-              <div className="w-3 h-3 rounded-full" style={{ background: ODDZIAL_COLORS[kod] || DEFAULT_COLOR }} />
-              <span className="font-medium">{kod}</span>
-              <span className="text-muted-foreground">
-                ({zlecenia.filter(z => z.oddzial_kod === kod).length})
-              </span>
-            </div>
-          ))}
-        </div>
 
-        {/* Kursy dnia — lista kursów wszystkich oddziałów na wybrany dzień */}
-        {kursyDnia.length > 0 && (
+        {/* Kursy dnia — lista kursów (po filtrze oddzialow) na wybrany dzień */}
+        {kursyDniaFiltered.length > 0 && (
           <div className="space-y-2 pt-2">
             <h2 className="text-sm font-semibold">
-              🚛 Kursy dnia ({kursyDnia.length})
+              🚛 Kursy dnia ({kursyDniaFiltered.length}{kursyDniaFiltered.length !== kursyDnia.length ? ` z ${kursyDnia.length}` : ''})
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {kursyDnia.map(k => {
+              {kursyDniaFiltered.map(k => {
                 const oddzialColor = ODDZIAL_COLORS[k.oddzial_kod] || DEFAULT_COLOR;
                 const przystanki = przystankiPoKursie.get(k.id) || [];
                 const sumaKg = przystanki.reduce((s, p) => s + p.suma_kg, 0);
