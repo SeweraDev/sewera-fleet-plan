@@ -205,19 +205,20 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         const page = await pdfDoc.getPage(i);
 
-        // 1) Render obrazu strony do podgladu — scale 2.0 zeby po klikniciu
-        // (modal powiekszenia) tekst byl ostry. W miniaturze CSS zmniejsza obraz
-        // do 100% szerokosci kolumny (~280-380px), a w modalu pokazujemy w pelnej rozdzielczosci.
+        // 1) Render obrazu strony do podgladu — scale 1.5 (bezpieczna rozdzielczosc
+        // dla wielo-stronnych PDF, scale 2.0 powodowala ze druga strona nie renderowala
+        // sie na niektorych przegladarkach przez limit canvas/pamieci).
+        // Modal powiekszenia pokazuje ten sam obraz przeskalowany CSS — 1.5x A4
+        // (~1240x1750 px) pozostaje czytelny przy zoom.
         try {
-          const viewport = page.getViewport({ scale: 2.0 });
+          const viewport = page.getViewport({ scale: 1.5 });
           const canvas = document.createElement('canvas');
           canvas.width = Math.floor(viewport.width);
           canvas.height = Math.floor(viewport.height);
           const ctx = canvas.getContext('2d');
           if (ctx) {
             await page.render({ canvasContext: ctx, viewport }).promise;
-            // JPEG 78% — kompromis ostrosc / rozmiar (przy scale 2.0 rosnie wymiar pixelowy)
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
             previewUrls.push(dataUrl);
             // Po pierwszej stronie pokaz juz cos userowi — kolejne dolaczymy w pelni na koncu
             if (i === 1) setPdfPreviewUrls([dataUrl]);
