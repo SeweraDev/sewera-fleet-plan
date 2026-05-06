@@ -685,6 +685,27 @@ function fixPolishOCRAddress(addr: string): string {
 }
 
 /**
+ * Korekta OCR dla nazwy odbiorcy (firmy). Tesseract czesto myli o → 0 w nazwach
+ * typu "Sp. z o.o." → "Sp. z 0.0." Aplikujemy po wyciagnieciu odbiorcy z dokumentu.
+ *
+ * Tylko WYSOKO PEWNE pomylki — lepiej zostawic nieskorygowane niz uszkodzic
+ * poprawne dane. Wzorce z lookbehind "Sp. z" zeby nie ruszac liczb gdziekolwiek.
+ */
+function fixPolishOCROdbiorca(name: string): string {
+  if (!name) return name;
+  return name
+    // "Sp. z 0.0." / "Sp. z 0.0" / "Sp.z 0.0" → "Sp. z o.o."
+    .replace(/\bSp\.?\s*z\s*0\.0\.?/gi, 'Sp. z o.o.')
+    // "Sp. z O.O" / "Sp.z O.O" → "Sp. z o.o." (wielkie O zamiast malych)
+    .replace(/\bSp\.?\s*z\s*O\.O\.?/g, 'Sp. z o.o.')
+    // "Spólka z 0.0" / "Spolka z 0.0" → "Spółka z o.o."
+    .replace(/\b(Sp[oóò]lka)\s+z\s*0\.0\.?/gi, 'Spółka z o.o.')
+    // OCR myli "S.A" jako "S.4" / "5.A" — rzadkie, ale akceptujemy
+    .replace(/\bS\.4\.\b/g, 'S.A.')
+    .replace(/\b5\.A\.\b/g, 'S.A.');
+}
+
+/**
  * Wyciąga adres dostawy z pola Uwagi.
  * Wzorzec: [Miasto z dużej] + ul./al./os./pl. + nazwa_ulicy [+ numer]
  *
@@ -1724,18 +1745,20 @@ export function parseWZText(rawText: string): WZImportData {
   // Korekta OCR dla adresu — typowe pomyłki Tesseractu na polskich nazwach
   // ("Sląskie" → "Śląskie", "Oświędmska" → "Oświęcimska" itp.)
   const adresFinal = adres ? fixPolishOCRAddress(adres) : adres;
+  // Korekta OCR dla nazwy odbiorcy — "Sp. z 0.0." → "Sp. z o.o.", "S.4." → "S.A." itp.
+  const odbiorcaFinal = odbiorca ? fixPolishOCROdbiorca(odbiorca) : odbiorca;
 
   // DEBUG: zaloguj wynik parsowania (F12 Console) — pomocne do diagnozy bug-ow OCR
   if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
     console.groupCollapsed("[parseWZText] result");
-    console.log({ numer_wz, nr_zamowienia, odbiorca, adres: adresFinal, adresPrzedKorektaOCR: adres, odbiornikAdres, tel, masa_kg });
+    console.log({ numer_wz, nr_zamowienia, odbiorca: odbiorcaFinal, odbiorcaPrzedKorektaOCR: odbiorca, adres: adresFinal, adresPrzedKorektaOCR: adres, odbiornikAdres, tel, masa_kg });
     console.groupEnd();
   }
 
   return {
     numer_wz,
     nr_zamowienia,
-    odbiorca,
+    odbiorca: odbiorcaFinal,
     adres: adresFinal,
     tel,
     osoba_kontaktowa,
