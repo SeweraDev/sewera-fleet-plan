@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong } from '@/lib/klasyfikacje';
@@ -156,8 +157,10 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   // formularza żeby user mógł porównać wartości pól z oryginalem (analogicznie do OCR taba).
   // Multi-strona: kazdy URL w array = jedna strona, renderowana w pionowym scrollu z numerem.
   const [pdfPreviewUrls, setPdfPreviewUrls] = useState<string[]>([]);
-  // Object URL do pelnego PDF (otwierany w nowej karcie po kliknieciu podgladu).
+  // Object URL do pelnego PDF (otwierany w nowej karcie po kliknieciu "Otworz pelny PDF").
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  // Index strony pokazywanej w modalu powiekszenia (null = modal zamkniety)
+  const [zoomedPageIdx, setZoomedPageIdx] = useState<number | null>(null);
   // Zwalnianie blob URL przy zmianie pliku / unmount
   useEffect(() => {
     return () => {
@@ -202,16 +205,19 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         const page = await pdfDoc.getPage(i);
 
-        // 1) Render obrazu strony do podgladu
+        // 1) Render obrazu strony do podgladu — scale 2.0 zeby po klikniciu
+        // (modal powiekszenia) tekst byl ostry. W miniaturze CSS zmniejsza obraz
+        // do 100% szerokosci kolumny (~280-380px), a w modalu pokazujemy w pelnej rozdzielczosci.
         try {
-          const viewport = page.getViewport({ scale: 1.5 });
+          const viewport = page.getViewport({ scale: 2.0 });
           const canvas = document.createElement('canvas');
           canvas.width = Math.floor(viewport.width);
           canvas.height = Math.floor(viewport.height);
           const ctx = canvas.getContext('2d');
           if (ctx) {
             await page.render({ canvasContext: ctx, viewport }).promise;
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            // JPEG 78% — kompromis ostrosc / rozmiar (przy scale 2.0 rosnie wymiar pixelowy)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
             previewUrls.push(dataUrl);
             // Po pierwszej stronie pokaz juz cos userowi — kolejne dolaczymy w pelni na koncu
             if (i === 1) setPdfPreviewUrls([dataUrl]);
@@ -288,6 +294,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setPreview(null);
     setPdfFile(null);
     setPdfPreviewUrls([]);
+    setZoomedPageIdx(null);
     if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
   };
 
@@ -326,33 +333,97 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
             </div>
             {pdfPreviewUrls.length > 0 && (
               <div className="border rounded-md p-2 bg-muted/20 sticky top-2 self-start max-h-[70vh] overflow-auto space-y-2">
-                <p className="text-xs text-muted-foreground mb-1.5">
-                  📄 Oryginał {pdfPreviewUrls.length > 1 ? `(${pdfPreviewUrls.length} stron, kliknij aby otworzyć PDF)` : '(kliknij aby otworzyć PDF)'}:
-                </p>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <p className="text-xs text-muted-foreground">
+                    📄 Oryginał {pdfPreviewUrls.length > 1 ? `(${pdfPreviewUrls.length} stron)` : ''} — kliknij aby powiększyć
+                  </p>
+                  {pdfBlobUrl && (
+                    <a
+                      href={pdfBlobUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-primary hover:underline shrink-0"
+                    >
+                      Otwórz PDF ↗
+                    </a>
+                  )}
+                </div>
                 {pdfPreviewUrls.map((url, idx) => (
-                  <div key={idx} className="space-y-1">
+                  <div key={idx} className="space-y-0.5">
                     {pdfPreviewUrls.length > 1 && (
                       <p className="text-[10px] text-muted-foreground font-medium">Strona {idx + 1} / {pdfPreviewUrls.length}</p>
                     )}
-                    {pdfBlobUrl ? (
-                      <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer" className="block">
-                        <img
-                          src={url}
-                          alt={`Oryginał WZ — strona ${idx + 1}`}
-                          className="w-full h-auto rounded shadow-sm hover:shadow-md transition-shadow"
-                        />
-                      </a>
-                    ) : (
+                    <button
+                      type="button"
+                      onClick={() => setZoomedPageIdx(idx)}
+                      className="block w-full cursor-zoom-in"
+                      title={`Powiększ stronę ${idx + 1}`}
+                    >
                       <img
                         src={url}
                         alt={`Oryginał WZ — strona ${idx + 1}`}
-                        className="w-full h-auto rounded shadow-sm"
+                        className="w-full h-auto rounded shadow-sm hover:shadow-md hover:ring-2 hover:ring-primary/40 transition-all"
                       />
-                    )}
+                    </button>
                   </div>
                 ))}
               </div>
             )}
+
+            {/* Modal powiekszenia strony PDF — klik na miniature otwiera ten dialog */}
+            <Dialog
+              open={zoomedPageIdx !== null}
+              onOpenChange={(o) => { if (!o) setZoomedPageIdx(null); }}
+            >
+              <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto p-2 overflow-auto">
+                {zoomedPageIdx !== null && pdfPreviewUrls[zoomedPageIdx] && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3 px-2">
+                      <p className="text-sm font-medium">
+                        Strona {zoomedPageIdx + 1} {pdfPreviewUrls.length > 1 && `/ ${pdfPreviewUrls.length}`}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {pdfPreviewUrls.length > 1 && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={zoomedPageIdx === 0}
+                              onClick={() => setZoomedPageIdx(i => i !== null && i > 0 ? i - 1 : i)}
+                            >
+                              ← Poprzednia
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={zoomedPageIdx === pdfPreviewUrls.length - 1}
+                              onClick={() => setZoomedPageIdx(i => i !== null && i < pdfPreviewUrls.length - 1 ? i + 1 : i)}
+                            >
+                              Następna →
+                            </Button>
+                          </>
+                        )}
+                        {pdfBlobUrl && (
+                          <a
+                            href={pdfBlobUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline"
+                          >
+                            Otwórz pełny PDF ↗
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <img
+                      src={pdfPreviewUrls[zoomedPageIdx]}
+                      alt={`Oryginał WZ — strona ${zoomedPageIdx + 1} (powiększenie)`}
+                      className="w-full h-auto rounded"
+                    />
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
@@ -360,6 +431,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               setPreview(null);
               setError(null);
               setPdfPreviewUrls([]);
+              setZoomedPageIdx(null);
               if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
             }}>Nowy plik</Button>
           </div>
