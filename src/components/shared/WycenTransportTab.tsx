@@ -13,6 +13,8 @@ import {
   getRouteAlternatives,
   pickKmFromAlternatives,
   searchAddress,
+  ODDZIAL_COLORS,
+  getOddzialTextColor,
 } from '@/lib/oddzialy-geo';
 import type { SearchResult } from '@/lib/oddzialy-geo';
 import {
@@ -43,11 +45,6 @@ interface WynikOddzialu {
   zewTypy: string[];
 }
 
-
-const ODDZIAL_COLORS: Record<string, string> = {
-  KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
-  DG: '#ea580c', TG: '#0891b2', CH: '#be185d', OS: '#ca8a04',
-};
 
 // Odwrotne mapowanie kod → nazwa
 const KOD_TO_NAZWA: Record<string, string> = {};
@@ -179,9 +176,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const coord = ODDZIAL_COORDS[w.kod];
         if (!coord) continue;
         const color = ODDZIAL_COLORS[w.kod] || '#6b7280';
+        const textColor = getOddzialTextColor(w.kod);
         const icon = L.divIcon({
           className: '',
-          html: `<div style="width:24px;height:24px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:bold;">${w.kod}</div>`,
+          html: `<div style="width:24px;height:24px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:${textColor};font-size:10px;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.3)">${w.kod}</div>`,
           iconSize: [24, 24],
           iconAnchor: [12, 12],
         });

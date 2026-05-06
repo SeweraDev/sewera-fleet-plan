@@ -1,15 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { geocodeAddress } from '@/lib/oddzialy-geo';
-import { ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { geocodeAddress, ODDZIAL_COORDS, NAZWA_TO_KOD, ODDZIAL_COLORS, ODDZIAL_COLOR_DEFAULT as DEFAULT_COLOR, getOddzialTextColor } from '@/lib/oddzialy-geo';
 import { toast } from 'sonner';
 import type { KursDto, PrzystanekDto } from '@/hooks/useKursyDnia';
-
-// Kolory oddziałów
-const ODDZIAL_COLORS: Record<string, string> = {
-  KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
-  DG: '#ea580c', TG: '#0891b2', CH: '#be185d', OS: '#ca8a04',
-};
-const DEFAULT_COLOR = '#6b7280';
 
 // Kolory tras kursów — cykliczne
 const KURS_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#ca8a04'];
@@ -129,7 +121,12 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
 
         const codes = coordLabels.get(coordKey) || [kod];
         const isMine = codes.includes(myKod);
-        const color = ODDZIAL_COLORS[codes[0]] || DEFAULT_COLOR;
+        const c0 = ODDZIAL_COLORS[codes[0]] || DEFAULT_COLOR;
+        // Pol-na-pol gradient dla par dzielacych adres (KAT/R)
+        const background = codes.length >= 2
+          ? `linear-gradient(to right, ${c0} 50%, ${ODDZIAL_COLORS[codes[1]] || DEFAULT_COLOR} 50%)`
+          : c0;
+        const textColor = codes.length === 1 ? getOddzialTextColor(codes[0]) : '#ffffff';
         const label = codes.join('/');
         const size = isMine ? 32 : 24;
         const border = isMine ? '3px solid white' : '2px solid white';
@@ -138,7 +135,7 @@ export default function KursyMapView({ kursy, przystanki, oddzialNazwa }: Props)
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="background:' + color + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:white;font-size:' + fontSize + ';font-weight:bold;letter-spacing:-0.5px">' + label + '</div>',
+          html: '<div style="background:' + background + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:' + textColor + ';font-size:' + fontSize + ';font-weight:bold;letter-spacing:-0.5px;text-shadow:0 1px 2px rgba(0,0,0,.4)">' + label + '</div>',
           iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 - 2],
         });
 

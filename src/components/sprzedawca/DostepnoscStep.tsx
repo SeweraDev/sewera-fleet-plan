@@ -4,17 +4,11 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useSprawdzDostepnosc, pctColor, pctBg, type VehicleOccupancy } from '@/hooks/useSprawdzDostepnosc';
 import { useCostComparison } from '@/hooks/useCostComparison';
-import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
+import { ODDZIAL_COORDS, ODDZIAL_COLORS, getOddzialTextColor } from '@/lib/oddzialy-geo';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 
 /** Próg w zł netto — banner pojawia się gdy alternatywa jest tańsza o tyle. */
 const COST_THRESHOLD_PLN = 30;
-
-/** Kolory pinów oddziałów na mapie — spójne z resztą aplikacji. */
-const ODDZIAL_COLORS: Record<string, string> = {
-  KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
-  DG: '#ea580c', TG: '#0891b2', CH: '#be185d', OS: '#ca8a04',
-};
 
 // Leaflet lazy load (z CDN, jak w innych mapach w projekcie)
 let leafletLoaded = false;
@@ -185,12 +179,13 @@ export function DostepnoscStep({
         const coord = ODDZIAL_COORDS[r.oddzialKod];
         if (!coord) continue;
         const color = ODDZIAL_COLORS[r.oddzialKod] || '#6b7280';
+        const textColor = getOddzialTextColor(r.oddzialKod);
         const isCurrent = r.isCurrent;
         const size = isCurrent ? 28 : 22;
         const ring = isCurrent ? '3px solid #fb923c' : '2px solid white';
         const icon = L.divIcon({
           className: '',
-          html: `<div style="width:${size}px;height:${size}px;background:${color};border:${ring};border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:bold;">${r.oddzialKod}</div>`,
+          html: `<div style="width:${size}px;height:${size}px;background:${color};border:${ring};border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:${textColor};font-size:10px;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.3)">${r.oddzialKod}</div>`,
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],
         });

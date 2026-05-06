@@ -3,17 +3,10 @@ import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/shared/AppLayout';
 import { useMapaZlecen } from '@/hooks/useMapaZlecen';
 import type { MapaZlecenieDto } from '@/hooks/useMapaZlecen';
-import { ODDZIAL_COORDS } from '@/lib/oddzialy-geo';
+import { ODDZIAL_COORDS, ODDZIAL_COLORS, ODDZIAL_COLOR_DEFAULT as DEFAULT_COLOR, getOddzialTextColor } from '@/lib/oddzialy-geo';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-
-// Kolory oddziałów — stałe
-const ODDZIAL_COLORS: Record<string, string> = {
-  KAT: '#dc2626', R: '#7c3aed', SOS: '#1e40af', GL: '#059669',
-  DG: '#ea580c', TG: '#0891b2', CH: '#be185d', OS: '#ca8a04',
-};
-const DEFAULT_COLOR = '#6b7280';
 
 let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
@@ -163,12 +156,19 @@ export default function MapaSewera() {
         shownCoords.add(coordKey);
 
         const codes = coordLabels.get(coordKey) || [kod];
-        const color = ODDZIAL_COLORS[codes[0]] || DEFAULT_COLOR;
         const label = codes.join('/');
+
+        // Tlo pinu: dla par dzielacych adres (np. KAT/R) — gradient pol-na-pol z dwoch kolorow.
+        // Tekst zawsze biały na ciemniejszej z dwoch (lub czarny gdy oba jasne) — dla czytelnosci.
+        const c0 = ODDZIAL_COLORS[codes[0]] || DEFAULT_COLOR;
+        const background = codes.length >= 2
+          ? `linear-gradient(to right, ${c0} 50%, ${ODDZIAL_COLORS[codes[1]] || DEFAULT_COLOR} 50%)`
+          : c0;
+        const textColor = codes.length === 1 ? getOddzialTextColor(codes[0]) : '#ffffff';
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="background:' + color + ';width:28px;height:28px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:bold;letter-spacing:-0.5px">' + label + '</div>',
+          html: '<div style="background:' + background + ';width:28px;height:28px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:' + textColor + ';font-size:9px;font-weight:bold;letter-spacing:-0.5px;text-shadow:0 1px 2px rgba(0,0,0,.4)">' + label + '</div>',
           iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16],
         });
 

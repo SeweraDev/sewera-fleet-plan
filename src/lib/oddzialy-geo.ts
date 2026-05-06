@@ -1,3 +1,36 @@
+// ============================================================
+// KOLORY ODDZIAŁÓW — Wariant C2 (naprzemienne jasność/ciemność)
+// ============================================================
+// Wybrane 06.05.2026 dla maksymalnej rozróżnialności na mapie OSM.
+// Sąsiednie hue mają przeciwną jasność (jeden ciemny, jeden jasny).
+// 4 piny (R, DG, TG, CH) maja jasne tlo i wymagaja CIEMNEGO tekstu —
+// patrz ODDZIAL_TEXT_DARK ponizej.
+//
+// Zasada KAT/R: ten sam adres fizyczny → na mapie pin jest pol-na-pol
+// (lewa polowa = KAT czerwony, prawa = R fiolet) — patrz MapaSewera.tsx.
+export const ODDZIAL_COLORS: Record<string, string> = {
+  KAT: '#b91c1c', // red-700 — ciemny czerwony
+  R:   '#c084fc', // purple-400 — jasny fiolet (DARK TEXT)
+  SOS: '#1e3a8a', // blue-900 — navy ciemny
+  GL:  '#15803d', // green-700 — ciemny zielony
+  DG:  '#facc15', // yellow-400 — jasny żółty (DARK TEXT)
+  TG:  '#22d3ee', // cyan-400 — jasny cyan (DARK TEXT)
+  CH:  '#ec4899', // pink-500 — jasny pink (DARK TEXT)
+  OS:  '#78350f', // amber-900 — ciemny brąz
+};
+
+/** Default color gdy oddzial nieznany. */
+export const ODDZIAL_COLOR_DEFAULT = '#6b7280';
+
+/** Oddziały które maja jasne tlo i wymagaja ciemnego tekstu na pinie zamiast bialego. */
+const ODDZIAL_TEXT_DARK = new Set(['R', 'DG', 'TG', 'CH']);
+
+/** Zwraca kolor tekstu (białą lub czarny) dla danego kodu oddziału — tak żeby
+ * był czytelny na pinie kolorowym ODDZIAL_COLORS[kod]. */
+export function getOddzialTextColor(kod: string): string {
+  return ODDZIAL_TEXT_DARK.has(kod) ? '#1f2937' : '#ffffff';
+}
+
 // Współrzędne oddziałów SEWERA (hardcoded — znane adresy)
 export const ODDZIAL_COORDS: Record<string, { lat: number; lng: number; adres: string }> = {
   KAT: { lat: 50.2162, lng: 18.9836, adres: 'ul. Kościuszki 326, 40-608 Katowice' },

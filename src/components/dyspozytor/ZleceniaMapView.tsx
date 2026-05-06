@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import type { ZlecenieOddzialuDto } from '@/hooks/useZleceniaOddzialu';
-import { ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { ODDZIAL_COORDS, NAZWA_TO_KOD, ODDZIAL_COLORS, ODDZIAL_COLOR_DEFAULT as DEFAULT_COLOR, getOddzialTextColor } from '@/lib/oddzialy-geo';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,19 +10,6 @@ import { toast } from 'sonner';
 // Hook do floty oddzialu i kierowcy — w jednym miejscu zeby nie obciazac
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
-
-// Kolory oddziałów — wyraziste, niepodobne do siebie
-const ODDZIAL_COLORS: Record<string, string> = {
-  KAT: '#dc2626',  // czerwony
-  R:   '#7c3aed',  // fioletowy
-  SOS: '#1e40af',  // granatowy
-  GL:  '#059669',  // zielony
-  DG:  '#ea580c',  // pomarańczowy
-  TG:  '#0891b2',  // turkusowy
-  CH:  '#be185d',  // różowy
-  OS:  '#ca8a04',  // złoty
-};
-const DEFAULT_COLOR = '#6b7280';
 
 let leafletLoaded = false;
 function loadLeaflet(): Promise<any> {
@@ -182,7 +169,12 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
 
         const codes = coordLabels.get(coordKey) || [kod];
         const isMine = codes.includes(myKod);
-        const color = ODDZIAL_COLORS[codes[0]] || DEFAULT_COLOR;
+        const c0 = ODDZIAL_COLORS[codes[0]] || DEFAULT_COLOR;
+        // Pol-na-pol gradient dla par dzielacych adres (KAT/R)
+        const background = codes.length >= 2
+          ? `linear-gradient(to right, ${c0} 50%, ${ODDZIAL_COLORS[codes[1]] || DEFAULT_COLOR} 50%)`
+          : c0;
+        const textColor = codes.length === 1 ? getOddzialTextColor(codes[0]) : '#ffffff';
         const label = codes.join('/');
 
         const size = isMine ? 32 : 24;
@@ -192,7 +184,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
 
         const icon = L.divIcon({
           className: '',
-          html: '<div style="background:' + color + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:white;font-size:' + fontSize + ';font-weight:bold;letter-spacing:-0.5px">' + label + '</div>',
+          html: '<div style="background:' + background + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:' + border + ';box-shadow:' + shadow + ';display:flex;align-items:center;justify-content:center;color:' + textColor + ';font-size:' + fontSize + ';font-weight:bold;letter-spacing:-0.5px;text-shadow:0 1px 2px rgba(0,0,0,.4)">' + label + '</div>',
           iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2 - 2],
         });
 
