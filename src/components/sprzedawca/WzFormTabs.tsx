@@ -152,9 +152,10 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   // Plik PDF zachowujemy do archiwum (po zatwierdzeniu WZ — upload JPEG do Storage)
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  // Podglad pierwszej strony PDF (data URL z canvas) — pokazujemy obok formularza
-  // żeby user mógł porównać wartości pól z oryginalem (analogicznie do OCR taba).
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  // Podglad WSZYSTKICH stron PDF (data URL z canvas per strona) — pokazujemy obok
+  // formularza żeby user mógł porównać wartości pól z oryginalem (analogicznie do OCR taba).
+  // Multi-strona: kazdy URL w array = jedna strona, renderowana w pionowym scrollu z numerem.
+  const [pdfPreviewUrls, setPdfPreviewUrls] = useState<string[]>([]);
   // Object URL do pelnego PDF (otwierany w nowej karcie po kliknieciu podgladu).
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   // Zwalnianie blob URL przy zmianie pliku / unmount
@@ -181,7 +182,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     // Reset podgladow z poprzedniego pliku
     if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
     setPdfBlobUrl(null);
-    setPdfPreviewUrl(null);
+    setPdfPreviewUrls([]);
 
     try {
       const pdfjs = await import('pdfjs-dist');
@@ -193,27 +194,33 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
       const pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
 
-      // Render pierwszej strony jako obraz do podgladu (scale 1.5 dla czytelnosci na 400-600px szer.)
-      try {
-        const page1 = await pdfDoc.getPage(1);
-        const viewport = page1.getViewport({ scale: 1.5 });
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          await page1.render({ canvasContext: ctx, viewport }).promise;
-          // JPEG 80% — wystarczajace do podgladu, znacznie mniejsze niz PNG
-          setPdfPreviewUrl(canvas.toDataURL('image/jpeg', 0.8));
-        }
-      } catch (renderErr) {
-        // Render moze sie nie powiesc np. dla zaszyfrowanego PDF — nie blokujemy parsowania
-        console.warn('[WzPdfTab] render preview failed:', renderErr);
-      }
-
+      // Render WSZYSTKICH stron jako obrazy do podgladu (scale 1.5 dla czytelnosci).
+      // Pierwsza strona renderowana natychmiast (zeby user widzial cos szybko), pozostale
+      // zbieramy do array i ustawiamy hurtem (mniej re-renderow Reacta).
+      const previewUrls: string[] = [];
       const pages: string[] = [];
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         const page = await pdfDoc.getPage(i);
+
+        // 1) Render obrazu strony do podgladu
+        try {
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            previewUrls.push(dataUrl);
+            // Po pierwszej stronie pokaz juz cos userowi — kolejne dolaczymy w pelni na koncu
+            if (i === 1) setPdfPreviewUrls([dataUrl]);
+          }
+        } catch (renderErr) {
+          console.warn(`[WzPdfTab] render strony ${i} failed:`, renderErr);
+        }
+
+        // 2) Tekst do parsowania
         const content = await page.getTextContent();
         const lines: string[] = [];
         let currentLine = '';
@@ -237,6 +244,8 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         if (currentLine.trim()) lines.push(currentLine.trim());
         pages.push(lines.join('\n'));
       }
+      // Po petli — ustaw KOMPLETNA liste podgladow (jesli bylo > 1 strona)
+      if (previewUrls.length > 1) setPdfPreviewUrls(previewUrls);
       const rawText = pages.join('\n');
 
       if (!rawText || rawText.trim().length < 10) {
@@ -278,7 +287,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     }
     setPreview(null);
     setPdfFile(null);
-    setPdfPreviewUrl(null);
+    setPdfPreviewUrls([]);
     if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
   };
 
@@ -315,24 +324,33 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
             <div>
               <PreviewFields preview={preview} setPreview={setPreview} />
             </div>
-            {pdfPreviewUrl && (
-              <div className="border rounded-md p-2 bg-muted/20 sticky top-2 self-start max-h-[70vh] overflow-auto">
-                <p className="text-xs text-muted-foreground mb-1.5">📄 Oryginał (kliknij aby otworzyć PDF):</p>
-                {pdfBlobUrl ? (
-                  <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer" className="block">
-                    <img
-                      src={pdfPreviewUrl}
-                      alt="Oryginał WZ (PDF)"
-                      className="w-full h-auto rounded shadow-sm hover:shadow-md transition-shadow"
-                    />
-                  </a>
-                ) : (
-                  <img
-                    src={pdfPreviewUrl}
-                    alt="Oryginał WZ (PDF)"
-                    className="w-full h-auto rounded shadow-sm"
-                  />
-                )}
+            {pdfPreviewUrls.length > 0 && (
+              <div className="border rounded-md p-2 bg-muted/20 sticky top-2 self-start max-h-[70vh] overflow-auto space-y-2">
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  📄 Oryginał {pdfPreviewUrls.length > 1 ? `(${pdfPreviewUrls.length} stron, kliknij aby otworzyć PDF)` : '(kliknij aby otworzyć PDF)'}:
+                </p>
+                {pdfPreviewUrls.map((url, idx) => (
+                  <div key={idx} className="space-y-1">
+                    {pdfPreviewUrls.length > 1 && (
+                      <p className="text-[10px] text-muted-foreground font-medium">Strona {idx + 1} / {pdfPreviewUrls.length}</p>
+                    )}
+                    {pdfBlobUrl ? (
+                      <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer" className="block">
+                        <img
+                          src={url}
+                          alt={`Oryginał WZ — strona ${idx + 1}`}
+                          className="w-full h-auto rounded shadow-sm hover:shadow-md transition-shadow"
+                        />
+                      </a>
+                    ) : (
+                      <img
+                        src={url}
+                        alt={`Oryginał WZ — strona ${idx + 1}`}
+                        className="w-full h-auto rounded shadow-sm"
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -341,7 +359,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
             <Button size="sm" variant="ghost" onClick={() => {
               setPreview(null);
               setError(null);
-              setPdfPreviewUrl(null);
+              setPdfPreviewUrls([]);
               if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
             }}>Nowy plik</Button>
           </div>
