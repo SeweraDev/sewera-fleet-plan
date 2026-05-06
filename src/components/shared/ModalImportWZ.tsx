@@ -1475,24 +1475,34 @@ export function parseWZText(rawText: string): WZImportData {
   if (wagaExplicit) {
     const intPartRaw = wagaExplicit[1];
     const decPart = wagaExplicit[2];
-    let val = parseFloat(`${intPartRaw.replace(/\s/g, "")}.${decPart}`);
 
-    // Sanity check: pojedyncze WZ rzadko > 50 ton (50000 kg). Jesli match dal wieksza liczbe,
-    // to PDF/OCR skleil dwie wartosci z tabeli (np. "RAZEM: 131  Waga netto razem: 699,876"
-    // → "131 699,876" → 131699.876). Probujemy wziac TYLKO OSTATNI fragment przed przecinkiem.
-    if (val > 50000) {
-      const lastFragment = intPartRaw.trim().split(/\s+/).pop() || "";
-      if (/^\d+$/.test(lastFragment)) {
-        const fixedVal = parseFloat(`${lastFragment}.${decPart}`);
-        if (fixedVal > 0 && fixedVal < 50000) {
-          console.log(`[parseWZText] masa: skleilo dwie liczby ${val}, biore ostatni fragment ${fixedVal}`);
-          val = fixedVal;
-        } else {
-          val = 0; // odrzuc match — strategy B/C/D sprobuja
-        }
-      } else {
-        val = 0;
-      }
+    // PDF/OCR czesto skleja dwie sasiednie komorki tabeli (np. "RAZEM: 376" + "Waga netto razem: 9 349,00"
+    // → intPart="376 9 349"). Klasyczny tysięcznik PL: 1-3 cyfry + spacja + 3 cyfry + spacja + 3 cyfry...
+    // Strategia: rozwaz wszystkie suffiksy fragmentow (od konca), ktore tworza poprawny tysięcznik
+    // (kazdy fragment poza pierwszym = dokladnie 3 cyfry). Wybierz NAJWIEKSZY sensowny (< 50t).
+    //
+    // Przyklady:
+    //   "9 349"       → [349, 9349] → 9349 ✓ (wlasciwa waga z tysięcznikiem)
+    //   "131 699"     → [699] (131699 > 50t) → 699 ✓ (PDF zlepilo "131 RAZEM ilosci" z "699 waga")
+    //   "376 9 349"   → [349, 9349] → 9349 ✓ (PDF zlepilo "376 RAZEM ilosci" z "9 349 waga")
+    //   "1 700"       → [700, 1700] → 1700 ✓ (typowy 1700 kg z tysięcznikiem)
+    const fragments = intPartRaw.trim().split(/\s+/).filter(Boolean);
+    const kandydaci: number[] = [];
+    for (let k = 1; k <= fragments.length; k++) {
+      const slice = fragments.slice(-k);
+      // Klasyczny tysięcznik: kazdy fragment POZA PIERWSZYM ma dokladnie 3 cyfry
+      const validTysieczne = slice.slice(1).every(s => /^\d{3}$/.test(s));
+      if (!validTysieczne) continue;
+      // Pierwszy fragment 1-3 cyfry
+      if (!/^\d{1,3}$/.test(slice[0])) continue;
+      const candidateStr = slice.join("");
+      const v = parseFloat(`${candidateStr}.${decPart}`);
+      if (v > 0 && v < 50000) kandydaci.push(v);
+    }
+    // Wybierz najwiekszy sensowny — najlepiej oddaje rzeczywista wage
+    const val = kandydaci.length > 0 ? Math.max(...kandydaci) : 0;
+    if (val > 0 && fragments.length > 1) {
+      console.log(`[parseWZText] masa: intPart="${intPartRaw.trim()}", kandydaci=${kandydaci.join(",")}, wybrano=${val}`);
     }
 
     if (val > 0) masa_kg = Math.ceil(val);
