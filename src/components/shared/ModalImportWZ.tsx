@@ -894,13 +894,19 @@ export function parseWZText(rawText: string): WZImportData {
     const SEWERA_PREFIXES: RegExp[] = [
       /^SEWERA\s+POLSKA\s+CHEMIA\s+IRENEUSZ\s+WOLAK\b[\s,.]*/i,
       /^ul\.\s+Tadeusza\s+Ko[śs]ciuszki\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice\s*/i,
+      // Adres oddzialu po REDYSTRYBUCJA (KOSCIUSZKI w capsach) — pdfjs wstawia
+      // te linie z lewej kolumny PRZED danymi prawej kolumny (Odbiorca), wiec
+      // musimy je odciac zeby dotrzec do prawej kolumny.
+      /^ul\.\s+KO[ŚS]CIUSZKI\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+KATOWICE\s*/i,
       /^NIP:\s*\d{10}\b\s*/i,
       /^N[RH]\s*BDO:\s*\d+\b\s*/i,
     ];
 
     let rightName: string | null = null;
     const rightAddr: string[] = [];
-    for (let i = mergedHeaderIdx + 1; i < Math.min(mergedHeaderIdx + 6, lines.length); i++) {
+    // Okno 10 linii (bylo 6) — REDYSTRYBUCJA + adres oddzialu wsuwaja prawa kolumne dalej.
+    // Wieksze okno + Nr ewid jako "stop" zeby nie wciagnac sekcji "Adres dostawy" pod spodem.
+    for (let i = mergedHeaderIdx + 1; i < Math.min(mergedHeaderIdx + 10, lines.length); i++) {
       let l = lines[i];
       // Odetnij znany prefix lewej kolumny (Sewera) — zostaje część z prawej
       for (const p of SEWERA_PREFIXES) {
@@ -910,10 +916,15 @@ export function parseWZText(rawText: string): WZImportData {
           break;
         }
       }
-      // Zakończenie bloku dwukolumnowego (tylko-lewa-kolumna linie: REDYSTRYBUCJA, Magazyn, Forma, Wydano, Adres dostawy)
-      if (/^REDYSTRYBUCJA|^ODDZIAŁ|^Magazyn|^Forma\s+płatn|^Wydano|^Adres\s+dostawy|^e\s+wydaj/i.test(l)) break;
+      // REDYSTRYBUCJA / ODDZIAŁ to linie LEWEJ kolumny (po nich moze byc jeszcze adres
+      // oddzialu lewej kolumny + cala prawa kolumna z Odbiorca). NIE break — continue.
+      if (/^REDYSTRYBUCJA\b|^ODDZIAŁ\b/i.test(l)) continue;
+      // Faktyczny koniec sekcji dwukolumnowej (sekcje pojawiaja sie pod blokiem)
+      if (/^Magazyn|^Forma\s+płatn|^Wydano|^Adres\s+dostawy|^e\s+wydaj/i.test(l)) break;
       if (/^HR\s*BDO:|^NR\s*BDO:/i.test(l) && (rightName || rightAddr.length > 0)) break;
-      if (/^Nr\s+ewid/i.test(l)) continue; // pomiń nr ewidencyjny odbiorcy
+      // Nr ewid = ostatnia linia bloku Odbiorcy. Po niej zaczyna sie sekcja "Adres dostawy"
+      // (tez zawiera nazwisko + adres) — break, zeby nie zduplikowac danych.
+      if (/^Nr\s+ewid/i.test(l)) break;
       if (l.length < 2) continue;
 
       if (!rightName) {
