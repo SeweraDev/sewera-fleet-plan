@@ -80,6 +80,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [loading, setLoading] = useState(false);
   const [wyniki, setWyniki] = useState<WynikOddzialu[] | null>(null);
   const [error, setError] = useState('');
+  // Tymczasowe pole diagnostyczne (wyswietla flota OS dla weryfikacji jest_zewnetrzny)
+  const [debugInfo, setDebugInfo] = useState('');
   const [pokazZew, setPokazZew] = useState(false);
 
   // Zamrożone parametry z czasu ostatniego udanego wyliczenia (żeby header tabeli
@@ -261,6 +263,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       });
       console.log('[WycenTransport DEBUG] OS wlasna:', osWlasna);
       console.log('[WycenTransport DEBUG] OS zew (flota_zewnetrzna + flota.jest_zewnetrzny=true):', osZew);
+      // Tymczasowy banner w UI - eliminuje potrzebe F12
+      setDebugInfo(`OS wlasna (typ:jest_zewnetrzny): ${JSON.stringify(osWlasna.map((f: any) => `${f.typ}:${f.jest_zewnetrzny}`))}\nOS zew: ${JSON.stringify(osZew.map(f => f.typ))}`);
 
       const { data: oddzialyData } = await supabase
         .from('oddzialy')
@@ -466,6 +470,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         {error && (
           <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
             {error}
+          </div>
+        )}
+
+        {debugInfo && (
+          <div className="text-[11px] font-mono bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-800 p-3 rounded-md whitespace-pre-wrap">
+            <div className="font-semibold mb-1 text-yellow-900 dark:text-yellow-100">🐛 DEBUG (do diagnozy — przeslij Claude):</div>
+            {debugInfo}
           </div>
         )}
 
