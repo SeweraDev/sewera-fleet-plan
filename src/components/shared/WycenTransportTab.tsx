@@ -251,6 +251,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const flotaZewExtraRaw = (flotaDataRaw || []).filter(f => !!(f as any).jest_zewnetrzny);
       const flotaZewMerged = [...(flotaZewData || []), ...flotaZewExtraRaw];
 
+      const { data: oddzialyData } = await supabase
+        .from('oddzialy')
+        .select('id, nazwa');
+
       // DEBUG: pokaz co jest dla OS — pomaga zdiagnozowac bledne flagi w bazie
       // (po wyjasnieniu mozna usunac)
       const osWlasna = flotaWlasnaRaw.filter(f => {
@@ -265,10 +269,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       console.log('[WycenTransport DEBUG] OS zew (flota_zewnetrzna + flota.jest_zewnetrzny=true):', osZew);
       // Tymczasowy banner w UI - eliminuje potrzebe F12
       setDebugInfo(`OS wlasna (typ:jest_zewnetrzny): ${JSON.stringify(osWlasna.map((f: any) => `${f.typ}:${f.jest_zewnetrzny}`))}\nOS zew: ${JSON.stringify(osZew.map(f => f.typ))}`);
-
-      const { data: oddzialyData } = await supabase
-        .from('oddzialy')
-        .select('id, nazwa');
 
       const oddzialIdToKod = new Map<number, string>();
       (oddzialyData || []).forEach(o => {
