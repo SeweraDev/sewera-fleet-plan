@@ -201,6 +201,22 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
     }
   };
 
+  /** Zmień klasyfikację konkretnego WZ (per zlecenie_id + numer_wz). Uzywane w aktywnych kursach
+   *  gdzie pokazujemy 1 wiersz per WZ — picker dziala na pojedynczy WZ a nie cala grupe adresu. */
+  const handleChangeKlasyfikacjaWz = async (zlecenieId: string, numerWz: string, nowaKlasyf: string) => {
+    if (!zlecenieId) return;
+    let q = supabase.from('zlecenia_wz').update({ klasyfikacja: nowaKlasyf }).eq('zlecenie_id', zlecenieId);
+    // numer_wz moze byc pusty (rzadko) — wtedy update wszystkich WZ zlecenia
+    if (numerWz) q = q.eq('numer_wz', numerWz);
+    const { error } = await q;
+    if (error) {
+      toast.error('Blad zmiany klasyfikacji: ' + error.message);
+      return;
+    }
+    toast.success(`Klasyfikacja: ${nowaKlasyf}`);
+    refetch();
+  };
+
   /** Zmień klasyfikację dla wszystkich WZ na danym adresie w obrębie kursa. */
   const handleChangeKlasyfikacjaAdres = async (kursId: string, adres: string, nowaKlasyf: string) => {
     // Znajdź wszystkie przystanki kursa z tym adresem
@@ -576,10 +592,28 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                               </TableCell>
                             ) : null
                           ) : (
-                            <TableCell>
-                              {p.klasyfikacja ? (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">{p.klasyfikacja}</Badge>
-                              ) : <span className="text-muted-foreground text-xs">—</span>}
+                            <TableCell onClick={e => e.stopPropagation()}>
+                              {p.zlecenie_id ? (
+                                <Select
+                                  value={p.klasyfikacja || ''}
+                                  onValueChange={(v) => handleChangeKlasyfikacjaWz(p.zlecenie_id!, p.numer_wz, v)}
+                                >
+                                  <SelectTrigger className="h-7 w-16 text-[10px] px-2 font-mono">
+                                    <SelectValue placeholder="—" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {KLASYFIKACJE.map(k => (
+                                      <SelectItem key={k.kod} value={k.kod} className="text-xs">
+                                        <span className="font-mono">{k.kod}</span> — {k.opis}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                p.klasyfikacja ? (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">{p.klasyfikacja}</Badge>
+                                ) : <span className="text-muted-foreground text-xs">—</span>
+                              )}
                             </TableCell>
                           )}
                           <TableCell className="text-right">{Math.round(p.masa_kg)}</TableCell>
