@@ -249,6 +249,19 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const flotaZewExtraRaw = (flotaDataRaw || []).filter(f => !!(f as any).jest_zewnetrzny);
       const flotaZewMerged = [...(flotaZewData || []), ...flotaZewExtraRaw];
 
+      // DEBUG: pokaz co jest dla OS — pomaga zdiagnozowac bledne flagi w bazie
+      // (po wyjasnieniu mozna usunac)
+      const osWlasna = flotaWlasnaRaw.filter(f => {
+        const o = (oddzialyData || []).find(o2 => o2.id === f.oddzial_id);
+        return o?.nazwa === 'Oświęcim';
+      });
+      const osZew = flotaZewMerged.filter(f => {
+        const o = (oddzialyData || []).find(o2 => o2.id === f.oddzial_id);
+        return o?.nazwa === 'Oświęcim';
+      });
+      console.log('[WycenTransport DEBUG] OS wlasna:', osWlasna);
+      console.log('[WycenTransport DEBUG] OS zew (flota_zewnetrzna + flota.jest_zewnetrzny=true):', osZew);
+
       const { data: oddzialyData } = await supabase
         .from('oddzialy')
         .select('id, nazwa');
