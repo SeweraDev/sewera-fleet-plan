@@ -9,7 +9,7 @@ import {
 } from '@/lib/oddzialy-geo';
 import {
   obliczKosztWew,
-  obliczKosztZew,
+  obliczKosztyZewWszystkie,
   mapTypNaCennikowy,
   findBestAvailableType,
 } from '@/lib/stawki-transportowe';
@@ -23,9 +23,9 @@ export interface CostComparisonRow {
   km: number;
   /** Koszt netto/brutto pojazdem własnym Sewera (gdy pasujący typ obsługiwany). */
   kosztWew: { netto: number; brutto: number } | null;
-  /** Koszt netto/brutto pojazdem zewnętrznym (gdy stawka istnieje dla tego oddziału).
+  /** Lista ofert pojazdami zewnetrznymi (posortowana od najtanszej). Pusta gdy brak.
    *  paletyExtra = stawka per paleta (informacyjna, mnozona przez palety w kontekscie zlecenia). */
-  kosztZew: { netto: number; brutto: number; paletyExtra?: number; nazwa_firmy?: string } | null;
+  kosztyZew: Array<{ netto: number; brutto: number; paletyExtra?: number; nazwa_firmy?: string }>;
   /** min(kosztWew?.netto, kosztZew?.netto) — używamy do rankingu i porównania. */
   minNetto: number | null;
   /** Typ cennikowy faktycznie użyty (po fallbacku, np. "z windą do 1,8t" gdy żądano "do 1,2t bez windy"). */
@@ -219,7 +219,7 @@ export function useCostComparison(
 
           const zewTypySet = flotaZew.get(kod) || new Set<string>();
           const bestZewType = findBestAvailableType(typCennikowy, zewTypySet);
-          const kosztZew = bestZewType ? obliczKosztZew(km, bestZewType.typ, kod) : null;
+          const kosztyZew = bestZewType ? obliczKosztyZewWszystkie(km, bestZewType.typ, kod) : [];
           const matchingZewTypy = bestZewType
             ? [...zewTypySet].filter(t => {
                 const mapped = mapTypNaCennikowy(t);
@@ -227,8 +227,10 @@ export function useCostComparison(
               })
             : [];
 
+          // minNetto - najtansza oferta z wew + wszystkich zew (do rankingu oddzialow)
           const minNetto = (() => {
-            const candidates = [kosztWew?.netto, kosztZew?.netto].filter((n): n is number => n != null);
+            const zewMin = kosztyZew.length > 0 ? kosztyZew[0].netto : null; // posortowane od najtanszej
+            const candidates = [kosztWew?.netto, zewMin].filter((n): n is number => n != null);
             return candidates.length ? Math.min(...candidates) : null;
           })();
 
@@ -238,7 +240,7 @@ export function useCostComparison(
             isCurrent: kod === currentKod,
             km,
             kosztWew,
-            kosztZew,
+            kosztyZew,
             minNetto,
             uzytTyp,
             isFallback,
@@ -253,10 +255,10 @@ export function useCostComparison(
 
       if (cancelled) return;
 
-      // 3. Filtruj: tylko oddziały z dostępnym typem (kosztWew lub kosztZew != null)
+      // 3. Filtruj: tylko oddziały z dostępnym typem (kosztWew lub kosztyZew niepuste)
       // — czyli musi być choć jeden pojazd dokładny lub fallback. Wyjątek: obecny
       // oddział pokazujemy zawsze (user musi widzieć z czego startuje).
-      const dostepne = allRows.filter(r => r.kosztWew != null || r.kosztZew != null);
+      const dostepne = allRows.filter(r => r.kosztWew != null || r.kosztyZew.length > 0);
       const mojOddzial = allRows.find(r => r.isCurrent) || null;
       const inneNajblizsze = dostepne
         .filter(r => !r.isCurrent)

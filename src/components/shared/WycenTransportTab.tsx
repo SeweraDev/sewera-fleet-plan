@@ -20,7 +20,7 @@ import type { SearchResult } from '@/lib/oddzialy-geo';
 import {
   TYPY_KALKULATOR,
   obliczKosztWew,
-  obliczKosztZew,
+  obliczKosztyZewWszystkie,
   maStawkiZew,
   findBestAvailableType,
   mapTypNaCennikowy,
@@ -31,13 +31,20 @@ interface WycenTransportTabProps {
   oddzialNazwa: string;
 }
 
+interface KosztZewOferta {
+  netto: number;
+  brutto: number;
+  paletyExtra?: number;
+  nazwa_firmy?: string;
+}
+
 interface WynikOddzialu {
   kod: string;
   nazwa: string;
   km: number;
   kosztWew: { netto: number; brutto: number } | null;
-  /** Koszt transportu zewnetrznego. paletyExtra = stawka per paleta (informacyjna, mnozona przez palety w kontekscie zlecenia). */
-  kosztZew: { netto: number; brutto: number; paletyExtra?: number; nazwa_firmy?: string } | null;
+  /** Lista ofert zewnetrznych - posortowane od najtanszej. Pusta gdy brak. */
+  kosztyZew: KosztZewOferta[];
   jestMojOddzial: boolean;
   uzytTyp: string | null;
   isFallback: boolean;
@@ -80,8 +87,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [loading, setLoading] = useState(false);
   const [wyniki, setWyniki] = useState<WynikOddzialu[] | null>(null);
   const [error, setError] = useState('');
-  // Tymczasowe pole diagnostyczne (wyswietla flota OS dla weryfikacji jest_zewnetrzny)
-  const [debugInfo, setDebugInfo] = useState('');
   const [pokazZew, setPokazZew] = useState(false);
 
   // Zamrożone parametry z czasu ostatniego udanego wyliczenia (żeby header tabeli
@@ -255,21 +260,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         .from('oddzialy')
         .select('id, nazwa');
 
-      // DEBUG: pokaz co jest dla OS — pomaga zdiagnozowac bledne flagi w bazie
-      // (po wyjasnieniu mozna usunac)
-      const osWlasna = flotaWlasnaRaw.filter(f => {
-        const o = (oddzialyData || []).find(o2 => o2.id === f.oddzial_id);
-        return o?.nazwa === 'Oświęcim';
-      });
-      const osZew = flotaZewMerged.filter(f => {
-        const o = (oddzialyData || []).find(o2 => o2.id === f.oddzial_id);
-        return o?.nazwa === 'Oświęcim';
-      });
-      console.log('[WycenTransport DEBUG] OS wlasna:', osWlasna);
-      console.log('[WycenTransport DEBUG] OS zew (flota_zewnetrzna + flota.jest_zewnetrzny=true):', osZew);
-      // Tymczasowy banner w UI - eliminuje potrzebe F12
-      setDebugInfo(`OS wlasna (typ:jest_zewnetrzny): ${JSON.stringify(osWlasna.map((f: any) => `${f.typ}:${f.jest_zewnetrzny}`))}\nOS zew: ${JSON.stringify(osZew.map(f => f.typ))}`);
-
       const oddzialIdToKod = new Map<number, string>();
       (oddzialyData || []).forEach(o => {
         const kod = NAZWA_TO_KOD[o.nazwa];
@@ -344,7 +334,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         // Liczymy koszt dla FAKTYCZNIE dostępnego typu (nie oryginalnie żądanego),
         // żeby oddział z fallbackiem w górę (np. SOS ma HDS 12,0t, user szuka HDS 9,0t)
         // dostał cenę wg HDS 12,0t zamiast nulla (brak stawki dla HDS 9,0t na SOS).
-        const kosztZew = bestZewType ? obliczKosztZew(km, bestZewType.typ, kod) : null;
+        const kosztyZew = bestZewType ? obliczKosztyZewWszystkie(km, bestZewType.typ, kod) : [];
         const matchingZewTypy = bestZewType ? [...zewTypy].filter(t => {
           const mapped = mapTypNaCennikowy(t);
           return mapped === typPojazdu || mapped === bestZewType.typ;
@@ -355,7 +345,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           nazwa: KOD_TO_NAZWA[kod] || kod,
           km,
           kosztWew,
-          kosztZew,
+          kosztyZew,
           jestMojOddzial: kod === mojKod,
           uzytTyp,
           isFallback,
@@ -369,7 +359,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       // mają wysokie koszty, więc liczy się odległość. Ranking po km, nie po cenie.)
       const mojOddzial = results.find(r => r.jestMojOddzial);
       const inneNajblizsze = results
-        .filter(r => !r.jestMojOddzial && (r.kosztWew || r.kosztZew))
+        .filter(r => !r.jestMojOddzial && (r.kosztWew || r.kosztyZew.length > 0))
         .sort((a, b) => a.km - b.km)
         .slice(0, 2); // top 2 najbliższych (plus mój = max 3 wiersze)
 
@@ -380,7 +370,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       // Końcowe sortowanie po km — najbliższy pierwszy
       finalResults.sort((a, b) => a.km - b.km);
 
-      const jestZew = finalResults.some(r => r.kosztZew !== null);
+      const jestZew = finalResults.some(r => r.kosztyZew.length > 0);
       setPokazZew(jestZew);
       setWyniki(finalResults);
       setLastCalc({ typ: typPojazdu, adres, oddzialNazwa });
@@ -473,13 +463,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           </div>
         )}
 
-        {debugInfo && (
-          <div className="text-[11px] font-mono bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-800 p-3 rounded-md whitespace-pre-wrap">
-            <div className="font-semibold mb-1 text-yellow-900 dark:text-yellow-100">🐛 DEBUG (do diagnozy — przeslij Claude):</div>
-            {debugInfo}
-          </div>
-        )}
-
         {/* Wyniki */}
         {wyniki && wyniki.length > 0 && lastCalc && (
           <div className="space-y-3">
@@ -552,15 +535,36 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                         {pokazZew && (
                           <>
                             <td className="text-center p-3 tabular-nums">
-                              {w.kosztZew ? formatPLN(w.kosztZew.netto) : '—'}
-                              {w.kosztZew && (w.kosztZew.paletyExtra ?? 0) > 0 && (
-                                <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal mt-0.5" title="Dodatkowa oplata za rozladunek (mnozona przez liczbe palet)">
-                                  + {w.kosztZew.paletyExtra} zł / paleta rozładunek
+                              {w.kosztyZew.length === 0 ? '—' : (
+                                <div className="space-y-1.5">
+                                  {w.kosztyZew.map((k, i) => (
+                                    <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
+                                      {formatPLN(k.netto)}
+                                      {k.nazwa_firmy && (
+                                        <div className="text-[10px] text-muted-foreground font-normal">({k.nazwa_firmy})</div>
+                                      )}
+                                      {(k.paletyExtra ?? 0) > 0 && (
+                                        <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal" title="Dodatkowa oplata za rozladunek (mnozona przez liczbe palet)">
+                                          + {k.paletyExtra} zł / paleta rozładunek
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
                               )}
                             </td>
                             <td className="text-center p-3 tabular-nums font-bold">
-                              {w.kosztZew ? formatPLN(w.kosztZew.brutto) : '—'}
+                              {w.kosztyZew.length === 0 ? '—' : (
+                                <div className="space-y-1.5">
+                                  {w.kosztyZew.map((k, i) => (
+                                    <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
+                                      {formatPLN(k.brutto)}
+                                      {k.nazwa_firmy && <div className="text-[10px] font-normal opacity-0">.</div>}
+                                      {(k.paletyExtra ?? 0) > 0 && <div className="text-[10px] font-normal opacity-0">.</div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </td>
                           </>
                         )}

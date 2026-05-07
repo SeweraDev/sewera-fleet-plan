@@ -341,55 +341,56 @@ function obliczKmDlaStawki(km: number, stawka: StawkaZew): { netto: number } | n
 }
 
 /**
- * Oblicz koszt transportu zewnętrznego.
- * Metoda stref (analogicznie do transportu wewnętrznego): cena punktu
- * obowiązuje dla km ≤ km_punktu. Dla km ≤ pierwszego punktu — cena pierwszego.
- * Powyżej ostatniego punktu — stawka za km (gdy ustalona) lub ekstrapolacja.
- *
- * Gdy dla (typ, oddzial) jest WIELE wpisow (kilka firm), wybierany jest najtanszy
- * calkowity koszt = koszt km + paletyExtra * palety (jesli palety podane).
- *
- * @param km — odległość w jedną stronę
- * @param typCennikowy — typ cennikowy (np. "HDS 12t")
- * @param oddzialKod — kod oddziału (np. "GL", "KAT")
- * @param palety — opcjonalnie: liczba palet (do uwzglednienia paletyExtra przy wyborze najtanszej oferty)
- * @returns null jeśli brak stawki zew dla tego oddziału/typu
+ * Oblicz koszt transportu zewnętrznego — najtansza oferta gdy jest wiele firm.
+ * Zachowane dla backward compat. Nowe miejsca uzywaja obliczKosztyZewWszystkie().
  */
 export function obliczKosztZew(km: number, typCennikowy: string, oddzialKod: string, palety?: number): KosztTransportuZew | null {
-  if (km <= 0) return { netto: 0, brutto: 0, paletyExtra: 0 };
+  const oferty = obliczKosztyZewWszystkie(km, typCennikowy, oddzialKod, palety);
+  return oferty.length > 0 ? oferty[0] : null;
+}
+
+/**
+ * Oblicz koszty transportu zewnętrznego DLA WSZYSTKICH FIRM dla danego (typ, oddzial).
+ * Gdy dla (typ, oddzial) jest jeden wpis - tablica jednoelementowa. Gdy wiele firm
+ * (np. Oswiecim ma 2 HDS 12T zewnetrzne) - tablica posortowana od najtanszej oferty.
+ *
+ * @param km — odległość w jedną stronę
+ * @param typCennikowy — typ cennikowy (np. "HDS 12,0t")
+ * @param oddzialKod — kod oddziału
+ * @param palety — opcjonalnie: liczba palet (uwzglednia paletyExtra przy sortowaniu)
+ * @returns pusta tablica jesli brak stawki zew dla tego oddziału/typu
+ */
+export function obliczKosztyZewWszystkie(km: number, typCennikowy: string, oddzialKod: string, palety?: number): KosztTransportuZew[] {
+  if (km <= 0) return [];
   const stawki = STAWKI_ZEW.filter(
     s => s.typCennikowy === typCennikowy && s.oddzial === oddzialKod
   );
-  if (stawki.length === 0) return null;
+  if (stawki.length === 0) return [];
 
-  // Policz koszt dla kazdej firmy, wybierz najtansza CALOSCIOWO (km + palety extra)
-  let bestNettoTotal = Infinity;
-  let bestResult: KosztTransportuZew | null = null;
+  const oferty: Array<{ wynik: KosztTransportuZew; totalDoSortowania: number }> = [];
 
   for (const stawka of stawki) {
     const kosztKm = obliczKmDlaStawki(km, stawka);
     if (!kosztKm) continue;
-
     const paletyExtraStawka = stawka.paletyExtra ?? 0;
-    // Do porownania uzywamy podanych palet (gdy znamy z WZ); jesli brak — porownujemy
-    // tylko po cenie km (paletyExtra wykazana informacyjnie w wyniku).
     const paletyDoPorownania = palety ?? 0;
     const paletyExtraTotal = paletyExtraStawka * paletyDoPorownania;
     const totalNetto = kosztKm.netto + paletyExtraTotal;
-
-    if (totalNetto < bestNettoTotal) {
-      bestNettoTotal = totalNetto;
-      const netto = round2(kosztKm.netto);
-      bestResult = {
+    const netto = round2(kosztKm.netto);
+    oferty.push({
+      wynik: {
         netto,
         brutto: round2(netto * VAT),
         paletyExtra: paletyExtraStawka,
         nazwa_firmy: stawka.nazwa_firmy,
-      };
-    }
+      },
+      totalDoSortowania: totalNetto,
+    });
   }
 
-  return bestResult;
+  // Sortuj od najtanszej calosciowo (km + palety extra)
+  oferty.sort((a, b) => a.totalDoSortowania - b.totalDoSortowania);
+  return oferty.map(o => o.wynik);
 }
 
 /**

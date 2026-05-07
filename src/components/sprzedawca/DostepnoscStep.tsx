@@ -312,10 +312,21 @@ export function DostepnoscStep({
                         {r.kosztWew ? fmtPLN(r.kosztWew.netto) : '—'}
                       </td>
                       <td className="text-right px-2 py-1.5 align-top">
-                        {r.kosztZew ? fmtPLN(r.kosztZew.netto) : '—'}
-                        {r.kosztZew && (r.kosztZew.paletyExtra ?? 0) > 0 && (
-                          <div className="text-[9px] text-amber-700 dark:text-amber-400 font-normal mt-0.5" title="Dodatkowa oplata za rozladunek (zl/paleta)">
-                            + {r.kosztZew.paletyExtra} zł/pal rozład.
+                        {r.kosztyZew.length === 0 ? '—' : (
+                          <div className="space-y-1">
+                            {r.kosztyZew.map((k, i) => (
+                              <div key={i} className={i > 0 ? 'pt-1 border-t border-dashed border-muted-foreground/30' : ''}>
+                                {fmtPLN(k.netto)}
+                                {k.nazwa_firmy && (
+                                  <div className="text-[9px] text-muted-foreground font-normal">({k.nazwa_firmy})</div>
+                                )}
+                                {(k.paletyExtra ?? 0) > 0 && (
+                                  <div className="text-[9px] text-amber-700 dark:text-amber-400 font-normal" title="Dodatkowa oplata za rozladunek (zl/paleta)">
+                                    + {k.paletyExtra} zł/pal rozład.
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </td>
