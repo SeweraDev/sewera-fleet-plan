@@ -118,6 +118,9 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
   }, [pojazdId, flota]);
 
   const procentPojazdu = pojazdWybrany ? (sumaKg / pojazdWybrany.ladownosc_kg) * 100 : 0;
+  const procentM3 = pojazdWybrany && pojazdWybrany.objetosc_m3 > 0 ? (sumaM3 / pojazdWybrany.objetosc_m3) * 100 : 0;
+  const procentPal = pojazdWybrany && pojazdWybrany.max_palet > 0 ? (sumaPal / pojazdWybrany.max_palet) * 100 : 0;
+  const isOverloaded = procentPojazdu > 100 || procentM3 > 100 || procentPal > 100;
 
   const { create, submitting } = useCreateKurs(() => {
     setSelectedIds(new Set());
@@ -415,17 +418,50 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
                   </SelectContent>
                 </Select>
                 {pojazdWybrany && (
-                  <div className="mt-1">
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full ${procentPojazdu > 100 ? 'bg-red-500' : procentPojazdu > 90 ? 'bg-orange-500' : 'bg-green-500'}`}
-                        style={{ width: `${Math.min(procentPojazdu, 100)}%` }}
-                      />
+                  <div className="mt-1 space-y-1.5">
+                    {/* Waga (kg) — zawsze pokazujemy */}
+                    <div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full ${procentPojazdu > 100 ? 'bg-red-500' : procentPojazdu > 90 ? 'bg-orange-500' : 'bg-green-500'}`}
+                          style={{ width: `${Math.min(procentPojazdu, 100)}%` }}
+                        />
+                      </div>
+                      <div className={`text-[10px] mt-0.5 ${procentPojazdu > 100 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                        ⚖️ {Math.round(sumaKg)} / {pojazdWybrany.ladownosc_kg} kg ({Math.round(procentPojazdu)}%)
+                        {procentPojazdu > 100 && ' ⚠ przekroczona'}
+                      </div>
                     </div>
-                    <div className={`text-[10px] mt-0.5 ${procentPojazdu > 100 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
-                      {Math.round(sumaKg)} / {pojazdWybrany.ladownosc_kg} kg ({Math.round(procentPojazdu)}%)
-                      {procentPojazdu > 100 && ' ⚠ przekroczona ładowność'}
-                    </div>
+                    {/* Objetosc (m3) — tylko gdy pojazd ma zdefiniowana */}
+                    {pojazdWybrany.objetosc_m3 > 0 && (
+                      <div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full ${procentM3 > 100 ? 'bg-red-500' : procentM3 > 90 ? 'bg-orange-500' : 'bg-blue-500'}`}
+                            style={{ width: `${Math.min(procentM3, 100)}%` }}
+                          />
+                        </div>
+                        <div className={`text-[10px] mt-0.5 ${procentM3 > 100 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                          📐 {sumaM3.toFixed(1)} / {pojazdWybrany.objetosc_m3} m³ ({Math.round(procentM3)}%)
+                          {procentM3 > 100 && ' ⚠ przekroczona'}
+                        </div>
+                      </div>
+                    )}
+                    {/* Palety — tylko gdy pojazd ma zdefiniowana */}
+                    {pojazdWybrany.max_palet > 0 && (
+                      <div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full ${procentPal > 100 ? 'bg-red-500' : procentPal > 90 ? 'bg-orange-500' : 'bg-amber-500'}`}
+                            style={{ width: `${Math.min(procentPal, 100)}%` }}
+                          />
+                        </div>
+                        <div className={`text-[10px] mt-0.5 ${procentPal > 100 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                          📦 {sumaPal} / {pojazdWybrany.max_palet} pal ({Math.round(procentPal)}%)
+                          {procentPal > 100 && ' ⚠ przekroczona'}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -450,7 +486,7 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
               <Button
                 className="w-full"
                 onClick={handleUtworzKurs}
-                disabled={submitting || koszyk.length === 0 || !pojazdWybrany || procentPojazdu > 100}
+                disabled={submitting || koszyk.length === 0 || !pojazdWybrany || isOverloaded}
               >
                 {submitting ? 'Tworzenie…' : `✅ Utwórz kurs (${koszyk.length})`}
               </Button>
