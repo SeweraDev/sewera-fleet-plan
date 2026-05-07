@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -1030,6 +1030,30 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
   const { oddzialy, loading: loadingOddzialy } = useOddzialy();
   const { flota: flotaList, loading: loadingFlota } = useFlotaOddzialu(oddzialId);
   const { create, submitting, error } = useCreateZlecenie(onSuccess);
+  // Drugi instans hooka dla trybu bulk — bez per-call onSuccess (sami wywolamy po petli)
+  const { create: createBulkOne, submitting: bulkSubmitting } = useCreateZlecenie();
+
+  const handleBulkSubmit = useCallback(async (wzListPerZlecenie: WzInput[][]) => {
+    if (!oddzialId || !dzien || !godzina) {
+      toast.error('Wroc do wczesniejszych krokow i uzupelnij oddzial / dzien / godzine');
+      return;
+    }
+    let okCount = 0;
+    for (const wzList of wzListPerZlecenie) {
+      await createBulkOne({
+        oddzial_id: oddzialId,
+        typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu,
+        dzien,
+        preferowana_godzina: godzina,
+        wz_list: wzList,
+      }, false);
+      okCount++;
+    }
+    if (okCount > 0) {
+      toast.success(`✅ Utworzono ${okCount} ${okCount === 1 ? 'zlecenie' : okCount < 5 ? 'zlecenia' : 'zlecen'}`);
+      onSuccess();
+    }
+  }, [oddzialId, dzien, godzina, typPojazdu, createBulkOne, onSuccess]);
 
   const handleGoToCheck = () => {
     // Klasyfikacja transportu jest OPCJONALNA — mozna uzupelnic pozniej
@@ -1070,7 +1094,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
         )}
         {step === 2 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step === 3 && (
-          <WzFormTabs wzList={wzList} setWzList={setWzList} error={error} submitting={submitting} onBack={() => setStep(2)} onSubmit={handleGoToCheck} typPojazdu={typPojazdu} />
+          <WzFormTabs wzList={wzList} setWzList={setWzList} error={error} submitting={submitting} onBack={() => setStep(2)} onSubmit={handleGoToCheck} typPojazdu={typPojazdu} onBulkSubmit={handleBulkSubmit} bulkSubmitting={bulkSubmitting} />
         )}
         {step === 4 && oddzialId && (
           <DostepnoscStep oddzialId={oddzialId}
