@@ -34,8 +34,10 @@ interface Props {
   zlecenia: ZlecenieOddzialuDto[];
   oddzialCoords: { lat: number; lng: number } | null;
   oddzialNazwa: string;
-  /** Dzień (YYYY-MM-DD) — używany do tworzenia kursu w trybie planera. */
+  /** Dzień (YYYY-MM-DD) — używany do tworzenia kursu w trybie planera. W trybie zakresu = data startowa. */
   dzien?: string;
+  /** Koniec zakresu dat (YYYY-MM-DD) — gdy ustawiony, tryb planera filtruje cały zakres. */
+  dzienDo?: string;
   /** ID oddziału — używany do floty/kierowców w trybie planera. */
   oddzialId?: number;
   /** Włącza tryb planera mapowego: panel boczny + selekcja markerów + tworzenie kursu. */
@@ -44,7 +46,7 @@ interface Props {
   onKursCreated?: () => void;
 }
 
-export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa, dzien, oddzialId, planerMode, onKursCreated }: Props) {
+export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa, dzien, dzienDo, oddzialId, planerMode, onKursCreated }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
@@ -54,7 +56,9 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
   // Filtry trybu planera
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
   const baseDzien = dzien || today;
-  // Domyślnie pokazuj TYLKO wybrany dzień; checkbox pozwala dodać zaległe z wcześniejszych dni
+  // Tryb zakresu: gdy dzienDo ustawione, filtrujemy [baseDzien, dzienDo]
+  const isRange = !!dzienDo && dzienDo !== baseDzien;
+  // Domyślnie pokazuj TYLKO wybrany dzień (lub zakres); checkbox pozwala dodać zaległe sprzed startu
   const [pokazZalegle, setPokazZalegle] = useState(false);
 
   // Filtruj zlecenia wg trybu planera
@@ -64,12 +68,18 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
       // Tylko bez kursu (jeszcze niezaplanowane)
       if (z.kurs_numer || z.kurs_nrrej) return false;
       if (z.status === 'anulowana') return false;
-      // Wybrany dzień zawsze + zaległe (z poprzednich dni) gdy checkbox włączony
+      // Tryb zakresu: zlecenia w zakresie [baseDzien, dzienDo] + opcjonalnie zaległe sprzed baseDzien
+      if (isRange) {
+        if (z.dzien >= baseDzien && z.dzien <= dzienDo!) return true;
+        if (pokazZalegle && z.dzien < baseDzien) return true;
+        return false;
+      }
+      // Tryb pojedynczego dnia: wybrany dzień + opcjonalnie zaległe
       if (z.dzien === baseDzien) return true;
       if (pokazZalegle && z.dzien < baseDzien) return true;
       return false;
     });
-  }, [zlecenia, planerMode, baseDzien, pokazZalegle]);
+  }, [zlecenia, planerMode, baseDzien, dzienDo, isRange, pokazZalegle]);
 
   const pins = filteredZlecenia.filter(z => z.lat != null && z.lng != null);
   const bezAdresu = filteredZlecenia.filter(z => !z.adres || z.adres.trim().length < 5);
@@ -293,10 +303,12 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
       <div className="space-y-2">
         {/* Pasek filtrow */}
         <div className="flex items-center gap-3 px-2 py-2 bg-muted/40 rounded-lg text-sm">
-          <span className="font-medium">Dzień: <b>{baseDzien}</b></span>
+          <span className="font-medium">
+            {isRange ? <>Zakres: <b>{baseDzien}</b> → <b>{dzienDo}</b></> : <>Dzień: <b>{baseDzien}</b></>}
+          </span>
           <label className="flex items-center gap-2 cursor-pointer">
             <Checkbox checked={pokazZalegle} onCheckedChange={(v) => setPokazZalegle(!!v)} />
-            <span>Pokaż także zaległe z poprzednich dni</span>
+            <span>Pokaż także zaległe {isRange ? 'sprzed startu zakresu' : 'z poprzednich dni'}</span>
           </label>
           <span className="ml-auto text-xs text-muted-foreground">
             Klik markera = zaznacz / odznacz. Wszystkie zlecenia spod tego adresu wpadną do koszyka.
@@ -305,8 +317,8 @@ export default function ZleceniaMapView({ zlecenia, oddzialCoords, oddzialNazwa,
 
         {filteredZlecenia.length === 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            Brak zleceń bez kursu na ten dzień{pokazZalegle ? ' ani z poprzednich dni' : ''}.
-            {!pokazZalegle && ' Zaznacz checkbox „Pokaż także zaległe z poprzednich dni" powyżej, aby zobaczyć starsze zlecenia.'}
+            Brak zleceń bez kursu {isRange ? 'w tym zakresie' : 'na ten dzień'}{pokazZalegle ? ' ani sprzed startu' : ''}.
+            {!pokazZalegle && ' Zaznacz checkbox „Pokaż także zaległe" powyżej, aby zobaczyć starsze zlecenia.'}
           </div>
         )}
         {filteredZlecenia.length > 0 && pins.length === 0 && (

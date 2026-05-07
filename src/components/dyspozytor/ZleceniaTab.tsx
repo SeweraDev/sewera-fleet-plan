@@ -534,6 +534,7 @@ export function ZleceniaTab({
             oddzialCoords={oddzialNazwa ? (ODDZIAL_COORDS[NAZWA_TO_KOD[oddzialNazwa] || ''] || null) : null}
             oddzialNazwa={oddzialNazwa || ''}
             dzien={dzien}
+            dzienDo={dzienDo}
             oddzialId={oddzialId}
             planerMode={planerMode}
             onKursCreated={refetch}
