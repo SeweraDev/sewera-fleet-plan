@@ -664,7 +664,7 @@ export function ZleceniaTab({
                   </TableHead>
                   <TableHead>Klasyf.</TableHead>
                   <TableHead>Typ</TableHead>
-                  <TableHead>Kurs</TableHead>
+                  <TableHead>Uwagi / Kurs</TableHead>
                   <TableHead>WZ</TableHead>
                 </TableRow>
               </TableHeader>
@@ -763,10 +763,18 @@ export function ZleceniaTab({
                         );
                       })()}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-w-[260px]">
+                      {/* Uwagi z dokumentów WZ — pomaga dyspozytorowi w planowaniu (godziny dostawy,
+                          uwagi typu "ostroznie", "do drugiego pietra", "platnosc gotowka" itp.) */}
+                      {z.uwagi && (
+                        <div className="text-xs text-foreground/80 line-clamp-2 mb-1" title={z.uwagi}>
+                          {z.uwagi}
+                        </div>
+                      )}
+                      {/* Status kursu — kompaktowo pod uwagami */}
                       {z.kurs_numer || z.kurs_nrrej
-                        ? <Badge variant="outline" className="font-mono text-xs">{z.kurs_numer || ''}{z.kurs_nrrej ? (z.kurs_numer ? ' · ' : '') + z.kurs_nrrej : ''}</Badge>
-                        : <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs">bez kursu ⚠️</Badge>
+                        ? <Badge variant="outline" className="font-mono text-[10px] py-0 px-1.5">{z.kurs_numer || ''}{z.kurs_nrrej ? (z.kurs_numer ? ' · ' : '') + z.kurs_nrrej : ''}</Badge>
+                        : <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-[10px] py-0 px-1.5">bez kursu ⚠️</Badge>
                       }
                     </TableCell>
                     <TableCell onClick={e => e.stopPropagation()}>

@@ -922,7 +922,7 @@ function NowyKursModal({
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-5xl max-h-[85vh] overflow-auto">
+      <DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Nowy kurs — {dzien}</DialogTitle>
         </DialogHeader>
@@ -949,24 +949,30 @@ function NowyKursModal({
           </div>
 
           <div>
-            <Label className="mb-2 block">Zlecenia bez kursu ({zlecenia.length})</Label>
+            <Label className="mb-2 block">Zlecenia bez kursu ({zlecenia.length}) — sortowane od najstarszych (zaległe na górze)</Label>
             {zlecenia.length === 0 ? (
               <p className="text-sm text-muted-foreground">Brak zleceń do przypisania</p>
             ) : (
-              <div className="space-y-1 max-h-60 overflow-auto">
+              <div className="space-y-1 max-h-[50vh] overflow-auto border rounded-md">
                 {zlecenia.map(z => (
-                  <div key={z.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer" onClick={() => toggleZl(z.id)}>
-                    <Checkbox checked={selectedZl.has(z.id)} />
+                  <div key={z.id} className="flex items-start gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer border-b last:border-b-0" onClick={() => toggleZl(z.id)}>
+                    <Checkbox checked={selectedZl.has(z.id)} className="mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs">{z.numer}</span>
                         <span className="text-xs text-muted-foreground">{z.dzien}</span>
+                        {z.preferowana_godzina && <span className="text-xs text-muted-foreground">· {z.preferowana_godzina}</span>}
                         {z.dzien < dzien && <Badge variant="destructive" className="text-[10px]">Zaległe</Badge>}
                         <span className="text-xs ml-auto">{Math.round(z.suma_kg)} kg{z.suma_m3 > 0 ? ` · ${z.suma_m3} m³` : ''}{z.suma_palet > 0 ? ` · ${z.suma_palet} pal` : ''}</span>
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-xs text-muted-foreground truncate mt-0.5">
                         {z.odbiorca || '—'} · {z.adres || '—'}
                       </div>
+                      {z.uwagi && (
+                        <div className="text-xs text-amber-700 dark:text-amber-400 mt-1 line-clamp-2" title={z.uwagi}>
+                          📝 {z.uwagi}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

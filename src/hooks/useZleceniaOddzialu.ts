@@ -26,6 +26,8 @@ export interface ZlecenieOddzialuDto {
   flaga_brak_wz: boolean;
   /** Klasyfikacje wszystkich WZ w zleceniu (unikalne, posortowane) np. ["B", "D"] */
   klasyfikacje: string[];
+  /** Uwagi z wszystkich WZ zlecenia (sklejone " · ") - pomaga dyspozytorowi w planowaniu */
+  uwagi: string | null;
 }
 
 export interface WzDto {
@@ -109,19 +111,21 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
       (oData || []).forEach(o => oddzialMap.set(o.id, o.nazwa));
     }
 
-    // Get WZ sums + first odbiorca + zebrane klasyfikacje
+    // Get WZ sums + first odbiorca + zebrane klasyfikacje + uwagi (sklejone)
     const ids = (zlData || []).map(z => z.id);
-    let wzMap = new Map<string, { suma_kg: number; suma_m3: number; suma_palet: number; odbiorca: string | null; adres: string | null; klasyfikacje: Set<string> }>();
+    let wzMap = new Map<string, { suma_kg: number; suma_m3: number; suma_palet: number; odbiorca: string | null; adres: string | null; klasyfikacje: Set<string>; uwagi: string[] }>();
     if (ids.length > 0) {
       const { data: wzData } = await supabase
         .from('zlecenia_wz')
-        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet, odbiorca, adres, klasyfikacja')
+        .select('zlecenie_id, masa_kg, objetosc_m3, ilosc_palet, odbiorca, adres, klasyfikacja, uwagi')
         .in('zlecenie_id', ids);
       (wzData || []).forEach(w => {
         const cur = wzMap.get(w.zlecenie_id);
         const wAny = w as any;
         const klas = new Set<string>(cur?.klasyfikacje || []);
         if (wAny.klasyfikacja) klas.add(wAny.klasyfikacja);
+        const uwagiArr = [...(cur?.uwagi || [])];
+        if (wAny.uwagi && wAny.uwagi.trim()) uwagiArr.push(wAny.uwagi.trim());
         wzMap.set(w.zlecenie_id, {
           suma_kg: (cur?.suma_kg || 0) + Number(w.masa_kg),
           suma_m3: (cur?.suma_m3 || 0) + Number(w.objetosc_m3 || 0),
@@ -129,6 +133,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
           odbiorca: cur?.odbiorca || wAny.odbiorca || null,
           adres: cur?.adres || wAny.adres || null,
           klasyfikacje: klas,
+          uwagi: uwagiArr,
         });
       });
     }
@@ -160,6 +165,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
         ma_wz: !!(z as any).ma_wz,
         klasyfikacje: [...(wzInfo?.klasyfikacje || [])].sort(),
         flaga_brak_wz: !!(z as any).flaga_brak_wz,
+        uwagi: wzInfo?.uwagi && wzInfo.uwagi.length > 0 ? wzInfo.uwagi.join(' · ') : null,
       };
     }));
     setLoading(false);
