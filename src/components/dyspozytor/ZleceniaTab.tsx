@@ -578,8 +578,10 @@ export function ZleceniaTab({
         </button>
       </div>
 
-      {/* Action bar dla zaznaczonych */}
-      {checkedIds.size > 0 && statusFilter === 'bez_kursu' && (
+      {/* Action bar dla zaznaczonych — checkboxy + bulk akcje. W 'bez_kursu' pelny zestaw
+          (przypisz do kursu / przekaz / usun), w 'all' tylko "Anuluj zaznaczone" (przypisanie
+          / przekazanie nie ma sensu dla zlecen juz w kursie / w trasie). */}
+      {checkedIds.size > 0 && (statusFilter === 'bez_kursu' || statusFilter === 'all') && (
         <div className="flex items-center gap-4 rounded-lg bg-primary/10 border border-primary/30 px-4 py-3">
           <span className="text-sm font-semibold">
             Zaznaczono {checkedIds.size} {checkedIds.size === 1 ? 'zlecenie' : checkedIds.size < 5 ? 'zlecenia' : 'zleceń'}
@@ -589,23 +591,32 @@ export function ZleceniaTab({
             {checkedM3 > 0 && ` · ${Math.round(checkedM3 * 10) / 10} m³`}
             {checkedPal > 0 && ` · ${checkedPal} pal`}
           </span>
+          {statusFilter === 'bez_kursu' && (
+            <>
+              <Button
+                size="sm"
+                className="ml-auto"
+                onClick={() => {
+                  onOpenKursModal?.(Array.from(checkedIds));
+                  setCheckedIds(new Set());
+                }}
+              >
+                Przypisz do kursu →
+              </Button>
+              {moznaPrzekazac && (
+                <Button size="sm" variant="secondary" onClick={() => setShowBulkPrzekaz(true)}>
+                  ↗ Przekaż do oddziału
+                </Button>
+              )}
+            </>
+          )}
           <Button
             size="sm"
-            className="ml-auto"
-            onClick={() => {
-              onOpenKursModal?.(Array.from(checkedIds));
-              setCheckedIds(new Set());
-            }}
+            variant="destructive"
+            className={statusFilter === 'all' ? 'ml-auto' : ''}
+            onClick={() => setShowBulkDelete(true)}
           >
-            Przypisz do kursu →
-          </Button>
-          {moznaPrzekazac && (
-            <Button size="sm" variant="secondary" onClick={() => setShowBulkPrzekaz(true)}>
-              ↗ Przekaż do oddziału
-            </Button>
-          )}
-          <Button size="sm" variant="destructive" onClick={() => setShowBulkDelete(true)}>
-            Usuń zaznaczone
+            {statusFilter === 'all' ? 'Anuluj zaznaczone' : 'Usuń zaznaczone'}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setCheckedIds(new Set())}>
             Odznacz
@@ -621,7 +632,7 @@ export function ZleceniaTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  {statusFilter === 'bez_kursu' && (
+                  {(statusFilter === 'bez_kursu' || statusFilter === 'all') && (
                     <TableHead className="w-10" onClick={e => e.stopPropagation()}>
                       <Checkbox
                         checked={checkedIds.size === filtered.length && filtered.length > 0}
@@ -664,7 +675,7 @@ export function ZleceniaTab({
                     className={`cursor-pointer hover:bg-muted/50 ${z.flaga_brak_wz ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
                     onClick={() => setSelectedZl(z)}
                   >
-                    {statusFilter === 'bez_kursu' && (
+                    {(statusFilter === 'bez_kursu' || statusFilter === 'all') && (
                       <TableCell onClick={e => e.stopPropagation()}>
                         <Checkbox
                           checked={checkedIds.has(z.id)}
@@ -817,9 +828,16 @@ export function ZleceniaTab({
       <ConfirmDialog
         open={showBulkDelete}
         onOpenChange={setShowBulkDelete}
-        title={`Usunąć ${checkedIds.size} zleceń?`}
-        description={`Czy na pewno chcesz anulować ${checkedIds.size} zaznaczonych zleceń (${Math.round(checkedKg).toLocaleString('pl-PL')} kg)? Zlecenia zostaną przeniesione do zakładki Anulowane.`}
-        confirmLabel={bulkDeleting ? 'Usuwanie...' : `Usuń ${checkedIds.size} zleceń`}
+        title={`Anulować ${checkedIds.size} zleceń?`}
+        description={(() => {
+          const wKursie = checkedZlecenia.filter(z => z.kurs_numer || z.kurs_nrrej).length;
+          const baza = `Czy na pewno chcesz anulować ${checkedIds.size} zaznaczonych zleceń (${Math.round(checkedKg).toLocaleString('pl-PL')} kg)? Zlecenia zostaną przeniesione do zakładki Anulowane.`;
+          if (wKursie > 0) {
+            return `${baza}\n\n⚠️ ${wKursie} ${wKursie === 1 ? 'zlecenie jest' : 'zleceń jest'} aktualnie w kursie/trasie — zostaną odpięte od kursów.`;
+          }
+          return baza;
+        })()}
+        confirmLabel={bulkDeleting ? 'Anulowanie...' : `Anuluj ${checkedIds.size} zleceń`}
         destructive
         onConfirm={confirmBulkDelete}
       />
