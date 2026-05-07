@@ -1181,6 +1181,18 @@ export function parseWZText(rawText: string): WZImportData {
           // Przed rdzeniem — buforuj jako potencjalna nazwa lokalu
           // Filtruj tylko linie wyglądające na sensowny tekst (nie liczby/cyfry)
           if (/[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]/.test(l) && l.length < 60) {
+            // POMIN imie+nazwisko osoby kontaktowej — to NIE jest nazwa lokalu, tylko
+            // osoba do kontaktu (i tak pojawi sie w polu telefon przez combineKontaktTel).
+            // Heurystyka 1: wzorzec "Imie Nazwisko" (2-3 slowa, kazde z duzej + male litery).
+            // "PANORAMA PARK" / "GALERIA X" przejdzie (caps), "Aleksander Nowicki" odpada.
+            const isPersonName2or3 = /^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,}(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,}){1,2}$/.test(l);
+            // Heurystyka 2: ta sama wartosc pojawia sie w sekcji "Os. kontaktowa:" pozniej.
+            // Lapie tez przypadki ALL-CAPS imion ktore Heurystyka 1 by przepuscila.
+            const lWords = l.split(/\s+/).filter(w => w.length > 2);
+            const isInOsKontaktowa = lWords.length >= 2 && lines.slice(i + 1, Math.min(i + 8, lines.length)).some(
+              (other) => /Os\.\s*kontaktowa[:\s]/i.test(other) && lWords.every(w => other.toLowerCase().includes(w.toLowerCase()))
+            );
+            if (isPersonName2or3 || isInOsKontaktowa) continue;
             preBuffer.push(l);
           }
         }
