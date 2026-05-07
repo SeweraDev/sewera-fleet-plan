@@ -760,9 +760,9 @@ function WzPdfBulkTab({
                   <th className="text-left p-2">Odbiorca *</th>
                   <th className="text-left p-2">Adres *</th>
                   <th className="text-left p-2">Telefon *</th>
-                  <th className="text-left p-2 w-20">Masa kg *</th>
-                  <th className="text-left p-2 w-20">Palety</th>
-                  <th className="text-left p-2 w-20">Obj. m³</th>
+                  <th className="text-left p-2 w-28">Masa kg *</th>
+                  <th className="text-left p-2 w-24">Palety</th>
+                  <th className="text-left p-2 w-24">Obj. m³</th>
                   <th className="text-left p-2 w-8"></th>
                 </tr>
               </thead>
