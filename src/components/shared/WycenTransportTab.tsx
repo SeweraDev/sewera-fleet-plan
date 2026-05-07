@@ -36,7 +36,8 @@ interface WynikOddzialu {
   nazwa: string;
   km: number;
   kosztWew: { netto: number; brutto: number } | null;
-  kosztZew: { netto: number; brutto: number } | null;
+  /** Koszt transportu zewnetrznego. paletyExtra = stawka per paleta (informacyjna, mnozona przez palety w kontekscie zlecenia). */
+  kosztZew: { netto: number; brutto: number; paletyExtra?: number; nazwa_firmy?: string } | null;
   jestMojOddzial: boolean;
   uzytTyp: string | null;
   isFallback: boolean;
@@ -520,6 +521,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           <>
                             <td className="text-center p-3 tabular-nums">
                               {w.kosztZew ? formatPLN(w.kosztZew.netto) : '—'}
+                              {w.kosztZew && (w.kosztZew.paletyExtra ?? 0) > 0 && (
+                                <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal mt-0.5" title="Dodatkowa oplata za rozladunek (mnozona przez liczbe palet)">
+                                  + {w.kosztZew.paletyExtra} zł / paleta rozładunek
+                                </div>
+                              )}
                             </td>
                             <td className="text-center p-3 tabular-nums font-bold">
                               {w.kosztZew ? formatPLN(w.kosztZew.brutto) : '—'}

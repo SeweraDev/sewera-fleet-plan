@@ -313,6 +313,11 @@ export function DostepnoscStep({
                       </td>
                       <td className="text-right px-2 py-1.5 align-top">
                         {r.kosztZew ? fmtPLN(r.kosztZew.netto) : '—'}
+                        {r.kosztZew && (r.kosztZew.paletyExtra ?? 0) > 0 && (
+                          <div className="text-[9px] text-amber-700 dark:text-amber-400 font-normal mt-0.5" title="Dodatkowa oplata za rozladunek (zl/paleta)">
+                            + {r.kosztZew.paletyExtra} zł/pal rozład.
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

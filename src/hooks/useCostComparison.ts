@@ -23,8 +23,9 @@ export interface CostComparisonRow {
   km: number;
   /** Koszt netto/brutto pojazdem własnym Sewera (gdy pasujący typ obsługiwany). */
   kosztWew: { netto: number; brutto: number } | null;
-  /** Koszt netto/brutto pojazdem zewnętrznym (gdy stawka istnieje dla tego oddziału). */
-  kosztZew: { netto: number; brutto: number } | null;
+  /** Koszt netto/brutto pojazdem zewnętrznym (gdy stawka istnieje dla tego oddziału).
+   *  paletyExtra = stawka per paleta (informacyjna, mnozona przez palety w kontekscie zlecenia). */
+  kosztZew: { netto: number; brutto: number; paletyExtra?: number; nazwa_firmy?: string } | null;
   /** min(kosztWew?.netto, kosztZew?.netto) — używamy do rankingu i porównania. */
   minNetto: number | null;
   /** Typ cennikowy faktycznie użyty (po fallbacku, np. "z windą do 1,8t" gdy żądano "do 1,2t bez windy"). */
