@@ -1259,6 +1259,7 @@ export default function DyspozytorDashboard() {
                   oddzialId={oddzialId}
                   oddzialNazwa={oddzialy.find(o => o.id === oddzialId)?.nazwa || ''}
                   dzien={dzien}
+                  dzienDo={rangeMode ? dzienDo : undefined}
                   onOpenKursModal={(zlIds) => { setPreSelectedZlIds(zlIds); setShowModal(true); }}
                   onZlChange={() => { refetchZlBezKursu(); refetch(); }}
                 />

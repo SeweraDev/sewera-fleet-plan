@@ -40,7 +40,7 @@ export interface WzDto {
   uwagi: string | null;
 }
 
-export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, dzien?: string) {
+export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, dzien?: string, dzienDo?: string) {
   const [zlecenia, setZlecenia] = useState<ZlecenieOddzialuDto[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -56,7 +56,11 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
       .order('dzien', { ascending: true })
       .order('created_at', { ascending: true });
 
-    if (dzien) {
+    if (dzien && dzienDo) {
+      // Tryb zakresu: zlecenia w zakresie [dzien, dzienDo] LUB wszystkie bez kursu
+      // (zaległe / przyszłe nieprzydzielone / przekazane — dyspozytor musi je widziec).
+      query = query.or(`and(dzien.gte.${dzien},dzien.lte.${dzienDo}),kurs_id.is.null`);
+    } else if (dzien) {
       // Pokazujemy:
       //  - zlecenia z wybranego dnia (z kursem lub bez),
       //  - WSZYSTKIE zlecenia bez kursu niezależnie od daty — dotyczy zaległych,
@@ -182,7 +186,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
         }
       })();
     }
-  }, [oddzialId, pastOnly, dzien]);
+  }, [oddzialId, pastOnly, dzien, dzienDo]);
 
   useEffect(() => { refetch(); }, [refetch]);
 

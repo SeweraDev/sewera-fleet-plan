@@ -247,6 +247,7 @@ export function ZleceniaTab({
   oddzialId,
   oddzialNazwa,
   dzien,
+  dzienDo,
   pastOnly = false,
   onOpenKursModal,
   onZlChange,
@@ -254,11 +255,12 @@ export function ZleceniaTab({
   oddzialId: number;
   oddzialNazwa?: string;
   dzien?: string;
+  dzienDo?: string;
   pastOnly?: boolean;
   onOpenKursModal?: (zlecenieIds: string[]) => void;
   onZlChange?: () => void;
 }) {
-  const { zlecenia, loading, refetch: refetchInner } = useZleceniaOddzialu(oddzialId, pastOnly, dzien);
+  const { zlecenia, loading, refetch: refetchInner } = useZleceniaOddzialu(oddzialId, pastOnly, dzien, dzienDo);
   const refetch = () => { refetchInner(); onZlChange?.(); };
   const { flota } = useFlotaOddzialu(oddzialId);
   const availableTypes = useMemo(() => [...new Set(flota.map(f => f.typ))], [flota]);
@@ -269,7 +271,8 @@ export function ZleceniaTab({
   const [selectedZl, setSelectedZl] = useState<ZlecenieOddzialuDto | null>(null);
   const [editZlId, setEditZlId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'dzien' | 'status' | 'godzina' | 'kg' | 'numer' | 'km'>('dzien');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  // Default 'asc' — najstarsze zlecenia u góry (chronologicznie). User moze toggle po kliknieciu.
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showMap, setShowMap] = useState(false);
   const [planerMode, setPlanerMode] = useState(false);
 
@@ -280,10 +283,12 @@ export function ZleceniaTab({
 
   const STATUS_ORDER: Record<string, number> = { robocza: 0, do_weryfikacji: 1, potwierdzona: 2, w_trasie: 3, dostarczona: 4, anulowana: 5 };
 
-  // Strict filter po wybranym dniu — wszystko co widzi tabela jest TYLKO z wybranego dnia.
+  // Strict filter po wybranym dniu (lub zakresie dat) — tabela pokazuje TYLKO zlecenia z tego okresu.
   // Zlecenia z innych dni (zaległe) pojawiają się jako osobne banery powyżej.
   const dzienAktualny = dzien || new Date().toISOString().split('T')[0];
-  const zleceniaDnia = zlecenia.filter(z => z.dzien === dzienAktualny);
+  const zleceniaDnia = dzienDo
+    ? zlecenia.filter(z => z.dzien >= dzienAktualny && z.dzien <= dzienDo)
+    : zlecenia.filter(z => z.dzien === dzienAktualny);
 
   const filteredBase = statusFilter === 'bez_kursu' ? zleceniaDnia.filter(z => !z.kurs_numer && !z.kurs_nrrej && z.status !== 'anulowana')
     : statusFilter === 'all' ? zleceniaDnia.filter(z => z.status !== 'anulowana')
