@@ -93,10 +93,11 @@ export function parseZamowienieText(rawText: string): WZImportData {
     // Brak "Adres dostawy" - wyciagamy z sekcji Nabywca
     const sprNabIdx = lines.findIndex(l => /Sprzedawca/i.test(l) && /Nabywca/i.test(l));
     if (sprNabIdx >= 0) {
-      // Prefiksy lewej kolumny (Sewera) do odciecia
+      // Prefiksy lewej kolumny (Sewera) do odciecia. Polskie litery w "Kościuszki" wymagaja
+      // pelnej klasy znakow (a-z + diakrytyki) - klasa [a-zA-Z] gubi 'ś', 'ż' itp.
       const SEWERA_PREFIXES: RegExp[] = [
         /^SEWERA\s+POLSKA\s+CHEMIA\s+IRENEUSZ\s+WOLAK\b[\s,.]*/i,
-        /^ul\.\s+Tadeusza\s+Ko[a-zA-Z]+\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice\s*/i,
+        /^ul\.\s+Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+Katowice\s*/i,
         /^ul\.\s+KO[ŚS]CIUSZKI\s*\d+\s*,?\s*\d{2}\s*-?\s*\d{3}\s+KATOWICE\s*/i,
         /^NIP:\s*\d{10}\b\s*/i,
         /^N[RH]\s*BDO:\s*\d+\b\s*/i,
@@ -159,36 +160,60 @@ export function parseZamowienieText(rawText: string): WZImportData {
     }
   }
 
-  // 4. WAGA - "Waga netto razem: X" (X jest na osobnej linii nad/pod, format zalezy od pdfjs)
+  // 4. WAGA - "Waga netto razem" + liczba (kolejnosc zalezy od pdfjs)
   //
-  // Ekonom uklada tabele tak:
+  // Ekonom uklada tabele tak (logiczna kolejnosc):
   //   <linia produktu>           np. "2,00 SZT 30,40 60,80"
   //   <ilosc razem>               np. "2,00"
   //   <waga razem>                np. "0,72" lub "50,00"
   //   "Razem: <wartosc netto>"    np. "Razem: 60,80"
   //   "Waga netto razem:"
   //
-  // Algorytm: znajdz "Waga netto razem:" -> linia 2 wczesniej = waga, linia 1 wczesniej = "Razem: ..."
+  // pdfjs moze rozjechac kolejnosc - probujemy kilku heurystyk po kolei.
   let masa_kg: number | null = null;
-  const wagaIdx = lines.findIndex(l => /^Waga\s+netto\s+razem:?\s*$/i.test(l));
-  if (wagaIdx >= 2) {
-    const linePoprzednia = lines[wagaIdx - 1];
-    const isRazem = /^Razem:/i.test(linePoprzednia);
-    if (isRazem) {
-      // 2 linie wczesniej = waga
-      const wagaCandidate = lines[wagaIdx - 2];
-      // Format PL liczby: 0,72 / 50,00 / 1 234,56
-      if (/^[\d\s]+,\d+$/.test(wagaCandidate.trim())) {
-        masa_kg = parsePLNumber(wagaCandidate);
+  const wagaIdx = lines.findIndex(l => /Waga\s+netto\s+razem/i.test(l));
+
+  if (wagaIdx >= 0) {
+    // (a) Inline: "Waga netto razem: 50,00" (liczba na tej samej linii)
+    const inlineMatch = lines[wagaIdx].match(/Waga\s+netto\s+razem:?\s*(\d{1,6}(?:\s\d{3})*[,.]\d{1,3})/i);
+    if (inlineMatch) {
+      masa_kg = parsePLNumber(inlineMatch[1]);
+    }
+
+    // (b) Po "Waga netto razem:" - liczba na nastepnej linii
+    if (masa_kg == null) {
+      for (let i = wagaIdx + 1; i <= Math.min(wagaIdx + 2, lines.length - 1); i++) {
+        const l = lines[i].trim();
+        if (/^Razem:/i.test(l)) continue;
+        if (/^\d{1,6}(?:\s\d{3})*[,.]\d{1,3}$/.test(l)) {
+          masa_kg = parsePLNumber(l);
+          break;
+        }
       }
     }
-  }
-  // Fallback: "Waga netto razem: X" w jednej linii
-  if (masa_kg == null) {
-    const inlineWaga = lines.find(l => /Waga\s+netto\s+razem:?\s*[\d\s]+,\d+/i.test(l));
-    if (inlineWaga) {
-      const m = inlineWaga.match(/Waga\s+netto\s+razem:?\s*([\d\s]+,\d+)/i);
-      if (m) masa_kg = parsePLNumber(m[1]);
+
+    // (c) Przed "Waga netto razem:" - skanuj wstecz, pomijaj "Razem: X" i wartosci netto
+    // (wartosc netto = liczba bezposrednio po "Razem:"). Wage rozpoznajemy jako pierwsza
+    // czysta liczba PL nad "Waga netto razem" ktora nie jest wartoscia netto.
+    if (masa_kg == null) {
+      // Wartosc netto z linii "Razem: VAL" - wykluczamy ja
+      let wartoscNetto: number | null = null;
+      for (let i = wagaIdx - 1; i >= Math.max(0, wagaIdx - 5); i--) {
+        const m = lines[i].match(/^Razem:\s*(\d{1,6}(?:\s\d{3})*[,.]\d{1,3})/i);
+        if (m) { wartoscNetto = parsePLNumber(m[1]); break; }
+      }
+      // Skanuj wstecz max 5 linii, weź pierwsza liczbe X,YY rozna od wartosci netto i 0
+      for (let i = wagaIdx - 1; i >= Math.max(0, wagaIdx - 5); i--) {
+        const l = lines[i].trim();
+        if (/^Razem:/i.test(l)) continue;
+        if (/^\d{1,6}(?:\s\d{3})*[,.]\d{1,3}$/.test(l)) {
+          const num = parsePLNumber(l);
+          if (num != null && num > 0 && num !== wartoscNetto) {
+            masa_kg = num;
+            break;
+          }
+        }
+      }
     }
   }
 
