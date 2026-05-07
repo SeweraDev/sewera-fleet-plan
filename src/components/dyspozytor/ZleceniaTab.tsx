@@ -27,6 +27,7 @@ import { isPrzekazane, parseKodZNumer, canPrzekazZlecenie, getDozwoloneOddzialyD
 import { usePrzekazZlecenie } from '@/hooks/usePrzekazZlecenie';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { KLASYFIKACJE } from '@/lib/klasyfikacje';
 
 import { lazy, Suspense } from 'react';
 const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView'));
@@ -399,6 +400,20 @@ export function ZleceniaTab({
     refetch();
   };
 
+  const handleSetKlasyfikacja = async (zlId: string, kod: string) => {
+    // Ustaw te sama klasyfikacje dla wszystkich WZ w zleceniu (typowo 1 WZ per zlecenie).
+    // Dla zlecen z >1 roznymi klasyfikacjami picker jest ukryty (badges + edycja w modalu).
+    const { error } = await (supabase.from('zlecenia_wz') as any)
+      .update({ klasyfikacja: kod })
+      .eq('zlecenie_id', zlId);
+    if (error) {
+      toast.error('Blad zapisu klasyfikacji: ' + error.message);
+      return;
+    }
+    toast.success(`Klasyfikacja: ${kod}`);
+    refetch();
+  };
+
   const handleAnuluj = async (zl: ZlecenieOddzialuDto) => {
     await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', zl.id);
     await supabase
@@ -681,14 +696,32 @@ export function ZleceniaTab({
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs">
-                      {z.klasyfikacje.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
+                    <TableCell className="text-xs" onClick={e => e.stopPropagation()}>
+                      {z.klasyfikacje.length > 1 ? (
+                        // Mieszane klasyfikacje (wiele WZ z roznymi kodami) — pokazujemy badges,
+                        // edycja per WZ w modalu szczegolow (klik wiersza)
+                        <div className="flex flex-wrap gap-1" title="Mieszane klasyfikacje WZ — kliknij wiersz, edytuj w szczegolach">
                           {z.klasyfikacje.map(k => (
                             <Badge key={k} variant="outline" className="text-[10px] px-1.5 py-0 font-mono">{k}</Badge>
                           ))}
                         </div>
-                      ) : '—'}
+                      ) : (
+                        <Select
+                          value={z.klasyfikacje[0] || ''}
+                          onValueChange={(v) => handleSetKlasyfikacja(z.id, v)}
+                        >
+                          <SelectTrigger className="h-7 text-xs px-2 font-mono w-[70px]">
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {KLASYFIKACJE.map(k => (
+                              <SelectItem key={k.kod} value={k.kod} className="text-xs">
+                                <span className="font-mono">{k.kod}</span> — {k.opis}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs">
                       {(() => {
