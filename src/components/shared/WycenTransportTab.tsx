@@ -231,15 +231,23 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       setDostawaCoords(coords);
 
       // 2. Pobierz flotę WSZYSTKICH oddziałów (aktywne pojazdy własne + zewnętrzne)
-      const { data: flotaData } = await supabase
+      // UWAGA: tabela `flota` zawiera kolumne jest_zewnetrzny - zewnetrzne pojazdy
+      // moga byc w obu miejscach (flota.jest_zewnetrzny=true lub flota_zewnetrzna).
+      // Filtrujemy lokalnie zeby pomylkowo dodane do flota nie trafialy do wlasnej puli.
+      const { data: flotaDataRaw } = await supabase
         .from('flota')
-        .select('typ, oddzial_id')
+        .select('typ, oddzial_id, jest_zewnetrzny')
         .eq('aktywny', true);
 
       const { data: flotaZewData } = await supabase
         .from('flota_zewnetrzna')
         .select('typ, oddzial_id')
         .eq('aktywny', true);
+
+      // Podziel `flota` po jest_zewnetrzny: false/null = wlasne, true = doloz do zewnetrznych
+      const flotaWlasnaRaw = (flotaDataRaw || []).filter(f => !(f as any).jest_zewnetrzny);
+      const flotaZewExtraRaw = (flotaDataRaw || []).filter(f => !!(f as any).jest_zewnetrzny);
+      const flotaZewMerged = [...(flotaZewData || []), ...flotaZewExtraRaw];
 
       const { data: oddzialyData } = await supabase
         .from('oddzialy')
@@ -262,8 +270,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         });
         return map;
       };
-      const flotaWlasna = buildTypMap(flotaData || []);
-      const flotaZew = buildTypMap(flotaZewData || []);
+      const flotaWlasna = buildTypMap(flotaWlasnaRaw);
+      const flotaZew = buildTypMap(flotaZewMerged);
 
       // KAT i R dzielą fizycznie to samo miejsce (ul. Kościuszki 326) i tę samą flotę.
       // Mergujemy pule typów pod oba klucze, żeby każdy z nich widział wszystkie auta.

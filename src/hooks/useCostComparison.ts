@@ -108,11 +108,14 @@ export function useCostComparison(
 
     (async () => {
       // 1. Geocode adresu + równolegle pobierz flotę własną, zewn., oddziały
+      // UWAGA: tabela `flota` zawiera kolumne jest_zewnetrzny - zewnetrzne pojazdy
+      // moga byc w obu miejscach (flota.jest_zewnetrzny=true lub flota_zewnetrzna).
+      // Pobieramy z flaga zeby moc rozdzielic lokalnie.
       const flotaPromise = supabase
         .from('flota')
-        .select('typ, oddzial_id')
+        .select('typ, oddzial_id, jest_zewnetrzny')
         .eq('aktywny', true)
-        .then(r => (r.data || []) as Array<{ typ: string; oddzial_id: number | null }>);
+        .then(r => (r.data || []) as Array<{ typ: string; oddzial_id: number | null; jest_zewnetrzny?: boolean | null }>);
 
       const flotaZewPromise = supabase
         .from('flota_zewnetrzna')
@@ -156,8 +159,11 @@ export function useCostComparison(
         }
         return map;
       };
-      const flotaWlasna = buildTypMap(flotaRows);
-      const flotaZew = buildTypMap(flotaZewRows);
+      // Podziel `flota` po jest_zewnetrzny: false/null = wlasne, true = doloz do zewnetrznych
+      const flotaWlasnaRows = flotaRows.filter(f => !(f as any).jest_zewnetrzny);
+      const flotaZewExtra = flotaRows.filter(f => !!(f as any).jest_zewnetrzny);
+      const flotaWlasna = buildTypMap(flotaWlasnaRows);
+      const flotaZew = buildTypMap([...flotaZewRows, ...flotaZewExtra]);
 
       // KAT i R współdzielą flotę (ten sam adres, te same auta)
       const mergeKATR = (map: Map<string, Set<string>>) => {
