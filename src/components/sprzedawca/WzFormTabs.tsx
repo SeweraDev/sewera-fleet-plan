@@ -155,6 +155,10 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ParsePreview | null>(null);
+  // Typ dokumentu (auto-wykryty lub wymuszony przez usera) + rawText do re-parse'u
+  const [docType, setDocType] = useState<'wz' | 'zamowienie' | null>(null);
+  const [docAutoDetected, setDocAutoDetected] = useState(true);
+  const rawTextRef = useRef<string | null>(null);
   // Plik PDF zachowujemy do archiwum (po zatwierdzeniu WZ — upload JPEG do Storage)
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   // Podglad WSZYSTKICH stron PDF — MINIATURY (low-res, scale ~0.8). Skalowalne na
@@ -239,6 +243,9 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setParsing(true);
     setError(null);
     setPreview(null);
+    setDocType(null);
+    setDocAutoDetected(true);
+    rawTextRef.current = null;
     setPdfFile(file);
     // Reset podgladow z poprzedniego pliku
     if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
@@ -327,8 +334,12 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         return;
       }
 
-      const { parseWZText } = await import('@/components/shared/ModalImportWZ');
-      const mapped = parseWZText(rawText);
+      // Wspolny dispatch: auto-detekcja WZ vs Zamowienie + odpowiedni parser
+      const { parseDocument } = await import('@/lib/parsers');
+      const { type, data: mapped, autoDetected } = await parseDocument(rawText);
+      rawTextRef.current = rawText;
+      setDocType(type === 'unknown' ? 'wz' : type);
+      setDocAutoDetected(autoDetected);
 
       setPreview({
         numer_wz: mapped.numer_wz || '',
@@ -349,6 +360,28 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     setParsing(false);
   }, []);
 
+  // Manualne wymuszenie typu dokumentu (gdy auto-detekcja sie pomyli) — re-parsuje rawText
+  const switchDocType = useCallback(async (newType: 'wz' | 'zamowienie') => {
+    if (!rawTextRef.current) return;
+    const { parseDocument } = await import('@/lib/parsers');
+    const { data: mapped } = await parseDocument(rawTextRef.current, { forceType: newType });
+    setDocType(newType);
+    setDocAutoDetected(false);
+    setPreview({
+      numer_wz: mapped.numer_wz || '',
+      nr_zamowienia: mapped.nr_zamowienia || '',
+      odbiorca: mapped.odbiorca || '',
+      adres: mapped.adres || '',
+      tel: combineKontaktTel(mapped.osoba_kontaktowa, mapped.tel),
+      masa_kg: mapped.masa_kg || 0,
+      objetosc_m3: mapped.objetosc_m3 || 0,
+      ilosc_palet: mapped.ilosc_palet || 0,
+      bez_palet: false,
+      luzne_karton: false,
+      uwagi: mapped.uwagi || '',
+    });
+  }, []);
+
   const handleConfirm = () => {
     if (!preview) return;
     // _pdfFile = oryginalny PDF do archiwum (transient, useCreateZlecenie zarchiwizuje go po INSERT WZ)
@@ -359,6 +392,9 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       setWzList([...wzList, newWz]);
     }
     setPreview(null);
+    setDocType(null);
+    setDocAutoDetected(true);
+    rawTextRef.current = null;
     setPdfFile(null);
     setPdfPreviewUrls([]);
     setPdfHighResCache(new Map());
@@ -395,6 +431,23 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
       {preview && (
         <div className="space-y-3">
+          {/* Badge typu dokumentu + manual toggle (gdy auto-detekcja sie pomyli) */}
+          {docType && (
+            <div className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs ${docType === 'zamowienie' ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800' : 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'}`}>
+              <span className={`font-medium ${docType === 'zamowienie' ? 'text-blue-900 dark:text-blue-100' : 'text-green-900 dark:text-green-100'}`}>
+                {docType === 'zamowienie' ? '📋 Wykryto: Zamówienie' : '📄 Wykryto: WZ (Dokument wydania)'}
+                {!docAutoDetected && <span className="ml-1 text-[10px] opacity-70">(wybór ręczny)</span>}
+              </span>
+              <button
+                type="button"
+                onClick={() => switchDocType(docType === 'wz' ? 'zamowienie' : 'wz')}
+                className="ml-auto text-[11px] underline opacity-80 hover:opacity-100"
+                title="Wymuś inny typ parsera (np. gdy auto-detekcja się pomyliła)"
+              >
+                Źle? Przełącz na {docType === 'wz' ? 'Zamówienie' : 'WZ'} →
+              </button>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">Sprawdź i popraw dane (oryginał obok dla porównania):</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -505,6 +558,9 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
             <Button size="sm" variant="ghost" onClick={() => {
               setPreview(null);
+              setDocType(null);
+              setDocAutoDetected(true);
+              rawTextRef.current = null;
               setError(null);
               setPdfPreviewUrls([]);
               setPdfHighResCache(new Map());
@@ -530,6 +586,8 @@ type BulkRow = {
   status: 'pending' | 'parsing' | 'ok' | 'error';
   preview: ParsePreview | null;
   errorMsg: string | null;
+  /** Wykryty typ dokumentu (WZ vs Zamowienie). Pomocne dla user'a zeby zweryfikowac. */
+  docType: 'wz' | 'zamowienie' | null;
 };
 
 function WzPdfBulkTab({
@@ -545,7 +603,7 @@ function WzPdfBulkTab({
   const [rows, setRows] = useState<BulkRow[]>([]);
   const [parsing, setParsing] = useState(false);
 
-  const parseOne = useCallback(async (file: File): Promise<{ preview: ParsePreview | null; error: string | null }> => {
+  const parseOne = useCallback(async (file: File): Promise<{ preview: ParsePreview | null; error: string | null; docType: 'wz' | 'zamowienie' | null }> => {
     try {
       if (!file.name.toLowerCase().endsWith('.pdf')) return { preview: null, error: 'Nie PDF' };
       if (file.size > 10 * 1024 * 1024) return { preview: null, error: 'Plik za duzy (>10 MB)' };
@@ -586,11 +644,13 @@ function WzPdfBulkTab({
 
       const rawText = pages.join('\n');
       if (!rawText || rawText.trim().length < 10) {
-        return { preview: null, error: 'Pusty PDF (zeskanowany?). Uzyj OCR.' };
+        return { preview: null, error: 'Pusty PDF (zeskanowany?). Uzyj OCR.', docType: null };
       }
 
-      const { parseWZText } = await import('@/components/shared/ModalImportWZ');
-      const mapped = parseWZText(rawText);
+      // Auto-detekcja: WZ vs Zamowienie (wybor parsera)
+      const { parseDocument } = await import('@/lib/parsers');
+      const { type, data: mapped } = await parseDocument(rawText);
+      const docType: 'wz' | 'zamowienie' = type === 'unknown' ? 'wz' : type;
 
       return {
         preview: {
@@ -607,9 +667,10 @@ function WzPdfBulkTab({
           uwagi: mapped.uwagi || '',
         },
         error: null,
+        docType,
       };
     } catch (err) {
-      return { preview: null, error: 'Blad odczytu: ' + (err as Error).message };
+      return { preview: null, error: 'Blad odczytu: ' + (err as Error).message, docType: null };
     }
   }, []);
 
@@ -620,7 +681,7 @@ function WzPdfBulkTab({
       return;
     }
     // Inicjalnie dodaj wszystkie ze statusem parsing
-    const initialRows: BulkRow[] = arr.map(f => ({ file: f, status: 'parsing', preview: null, errorMsg: null }));
+    const initialRows: BulkRow[] = arr.map(f => ({ file: f, status: 'parsing', preview: null, errorMsg: null, docType: null }));
     setRows(prev => [...prev, ...initialRows]);
     setParsing(true);
 
@@ -638,6 +699,7 @@ function WzPdfBulkTab({
             status: result.preview ? 'ok' : 'error',
             preview: result.preview,
             errorMsg: result.error,
+            docType: result.docType,
           };
         }
         return next;
@@ -745,6 +807,19 @@ function WzPdfBulkTab({
               {parsingRows.length > 0 && <> · <span className="text-blue-600">⏳ {parsingRows.length}</span></>}
               {errorRows.length > 0 && <> · <span className="text-red-600">✕ {errorRows.length}</span></>}
               {invalidRows.length > 0 && <> · <span className="text-amber-600">⚠ {invalidRows.length} braki</span></>}
+              {(() => {
+                const wzCount = okRows.filter(r => r.docType === 'wz').length;
+                const zamCount = okRows.filter(r => r.docType === 'zamowienie').length;
+                if (wzCount === 0 && zamCount === 0) return null;
+                return (
+                  <>
+                    {' · '}
+                    {wzCount > 0 && <span className="text-green-700">📄 {wzCount} WZ</span>}
+                    {wzCount > 0 && zamCount > 0 && ' '}
+                    {zamCount > 0 && <span className="text-blue-700">📋 {zamCount} Zam</span>}
+                  </>
+                );
+              })()}
             </span>
             <Button size="sm" variant="ghost" onClick={() => setRows([])} disabled={parsing || bulkSubmitting} className="h-7 text-xs">
               Wyczysc liste
@@ -781,10 +856,12 @@ function WzPdfBulkTab({
                       <td className="p-2 text-muted-foreground">{idx + 1}</td>
                       <td className="p-2">
                         <div className="font-medium truncate max-w-[200px]" title={r.file.name}>{r.file.name}</div>
-                        <div className="text-[10px] text-muted-foreground">
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-1 flex-wrap">
                           {r.status === 'parsing' && <span className="text-blue-600">⏳ analizuje...</span>}
-                          {r.status === 'ok' && <span className="text-green-600">✓ sparsowane{p?.numer_wz && ` · ${p.numer_wz}`}</span>}
+                          {r.status === 'ok' && <span className="text-green-600">✓ sparsowane{p?.numer_wz && ` · ${p.numer_wz}`}{p?.nr_zamowienia && !p?.numer_wz && ` · ${p.nr_zamowienia}`}</span>}
                           {r.status === 'error' && <span className="text-red-600" title={r.errorMsg || ''}>✕ {r.errorMsg}</span>}
+                          {r.docType === 'wz' && <span className="text-[9px] px-1 py-0 rounded bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700">📄 WZ</span>}
+                          {r.docType === 'zamowienie' && <span className="text-[9px] px-1 py-0 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-700">📋 Zam</span>}
                         </div>
                       </td>
                       {p ? (
@@ -1078,6 +1155,9 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const [preview, setPreview] = useState<ParsePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pasteFlash, setPasteFlash] = useState(false);
+  // Auto-detekcja typu dokumentu (WZ vs Zamowienie)
+  const [docType, setDocType] = useState<'wz' | 'zamowienie' | null>(null);
+  const [docAutoDetected, setDocAutoDetected] = useState(true);
   // Strony dokumentu — wielostronicowe WZ wymagaja sklejenia przed OCR.
   // Pierwszy paste/upload tworzy strone 1, kolejne dodaja strony 2, 3, ...
   const [pages, setPages] = useState<(File | Blob)[]>([]);
@@ -1188,9 +1268,11 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     }
   };
 
-  const handleParse = async () => {
-    const { parseWZText } = await import("@/components/shared/ModalImportWZ");
-    const mapped = parseWZText(ocrText);
+  const handleParse = async (forceType?: 'wz' | 'zamowienie') => {
+    const { parseDocument } = await import('@/lib/parsers');
+    const { type, data: mapped, autoDetected } = await parseDocument(ocrText, forceType ? { forceType } : {});
+    setDocType(type === 'unknown' ? 'wz' : type);
+    setDocAutoDetected(autoDetected);
     setPreview({
       numer_wz: mapped.numer_wz || '',
       nr_zamowienia: mapped.nr_zamowienia || '',
@@ -1349,6 +1431,23 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
 
       {step === 'preview' && preview && (
         <div className="space-y-3">
+          {/* Badge typu dokumentu + manual toggle (gdy auto-detekcja sie pomyli) */}
+          {docType && (
+            <div className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs ${docType === 'zamowienie' ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800' : 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'}`}>
+              <span className={`font-medium ${docType === 'zamowienie' ? 'text-blue-900 dark:text-blue-100' : 'text-green-900 dark:text-green-100'}`}>
+                {docType === 'zamowienie' ? '📋 Wykryto: Zamówienie' : '📄 Wykryto: WZ (Dokument wydania)'}
+                {!docAutoDetected && <span className="ml-1 text-[10px] opacity-70">(wybór ręczny)</span>}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleParse(docType === 'wz' ? 'zamowienie' : 'wz')}
+                className="ml-auto text-[11px] underline opacity-80 hover:opacity-100"
+                title="Wymuś inny typ parsera (np. gdy auto-detekcja się pomyliła)"
+              >
+                Źle? Przełącz na {docType === 'wz' ? 'Zamówienie' : 'WZ'} →
+              </button>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">Sprawdź i popraw dane (oryginał obok dla porównania):</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -1370,7 +1469,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
             <Button size="sm" variant="outline" onClick={() => setStep('text')}>Popraw tekst</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setStep('upload'); setPreview(null); setOcrText(""); setImageBlob(null); setPages([]); }}>Nowe zdjęcie</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setStep('upload'); setPreview(null); setOcrText(""); setImageBlob(null); setPages([]); setDocType(null); setDocAutoDetected(true); }}>Nowe zdjęcie</Button>
           </div>
         </div>
       )}
@@ -1552,15 +1651,21 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ParsePreview | null>(null);
-  const handleParse = async () => {
+  // Auto-detekcja typu dokumentu (WZ vs Zamowienie)
+  const [docType, setDocType] = useState<'wz' | 'zamowienie' | null>(null);
+  const [docAutoDetected, setDocAutoDetected] = useState(true);
+
+  const handleParse = async (forceType?: 'wz' | 'zamowienie') => {
     if (text.length === 0) return;
     setParsing(true);
     setError(null);
     setPreview(null);
 
-    // Single source of truth — parseWZText z ModalImportWZ (bez edge function)
-    const { parseWZText } = await import("@/components/shared/ModalImportWZ");
-    const mapped = parseWZText(text);
+    // Wspolny dispatch: auto-detekcja WZ vs Zamowienie + odpowiedni parser
+    const { parseDocument } = await import('@/lib/parsers');
+    const { type, data: mapped, autoDetected } = await parseDocument(text, forceType ? { forceType } : {});
+    setDocType(type === 'unknown' ? 'wz' : type);
+    setDocAutoDetected(autoDetected);
     setPreview({
       numer_wz: mapped.numer_wz || '',
       nr_zamowienia: mapped.nr_zamowienia || '',
@@ -1587,6 +1692,8 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
     }
     setText('');
     setPreview(null);
+    setDocType(null);
+    setDocAutoDetected(true);
   };
 
   return (
@@ -1595,12 +1702,12 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
         <>
           <Textarea
             className="min-h-[120px] font-mono text-xs"
-            placeholder="Wklej tekst z dokumentu WZ (z PDF, e-maila itp.) — system wyciągnie dane automatycznie"
+            placeholder="Wklej tekst z dokumentu WZ lub Potwierdzenia zamówienia (z PDF, e-maila itp.) — system rozpozna typ i wyciągnie dane"
             value={text}
             onChange={e => { setText(e.target.value); setError(null); }}
           />
           <div className="flex items-center gap-2">
-            <Button onClick={handleParse} disabled={text.length === 0 || parsing} size="sm">
+            <Button onClick={() => handleParse()} disabled={text.length === 0 || parsing} size="sm">
               {parsing ? 'Analizuję...' : 'Parsuj tekst'}
             </Button>
           </div>
@@ -1616,11 +1723,28 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 
       {preview && (
         <div className="space-y-3">
+          {/* Badge typu dokumentu + manual toggle (gdy auto-detekcja sie pomyli) */}
+          {docType && (
+            <div className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs ${docType === 'zamowienie' ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800' : 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'}`}>
+              <span className={`font-medium ${docType === 'zamowienie' ? 'text-blue-900 dark:text-blue-100' : 'text-green-900 dark:text-green-100'}`}>
+                {docType === 'zamowienie' ? '📋 Wykryto: Zamówienie' : '📄 Wykryto: WZ (Dokument wydania)'}
+                {!docAutoDetected && <span className="ml-1 text-[10px] opacity-70">(wybór ręczny)</span>}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleParse(docType === 'wz' ? 'zamowienie' : 'wz')}
+                className="ml-auto text-[11px] underline opacity-80 hover:opacity-100"
+                title="Wymuś inny typ parsera (np. gdy auto-detekcja się pomyliła)"
+              >
+                Źle? Przełącz na {docType === 'wz' ? 'Zamówienie' : 'WZ'} →
+              </button>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">Sprawdź i popraw odczytane dane:</p>
           <PreviewFields preview={preview} setPreview={setPreview} />
           <div className="flex gap-2">
             <Button size="sm" onClick={handleConfirm}>Użyj tych danych</Button>
-            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>Wróć do tekstu</Button>
+            <Button size="sm" variant="outline" onClick={() => { setPreview(null); setDocType(null); setDocAutoDetected(true); }}>Wróć do tekstu</Button>
           </div>
         </div>
       )}
