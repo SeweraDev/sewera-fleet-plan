@@ -94,6 +94,37 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const { oddzialy, loading: loadingOddzialy } = useOddzialy();
   const { flota, loading: loadingFlota } = useFlotaOddzialu(oddzialId);
   const { create, submitting, error } = useCreateZlecenie(onSuccess);
+  // Drugi instans hooka dla trybu bulk — bez per-call onSuccess (sami wywolamy po petli)
+  const { create: createBulkOne, submitting: bulkSubmitting } = useCreateZlecenie();
+
+  const handleBulkSubmit = useCallback(async (wzListPerZlecenie: WzInput[][]) => {
+    if (!oddzialId || !dzien || !godzina) {
+      toast.error('Wroc do wczesniejszych krokow i uzupelnij oddzial / dzien / godzine');
+      return;
+    }
+    let okCount = 0;
+    let failCount = 0;
+    for (const wzList of wzListPerZlecenie) {
+      try {
+        await createBulkOne({
+          oddzial_id: oddzialId,
+          typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu,
+          dzien,
+          preferowana_godzina: godzina,
+          wz_list: wzList,
+        }, false);
+        okCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    if (okCount > 0) {
+      toast.success(`✅ Utworzono ${okCount} ${okCount === 1 ? 'zlecenie' : okCount < 5 ? 'zlecenia' : 'zlecen'}${failCount > 0 ? ` (${failCount} bledow)` : ''}`);
+      onSuccess();
+    } else {
+      toast.error('Nie udalo sie utworzyc zadnego zlecenia');
+    }
+  }, [oddzialId, dzien, godzina, typPojazdu, createBulkOne, onSuccess]);
 
   const handleGoToCheck = () => {
     // Klasyfikacja transportu jest OPCJONALNA — dyspozytor moze ja uzupelnic pozniej
@@ -165,6 +196,8 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             onBack={() => setStep(2)}
             onSubmit={handleGoToCheck}
             typPojazdu={typPojazdu}
+            onBulkSubmit={handleBulkSubmit}
+            bulkSubmitting={bulkSubmitting}
           />
         )}
         {step === 4 && oddzialId && (

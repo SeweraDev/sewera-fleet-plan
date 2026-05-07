@@ -24,6 +24,10 @@ interface WzFormTabsProps {
    *  klasyfikacja jest auto-ustawiana z tego typu i ukrywana w UI.
    *  Gdy 'bez_preferencji' lub puste — klasyfikacja wymagana ręcznie. */
   typPojazdu?: string;
+  /** Tryb bulk: każdy PDF = osobne zlecenie (pomija krok 4 dostępności).
+   *  Zdefiniowane → tab "Wiele PDF" jest dostępny. */
+  onBulkSubmit?: (wzListPerZlecenie: WzInput[][]) => Promise<void>;
+  bulkSubmitting?: boolean;
 }
 
 
@@ -508,6 +512,342 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               if (pdfDocRef.current) { try { pdfDocRef.current.destroy(); } catch { /* ignore */ } pdfDocRef.current = null; }
               if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
             }}>Nowy plik</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Multi-PDF Bulk Tab ───
+ * Multi-file picker — kazdy PDF parsowany sekwencyjnie i tworzony jako OSOBNE
+ * zlecenie (1 WZ per zlecenie). Pomija krok 4 (sprawdzanie dostepnosci) — wszystkie
+ * zlecenia uzywaja tych samych parametrow z krokow 1-2 (oddzial, typ pojazdu, dzien,
+ * godzina). Dyspozytor moze pozniej polaczyc kursy z tych zlecen.
+ */
+type BulkRow = {
+  file: File;
+  status: 'pending' | 'parsing' | 'ok' | 'error';
+  preview: ParsePreview | null;
+  errorMsg: string | null;
+};
+
+function WzPdfBulkTab({
+  onBulkSubmit,
+  bulkSubmitting,
+  autoKlasyfikacja,
+}: {
+  onBulkSubmit: (wzListPerZlecenie: WzInput[][]) => Promise<void>;
+  bulkSubmitting: boolean;
+  autoKlasyfikacja?: string | null;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [rows, setRows] = useState<BulkRow[]>([]);
+  const [parsing, setParsing] = useState(false);
+
+  const parseOne = useCallback(async (file: File): Promise<{ preview: ParsePreview | null; error: string | null }> => {
+    try {
+      if (!file.name.toLowerCase().endsWith('.pdf')) return { preview: null, error: 'Nie PDF' };
+      if (file.size > 10 * 1024 * 1024) return { preview: null, error: 'Plik za duzy (>10 MB)' };
+
+      const pdfjs = await import('pdfjs-dist');
+      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+
+      const pages: string[] = [];
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const page = await pdfDoc.getPage(i);
+        const content = await page.getTextContent();
+        const lines: string[] = [];
+        let currentLine = '';
+        let lastY: number | null = null;
+        for (const item of content.items as any[]) {
+          if (!item.str && item.str !== '') continue;
+          const y = item.transform ? item.transform[5] : null;
+          if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) {
+            if (currentLine.trim()) lines.push(currentLine.trim());
+            currentLine = item.str;
+          } else {
+            currentLine += (currentLine && item.str && !currentLine.endsWith(' ') ? ' ' : '') + item.str;
+          }
+          if (y !== null) lastY = y;
+          if (item.hasEOL) {
+            if (currentLine.trim()) lines.push(currentLine.trim());
+            currentLine = '';
+            lastY = null;
+          }
+        }
+        if (currentLine.trim()) lines.push(currentLine.trim());
+        pages.push(lines.join('\n'));
+      }
+      try { pdfDoc.destroy(); } catch { /* ignore */ }
+
+      const rawText = pages.join('\n');
+      if (!rawText || rawText.trim().length < 10) {
+        return { preview: null, error: 'Pusty PDF (zeskanowany?). Uzyj OCR.' };
+      }
+
+      const { parseWZText } = await import('@/components/shared/ModalImportWZ');
+      const mapped = parseWZText(rawText);
+
+      return {
+        preview: {
+          numer_wz: mapped.numer_wz || '',
+          nr_zamowienia: mapped.nr_zamowienia || '',
+          odbiorca: mapped.odbiorca || '',
+          adres: mapped.adres || '',
+          tel: combineKontaktTel(mapped.osoba_kontaktowa, mapped.tel),
+          masa_kg: mapped.masa_kg || 0,
+          objetosc_m3: mapped.objetosc_m3 || 0,
+          ilosc_palet: mapped.ilosc_palet || 0,
+          bez_palet: false,
+          luzne_karton: false,
+          uwagi: mapped.uwagi || '',
+        },
+        error: null,
+      };
+    } catch (err) {
+      return { preview: null, error: 'Blad odczytu: ' + (err as Error).message };
+    }
+  }, []);
+
+  const handleFiles = useCallback(async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (arr.length === 0) {
+      toast.error('Wybierz pliki PDF');
+      return;
+    }
+    // Inicjalnie dodaj wszystkie ze statusem parsing
+    const initialRows: BulkRow[] = arr.map(f => ({ file: f, status: 'parsing', preview: null, errorMsg: null }));
+    setRows(prev => [...prev, ...initialRows]);
+    setParsing(true);
+
+    // Parsuj sekwencyjnie (zeby nie zarznac CPU/pamieci dla wielu plikow rownoczesnie)
+    const startIdx = rows.length;
+    for (let i = 0; i < arr.length; i++) {
+      const file = arr[i];
+      const result = await parseOne(file);
+      const rowIdx = startIdx + i;
+      setRows(prev => {
+        const next = [...prev];
+        if (next[rowIdx] && next[rowIdx].file === file) {
+          next[rowIdx] = {
+            ...next[rowIdx],
+            status: result.preview ? 'ok' : 'error',
+            preview: result.preview,
+            errorMsg: result.error,
+          };
+        }
+        return next;
+      });
+    }
+    setParsing(false);
+  }, [parseOne, rows.length]);
+
+  const updateRowField = (idx: number, field: keyof ParsePreview, value: string | number | boolean) => {
+    setRows(prev => {
+      const next = [...prev];
+      if (!next[idx] || !next[idx].preview) return prev;
+      next[idx] = { ...next[idx], preview: { ...next[idx].preview!, [field]: value } as ParsePreview };
+      return next;
+    });
+  };
+
+  const removeRow = (idx: number) => {
+    setRows(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const okRows = rows.filter(r => r.status === 'ok' && r.preview);
+  const errorRows = rows.filter(r => r.status === 'error');
+  const parsingRows = rows.filter(r => r.status === 'parsing');
+
+  // Walidacja: kazdy ok-row musi miec odbiorca, adres, tel, masa, palety/objetosc
+  const invalidRows = okRows.filter(r => {
+    const p = r.preview!;
+    if (!p.odbiorca || !p.adres || p.adres.trim().length < 5) return true;
+    if (!p.tel || p.tel.trim().length < 5) return true;
+    if (!p.masa_kg || p.masa_kg <= 0) return true;
+    if (!p.luzne_karton && (!p.objetosc_m3 || p.objetosc_m3 <= 0)) return true;
+    if (!p.bez_palet && (!p.ilosc_palet || p.ilosc_palet <= 0)) return true;
+    return false;
+  });
+
+  const handleSubmitAll = async () => {
+    if (okRows.length === 0) {
+      toast.error('Brak poprawnie sparsowanych PDF');
+      return;
+    }
+    if (invalidRows.length > 0) {
+      toast.error(`${invalidRows.length} zlecen ma braki — uzupelnij wymagane pola`);
+      return;
+    }
+    // Konwersja kazdego ok-row do WzInput[] (1 WZ per zlecenie)
+    const wzListPerZlecenie: WzInput[][] = okRows.map(r => {
+      const p = r.preview!;
+      return [{
+        numer_wz: p.numer_wz || null,
+        nr_zamowienia: p.nr_zamowienia || null,
+        odbiorca: p.odbiorca,
+        adres: p.adres,
+        tel: p.tel || null,
+        masa_kg: p.masa_kg,
+        objetosc_m3: p.objetosc_m3 || 0,
+        ilosc_palet: p.ilosc_palet || 0,
+        bez_palet: p.bez_palet,
+        luzne_karton: p.luzne_karton,
+        uwagi: p.uwagi || null,
+        klasyfikacja: autoKlasyfikacja || '',
+        wartosc_netto: null,
+        _pdfFile: r.file,
+      }];
+    });
+    await onBulkSubmit(wzListPerZlecenie);
+  };
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 text-xs">
+        <p className="font-medium text-blue-900 dark:text-blue-100">📚 Tryb wielu PDF</p>
+        <p className="text-blue-700 dark:text-blue-300 mt-1">
+          Kazdy PDF zostanie utworzony jako <strong>osobne zlecenie</strong> (1 WZ per zlecenie).
+          Wszystkie uzyja tego samego oddzialu, typu pojazdu, dnia i godziny z poprzednich krokow.
+          Krok sprawdzania dostepnosci jest pomijany — dyspozytor zobaczy zlecenia w kolejce i moze polaczyc je w kursy.
+        </p>
+      </div>
+
+      <div
+        className="border-2 border-dashed border-muted-foreground/30 rounded-lg bg-muted/30 p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+        onClick={() => fileRef.current?.click()}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); }}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf"
+          multiple
+          className="hidden"
+          onChange={e => { if (e.target.files?.length) { handleFiles(e.target.files); e.target.value = ''; } }}
+        />
+        <div className="text-3xl mb-2">📚</div>
+        <p className="text-sm font-medium text-muted-foreground">Przeciagnij PDF-y lub kliknij aby wybrac kilka plikow</p>
+        <p className="text-xs text-muted-foreground mt-1">Multi-select (Ctrl/Shift+klik). Kazdy PDF do 10 MB.</p>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {rows.length} plikow:
+              {' '}<span className="text-green-600 font-medium">✓ {okRows.length}</span>
+              {parsingRows.length > 0 && <> · <span className="text-blue-600">⏳ {parsingRows.length}</span></>}
+              {errorRows.length > 0 && <> · <span className="text-red-600">✕ {errorRows.length}</span></>}
+              {invalidRows.length > 0 && <> · <span className="text-amber-600">⚠ {invalidRows.length} braki</span></>}
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setRows([])} disabled={parsing || bulkSubmitting} className="h-7 text-xs">
+              Wyczysc liste
+            </Button>
+          </div>
+
+          <div className="border rounded-md overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left p-2 w-8">#</th>
+                  <th className="text-left p-2">Plik / Status</th>
+                  <th className="text-left p-2">Odbiorca *</th>
+                  <th className="text-left p-2">Adres *</th>
+                  <th className="text-left p-2">Telefon *</th>
+                  <th className="text-left p-2 w-20">Masa kg *</th>
+                  <th className="text-left p-2 w-20">Palety</th>
+                  <th className="text-left p-2 w-20">Obj. m³</th>
+                  <th className="text-left p-2 w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, idx) => {
+                  const p = r.preview;
+                  const isInvalid = r.status === 'ok' && p && (
+                    !p.odbiorca || !p.adres || p.adres.trim().length < 5 ||
+                    !p.tel || p.tel.trim().length < 5 ||
+                    !p.masa_kg || p.masa_kg <= 0 ||
+                    (!p.luzne_karton && (!p.objetosc_m3 || p.objetosc_m3 <= 0)) ||
+                    (!p.bez_palet && (!p.ilosc_palet || p.ilosc_palet <= 0))
+                  );
+                  return (
+                    <tr key={idx} className={`border-t ${r.status === 'error' ? 'bg-red-50 dark:bg-red-950/20' : isInvalid ? 'bg-amber-50 dark:bg-amber-950/20' : ''}`}>
+                      <td className="p-2 text-muted-foreground">{idx + 1}</td>
+                      <td className="p-2">
+                        <div className="font-medium truncate max-w-[200px]" title={r.file.name}>{r.file.name}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {r.status === 'parsing' && <span className="text-blue-600">⏳ analizuje...</span>}
+                          {r.status === 'ok' && <span className="text-green-600">✓ sparsowane{p?.numer_wz && ` · ${p.numer_wz}`}</span>}
+                          {r.status === 'error' && <span className="text-red-600" title={r.errorMsg || ''}>✕ {r.errorMsg}</span>}
+                        </div>
+                      </td>
+                      {p ? (
+                        <>
+                          <td className="p-1"><Input className="h-7 text-xs" value={p.odbiorca} onChange={e => updateRowField(idx, 'odbiorca', e.target.value)} /></td>
+                          <td className="p-1"><Input className="h-7 text-xs" value={p.adres} onChange={e => updateRowField(idx, 'adres', e.target.value)} /></td>
+                          <td className="p-1"><Input className="h-7 text-xs" value={p.tel} onChange={e => updateRowField(idx, 'tel', e.target.value)} /></td>
+                          <td className="p-1"><Input className="h-7 text-xs" type="number" value={p.masa_kg || ''} onChange={e => updateRowField(idx, 'masa_kg', Number(e.target.value))} /></td>
+                          <td className="p-1">
+                            <Input className="h-7 text-xs" type="number" min={0} value={p.bez_palet ? 0 : (p.ilosc_palet || '')} disabled={p.bez_palet} onChange={e => updateRowField(idx, 'ilosc_palet', Number(e.target.value))} />
+                            <label className="flex items-center gap-1 mt-0.5 cursor-pointer">
+                              <Checkbox checked={p.bez_palet} onCheckedChange={(c) => { updateRowField(idx, 'bez_palet', !!c); if (c) updateRowField(idx, 'ilosc_palet', 0); }} />
+                              <span className="text-[9px] text-muted-foreground">bez</span>
+                            </label>
+                          </td>
+                          <td className="p-1">
+                            <Input className="h-7 text-xs" type="number" min={0} step="0.1" value={p.luzne_karton ? 0 : (p.objetosc_m3 || '')} disabled={p.luzne_karton} onChange={e => updateRowField(idx, 'objetosc_m3', Number(e.target.value))} />
+                            <label className="flex items-center gap-1 mt-0.5 cursor-pointer">
+                              <Checkbox checked={p.luzne_karton} onCheckedChange={(c) => { updateRowField(idx, 'luzne_karton', !!c); if (c) updateRowField(idx, 'objetosc_m3', 0); }} />
+                              <span className="text-[9px] text-muted-foreground">luzne</span>
+                            </label>
+                          </td>
+                        </>
+                      ) : (
+                        <td className="p-1 text-muted-foreground italic" colSpan={6}>{r.status === 'parsing' ? 'analizuje...' : '—'}</td>
+                      )}
+                      <td className="p-1">
+                        <button
+                          type="button"
+                          onClick={() => removeRow(idx)}
+                          disabled={bulkSubmitting}
+                          className="text-red-600 hover:text-red-800 px-1 disabled:opacity-50"
+                          title="Usun z listy"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-2">
+            <div className="text-xs text-muted-foreground">
+              {okRows.length > 0 && invalidRows.length === 0 && (
+                <span className="text-green-700 dark:text-green-400 font-medium">
+                  Gotowe do utworzenia {okRows.length} {okRows.length === 1 ? 'zlecenia' : 'zlecen'}
+                </span>
+              )}
+              {invalidRows.length > 0 && (
+                <span className="text-amber-700 dark:text-amber-400">
+                  Uzupelnij wymagane pola w {invalidRows.length} {invalidRows.length === 1 ? 'wierszu' : 'wierszach'} (zaznaczone na zolto)
+                </span>
+              )}
+            </div>
+            <Button
+              onClick={handleSubmitAll}
+              disabled={bulkSubmitting || parsing || okRows.length === 0 || invalidRows.length > 0}
+            >
+              {bulkSubmitting ? 'Tworze zlecenia...' : `🚀 Utworz ${okRows.length} ${okRows.length === 1 ? 'zlecenie' : okRows.length < 5 ? 'zlecenia' : 'zlecen'}`}
+            </Button>
           </div>
         </div>
       )}
@@ -1288,7 +1628,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
   );
 }
 
-export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit, typPojazdu }: WzFormTabsProps) {
+export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit, typPojazdu, onBulkSubmit, bulkSubmitting }: WzFormTabsProps) {
   const [activeTab, setActiveTab] = useState<string>('reczne');
 
   // Auto-klasyfikacja z typu pojazdu — gdy user wybrał konkretny typ (nie 'bez_preferencji'),
@@ -1321,6 +1661,9 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
           <TabsTrigger value="pdf" className="flex-1 text-xs">PDF</TabsTrigger>
+          {onBulkSubmit && (
+            <TabsTrigger value="pdf-bulk" className="flex-1 text-xs">📚 Wiele PDF</TabsTrigger>
+          )}
           <TabsTrigger value="ocr" className="flex-1 text-xs">OCR</TabsTrigger>
           <TabsTrigger value="xls" className="flex-1 text-xs">XLS</TabsTrigger>
           <TabsTrigger value="paste" className="flex-1 text-xs">Wklej</TabsTrigger>
@@ -1328,6 +1671,11 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
         </TabsList>
 
         <TabsContent value="pdf"><WzPdfTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
+        {onBulkSubmit && (
+          <TabsContent value="pdf-bulk">
+            <WzPdfBulkTab onBulkSubmit={onBulkSubmit} bulkSubmitting={!!bulkSubmitting} autoKlasyfikacja={autoKlas} />
+          </TabsContent>
+        )}
         <TabsContent value="ocr"><WzOcrTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
         <TabsContent value="xls"><WzXlsTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
         <TabsContent value="paste"><WzPasteTab wzList={wzList} setWzList={setWzListFromImport} /></TabsContent>
@@ -1335,12 +1683,19 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
       </Tabs>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onBack}>← Wstecz</Button>
-        <Button onClick={onSubmit} disabled={submitting}>
-          {submitting ? 'Wysyłanie...' : 'Sprawdź dostępność →'}
-        </Button>
-      </div>
+      {activeTab !== 'pdf-bulk' && (
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onBack}>← Wstecz</Button>
+          <Button onClick={onSubmit} disabled={submitting}>
+            {submitting ? 'Wysyłanie...' : 'Sprawdź dostępność →'}
+          </Button>
+        </div>
+      )}
+      {activeTab === 'pdf-bulk' && (
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onBack} disabled={bulkSubmitting}>← Wstecz</Button>
+        </div>
+      )}
     </div>
   );
 }
