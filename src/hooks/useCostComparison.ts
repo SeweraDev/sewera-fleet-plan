@@ -24,8 +24,9 @@ export interface CostComparisonRow {
   /** Koszt netto/brutto pojazdem własnym Sewera (gdy pasujący typ obsługiwany). */
   kosztWew: { netto: number; brutto: number } | null;
   /** Lista ofert pojazdami zewnetrznymi (posortowana od najtanszej). Pusta gdy brak.
-   *  paletyExtra = stawka per paleta (informacyjna, mnozona przez palety w kontekscie zlecenia). */
-  kosztyZew: Array<{ netto: number; brutto: number; paletyExtra?: number; nazwa_firmy?: string }>;
+   *  paletyExtra = stawka per paleta (informacyjna, mnozona przez palety w kontekscie zlecenia).
+   *  ladownoscLabel = etykieta ladownosci (np. "12T", "14T") - rozroznia firmy z tym samym typem. */
+  kosztyZew: Array<{ netto: number; brutto: number; paletyExtra?: number; ladownoscLabel?: string }>;
   /** min(kosztWew?.netto, kosztZew?.netto) — używamy do rankingu i porównania. */
   minNetto: number | null;
   /** Typ cennikowy faktycznie użyty (po fallbacku, np. "z windą do 1,8t" gdy żądano "do 1,2t bez windy"). */

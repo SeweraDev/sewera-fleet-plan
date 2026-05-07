@@ -316,9 +316,9 @@ export function DostepnoscStep({
                           <div className="space-y-1">
                             {r.kosztyZew.map((k, i) => (
                               <div key={i} className={i > 0 ? 'pt-1 border-t border-dashed border-muted-foreground/30' : ''}>
-                                {fmtPLN(k.netto)}
-                                {k.nazwa_firmy && (
-                                  <div className="text-[9px] text-muted-foreground font-normal">({k.nazwa_firmy})</div>
+                                <span>{fmtPLN(k.netto)}</span>
+                                {k.ladownoscLabel && (
+                                  <span className="ml-1 text-[9px] font-medium text-muted-foreground">({k.ladownoscLabel})</span>
                                 )}
                                 {(k.paletyExtra ?? 0) > 0 && (
                                   <div className="text-[9px] text-amber-700 dark:text-amber-400 font-normal" title="Dodatkowa oplata za rozladunek (zl/paleta)">

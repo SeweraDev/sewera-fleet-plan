@@ -106,8 +106,10 @@ interface StawkaZew {
   oddzial: string; // kod oddziału: KAT, SOS, GL, DG
   punkty: PunktCenowyZew[];
   stawkaZaKmPonad20: number | null; // null = brak danych, interpoluj z tabeli
-  /** Identyfikator firmy/pojazdu (do UI/debug). Dla danego (typ, oddzial) moze byc kilka. */
-  nazwa_firmy?: string;
+  /** Etykieta ladownosci pojazdu do wyswietlenia obok ceny (np. "12T", "14T").
+   *  Pomaga dyspozytorowi rozroznic dwie firmy z tym samym typCennikowym (HDS 12,0t)
+   *  ale roznymi ladownosciami (12t vs 14t). */
+  ladownoscLabel?: string;
   /** Dodatkowa oplata za rozladunek per paleta (zl/paleta). 0 lub undefined = brak. */
   paletyExtra?: number;
 }
@@ -119,16 +121,21 @@ const STAWKI_ZEW: StawkaZew[] = [
   { typCennikowy: 'HDS 12,0t', oddzial: 'GL', punkty: [{ km: 5, cena: 380 }, { km: 10, cena: 380 }, { km: 15, cena: 430 }, { km: 20, cena: 480 }, { km: 30, cena: 550 }], stawkaZaKmPonad20: null },
   { typCennikowy: 'HDS 12,0t', oddzial: 'DG', punkty: [{ km: 5, cena: 300 }, { km: 10, cena: 350 }, { km: 15, cena: 400 }, { km: 20, cena: 450 }], stawkaZaKmPonad20: null },
 
-  // HDS 12T — Oświęcim (firma 1 - umowna stawka)
-  { typCennikowy: 'HDS 12,0t', oddzial: 'OS', punkty: [{ km: 5, cena: 300 }, { km: 15, cena: 350 }, { km: 20, cena: 450 }, { km: 30, cena: 550 }, { km: 40, cena: 650 }], stawkaZaKmPonad20: 7 },
-
-  // HDS 12T — Oświęcim (firma 2: KOS0000 - 14T ladownosc / 10 palet, oplata za rozladunek 10 zl/paleta)
-  // Nizsze stawki bazowe niz firma 1, ale z dodatkiem za rozladunek.
-  // obliczKosztZew wybiera najtansza calkowita opcje.
+  // HDS 12T — Oświęcim (firma 1 - 12T ladownosc, umowna stawka)
   {
     typCennikowy: 'HDS 12,0t',
     oddzial: 'OS',
-    nazwa_firmy: 'KOS0000',
+    ladownoscLabel: '12T',
+    punkty: [{ km: 5, cena: 300 }, { km: 15, cena: 350 }, { km: 20, cena: 450 }, { km: 30, cena: 550 }, { km: 40, cena: 650 }],
+    stawkaZaKmPonad20: 7,
+  },
+
+  // HDS 12T — Oświęcim (firma 2 - 14T ladownosc / 10 palet, oplata za rozladunek 10 zl/paleta)
+  // Wieksza ladownosc niz typ cennikowy (14t > 12t) - wyrozniamy etykieta.
+  {
+    typCennikowy: 'HDS 12,0t',
+    oddzial: 'OS',
+    ladownoscLabel: '14T',
     punkty: [
       { km: 5, cena: 150 },
       { km: 10, cena: 200 },
@@ -269,8 +276,8 @@ export interface KosztTransportu {
 export interface KosztTransportuZew extends KosztTransportu {
   /** Stawka za rozladunek per paleta (zl). 0 gdy brak. Mnozona przez liczbe palet w UI. */
   paletyExtra: number;
-  /** Identyfikator firmy ktora dala te cene (gdy bylo kilka opcji do wyboru). */
-  nazwa_firmy?: string;
+  /** Etykieta ladownosci (np. "12T", "14T") - do rozroznienia firm z tym samym typCennikowym. */
+  ladownoscLabel?: string;
 }
 
 /**
@@ -382,7 +389,7 @@ export function obliczKosztyZewWszystkie(km: number, typCennikowy: string, oddzi
         netto,
         brutto: round2(netto * VAT),
         paletyExtra: paletyExtraStawka,
-        nazwa_firmy: stawka.nazwa_firmy,
+        ladownoscLabel: stawka.ladownoscLabel,
       },
       totalDoSortowania: totalNetto,
     });

@@ -35,7 +35,7 @@ interface KosztZewOferta {
   netto: number;
   brutto: number;
   paletyExtra?: number;
-  nazwa_firmy?: string;
+  ladownoscLabel?: string;
 }
 
 interface WynikOddzialu {
@@ -539,9 +539,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                                 <div className="space-y-1.5">
                                   {w.kosztyZew.map((k, i) => (
                                     <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
-                                      {formatPLN(k.netto)}
-                                      {k.nazwa_firmy && (
-                                        <div className="text-[10px] text-muted-foreground font-normal">({k.nazwa_firmy})</div>
+                                      <span>{formatPLN(k.netto)}</span>
+                                      {k.ladownoscLabel && (
+                                        <span className="ml-1.5 text-[10px] font-medium text-muted-foreground">({k.ladownoscLabel})</span>
                                       )}
                                       {(k.paletyExtra ?? 0) > 0 && (
                                         <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal" title="Dodatkowa oplata za rozladunek (mnozona przez liczbe palet)">
@@ -559,7 +559,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                                   {w.kosztyZew.map((k, i) => (
                                     <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
                                       {formatPLN(k.brutto)}
-                                      {k.nazwa_firmy && <div className="text-[10px] font-normal opacity-0">.</div>}
                                       {(k.paletyExtra ?? 0) > 0 && <div className="text-[10px] font-normal opacity-0">.</div>}
                                     </div>
                                   ))}
