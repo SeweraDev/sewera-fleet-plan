@@ -661,6 +661,17 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                               ) : null}
                               <TableCell className="text-right text-xs font-semibold">
                                 {(() => { const k = kosztByWzId.get(p.id); return k != null ? k.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł' : '—'; })()}
+                                {/* Suma per adres — pokazuj tylko w pierwszym wierszu grupy gdy groupSize > 1
+                                    (przy 1 WZ na adres koszt WZ = koszt adresu, wiec nie ma co duplikowac) */}
+                                {isFirst && groupSize > 1 && (() => {
+                                  const sumAdres = kosztPunktuByGroup.get(key);
+                                  if (sumAdres == null) return null;
+                                  return (
+                                    <div className="text-[10px] font-normal text-muted-foreground mt-0.5 border-t border-dashed border-muted-foreground/30 pt-0.5" title={`Suma kosztow ${groupSize} WZ na tym adresie`}>
+                                      Σ adres: <span className="font-semibold text-foreground">{sumAdres.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł</span>
+                                    </div>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell className="w-8 p-1">
                                 {p.zlecenie_id && (
