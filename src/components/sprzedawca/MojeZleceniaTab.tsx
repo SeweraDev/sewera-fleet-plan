@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PodgladWZDialog } from '@/components/shared/PodgladWZDialog';
 import { useMojeZlecenia } from '@/hooks/useMojeZlecenia';
+import { TYPY_KLIENTOW, badgeClassesTypKlienta } from '@/lib/typy-klientow';
 
 function DeadlineBadge({ zlecenie }: { zlecenie: { ma_wz: boolean; deadline_wz: string | null; flaga_brak_wz: boolean } }) {
   if (zlecenie.ma_wz) {
@@ -84,6 +85,7 @@ export function MojeZleceniaTab() {
               <TableHead>Status</TableHead>
               <TableHead>Dzień</TableHead>
               <TableHead>Oddział</TableHead>
+              <TableHead>Klient</TableHead>
               <TableHead>Typ</TableHead>
               <TableHead className="text-right">WZ</TableHead>
               <TableHead className="text-right">Kg</TableHead>
@@ -108,6 +110,18 @@ export function MojeZleceniaTab() {
                     <TableCell><StatusBadge status={z.status} /></TableCell>
                     <TableCell>{z.dzien}</TableCell>
                     <TableCell>{z.oddzial}</TableCell>
+                    <TableCell>
+                      {z.typ_klienta ? (
+                        <span
+                          className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold font-mono ${badgeClassesTypKlienta(z.typ_klienta)}`}
+                          title={TYPY_KLIENTOW.find(t => t.kod === z.typ_klienta)?.opis || z.typ_klienta}
+                        >
+                          {z.typ_klienta}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>{z.typ_pojazdu || '—'}</TableCell>
                     <TableCell className="text-right">{z.liczba_wz}</TableCell>
                     <TableCell className="text-right">{Math.round(z.suma_kg)}</TableCell>
@@ -118,7 +132,7 @@ export function MojeZleceniaTab() {
                   </TableRow>
                   {isExpanded && z.wz_lista.length > 0 && (
                     <TableRow className="bg-muted/20">
-                      <TableCell colSpan={10} className="p-0">
+                      <TableCell colSpan={11} className="p-0">
                         <div className="px-6 py-3 space-y-1.5">
                           <p className="text-xs font-semibold text-muted-foreground mb-2">Dokumenty WZ:</p>
                           {z.wz_lista.map(wz => (

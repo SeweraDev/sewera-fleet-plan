@@ -28,6 +28,7 @@ import { usePrzekazZlecenie } from '@/hooks/usePrzekazZlecenie';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { KLASYFIKACJE } from '@/lib/klasyfikacje';
+import { TYPY_KLIENTOW, badgeClassesTypKlienta } from '@/lib/typy-klientow';
 
 import { lazy, Suspense } from 'react';
 const ZleceniaMapView = lazy(() => import('@/components/dyspozytor/ZleceniaMapView'));
@@ -419,6 +420,18 @@ export function ZleceniaTab({
     refetch();
   };
 
+  const handleSetTypKlienta = async (zlId: string, kod: string) => {
+    const { error } = await (supabase.from('zlecenia') as any)
+      .update({ typ_klienta: kod })
+      .eq('id', zlId);
+    if (error) {
+      toast.error('Blad zapisu typu klienta: ' + error.message);
+      return;
+    }
+    toast.success(`Klient: ${kod}`);
+    refetch();
+  };
+
   const handleAnuluj = async (zl: ZlecenieOddzialuDto) => {
     await supabase.from('kurs_przystanki').delete().eq('zlecenie_id', zl.id);
     await supabase
@@ -663,6 +676,7 @@ export function ZleceniaTab({
                   <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('km')}>
                     km {sortBy === 'km' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </TableHead>
+                  <TableHead>Klient</TableHead>
                   <TableHead>Klasyf.</TableHead>
                   <TableHead>Typ</TableHead>
                   <TableHead>Uwagi / Kurs</TableHead>
@@ -712,6 +726,23 @@ export function ZleceniaTab({
                           prosta: {z.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell className="text-xs" onClick={e => e.stopPropagation()}>
+                      <Select
+                        value={z.typ_klienta || ''}
+                        onValueChange={(v) => handleSetTypKlienta(z.id, v)}
+                      >
+                        <SelectTrigger className={`h-7 text-xs px-2 font-mono w-[60px] ${z.typ_klienta ? badgeClassesTypKlienta(z.typ_klienta) : ''}`}>
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TYPY_KLIENTOW.map(t => (
+                            <SelectItem key={t.kod} value={t.kod} className="text-xs">
+                              <span className="font-mono">{t.kod}</span> — {t.opis}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell className="text-xs" onClick={e => e.stopPropagation()}>
                       {z.klasyfikacje.length > 1 ? (

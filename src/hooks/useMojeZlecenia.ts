@@ -17,6 +17,7 @@ export interface MojeZlecenie {
   dzien: string;
   preferowana_godzina: string | null;
   typ_pojazdu: string | null;
+  typ_klienta: string | null;
   oddzial: string;
   liczba_wz: number;
   suma_kg: number;
@@ -39,7 +40,7 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
     let query = supabase
       .from('zlecenia')
       .select(`
-        id, numer, status, dzien, preferowana_godzina, typ_pojazdu,
+        id, numer, status, dzien, preferowana_godzina, typ_pojazdu, typ_klienta,
         deadline_wz, ma_wz, flaga_brak_wz,
         oddzialy(nazwa)
       `)
@@ -89,6 +90,7 @@ export function useMojeZlecenia(statusFilter: string = 'wszystkie') {
       dzien: z.dzien,
       preferowana_godzina: z.preferowana_godzina,
       typ_pojazdu: z.typ_pojazdu,
+      typ_klienta: (z as any).typ_klienta || null,
       oddzial: (z.oddzialy as any)?.nazwa || '',
       liczba_wz: wzMap.get(z.id)?.count || 0,
       suma_kg: wzMap.get(z.id)?.kg || 0,

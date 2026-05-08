@@ -8,6 +8,7 @@ export interface ZlecenieOddzialuDto {
   status: string;
   dzien: string;
   typ_pojazdu: string | null;
+  typ_klienta: string | null;
   preferowana_godzina: string | null;
   kurs_numer: string | null;
   kurs_nrrej: string | null;
@@ -53,7 +54,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('zlecenia')
-      .select('id, numer, status, dzien, typ_pojazdu, preferowana_godzina, kurs_id, oddzial_id, deadline_wz, ma_wz, flaga_brak_wz')
+      .select('id, numer, status, dzien, typ_pojazdu, typ_klienta, preferowana_godzina, kurs_id, oddzial_id, deadline_wz, ma_wz, flaga_brak_wz')
       .eq('oddzial_id', oddzialId)
       .order('dzien', { ascending: true })
       .order('created_at', { ascending: true });
@@ -148,6 +149,7 @@ export function useZleceniaOddzialu(oddzialId: number | null, pastOnly = false, 
         status: z.status,
         dzien: z.dzien,
         typ_pojazdu: z.typ_pojazdu,
+        typ_klienta: (z as any).typ_klienta || null,
         preferowana_godzina: z.preferowana_godzina,
         kurs_numer: kursInfo?.numer || null,
         kurs_nrrej: kursNrRej || null,
