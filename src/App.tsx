@@ -14,6 +14,7 @@ import KierowcaMojaTrasa from "@/pages/kierowca/MojaTrasa";
 import MapaSewera from "@/pages/MapaSewera";
 import KartaDrogowa from "@/pages/KartaDrogowa";
 import RozliczenieKosztow from "@/pages/RozliczenieKosztow";
+import WycenaPublicznaPage from "@/pages/WycenaPublicznaPage";
 import { RootRedirect } from "@/components/shared/RootRedirect";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,8 @@ const App = () => (
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/403" element={<UnauthorizedPage />} />
+          {/* Publiczny kalkulator wyceny — dostepny bez logowania */}
+          <Route path="/wycena" element={<WycenaPublicznaPage />} />
 
           {/* Admin */}
           <Route path="/admin" element={

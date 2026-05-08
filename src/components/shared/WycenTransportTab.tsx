@@ -251,15 +251,16 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       // UWAGA: tabela `flota` zawiera kolumne jest_zewnetrzny - zewnetrzne pojazdy
       // moga byc w obu miejscach (flota.jest_zewnetrzny=true lub flota_zewnetrzna).
       // Filtrujemy lokalnie zeby pomylkowo dodane do flota nie trafialy do wlasnej puli.
+      // Czytamy z PUBLICZNYCH widokow (publiczna_flota_typy / publiczna_flota_zew_typy)
+      // ktore nie ujawniaja wrazliwych pol (nr_rej, telefon, firma) — dzieki temu strona
+      // /wycena dziala bez logowania a wewnatrz appki tez czytamy te same dane.
       const { data: flotaDataRaw } = await supabase
-        .from('flota')
-        .select('typ, oddzial_id, jest_zewnetrzny')
-        .eq('aktywny', true);
+        .from('publiczna_flota_typy' as any)
+        .select('typ, oddzial_id, jest_zewnetrzny');
 
       const { data: flotaZewData } = await supabase
-        .from('flota_zewnetrzna')
-        .select('typ, oddzial_id')
-        .eq('aktywny', true);
+        .from('publiczna_flota_zew_typy' as any)
+        .select('typ, oddzial_id');
 
       // Podziel `flota` po jest_zewnetrzny: false/null = wlasne, true = doloz do zewnetrznych
       const flotaWlasnaRaw = (flotaDataRaw || []).filter(f => !(f as any).jest_zewnetrzny);
