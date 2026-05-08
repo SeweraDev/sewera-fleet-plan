@@ -345,15 +345,19 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         });
 
         const zewTypy = flotaZew.get(kod) || new Set<string>();
-        const bestZewType = findBestAvailableType(typPojazdu, zewTypy);
-        // Liczymy koszt dla FAKTYCZNIE dostępnego typu (nie oryginalnie żądanego),
-        // żeby oddział z fallbackiem w górę (np. SOS ma HDS 12,0t, user szuka HDS 9,0t)
-        // dostał cenę wg HDS 12,0t zamiast nulla (brak stawki dla HDS 9,0t na SOS).
-        const kosztyZew = bestZewType ? obliczKosztyZewWszystkie(km, bestZewType.typ, kod) : [];
-        const matchingZewTypy = bestZewType ? [...zewTypy].filter(t => {
+        // ZEW — analogicznie do wew: wszystkie typy z rodziny ktore oddzial ma w flota_zewnetrzna.
+        // Kazdy typ -> obliczKosztyZewWszystkie zwraca liste ofert (firm) z STAWKI_ZEW dla tego typu.
+        const dostepneTypyZew = findAllAvailableTypes(typPojazdu, zewTypy);
+        const kosztyZew: KosztZewOferta[] = [];
+        for (const dt of dostepneTypyZew) {
+          const oferty = obliczKosztyZewWszystkie(km, dt.typ, kod);
+          kosztyZew.push(...oferty);
+        }
+        const dostepneTypyZewSet = new Set(dostepneTypyZew.map(d => d.typ));
+        const matchingZewTypy = [...zewTypy].filter(t => {
           const mapped = mapTypNaCennikowy(t);
-          return mapped === typPojazdu || mapped === bestZewType.typ;
-        }) : [];
+          return mapped != null && dostepneTypyZewSet.has(mapped);
+        });
 
         results.push({
           kod,
