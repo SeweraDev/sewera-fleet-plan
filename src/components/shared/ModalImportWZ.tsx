@@ -918,7 +918,10 @@ export function parseWZText(rawText: string): WZImportData {
       }
       // REDYSTRYBUCJA / ODDZIAŁ to linie LEWEJ kolumny (po nich moze byc jeszcze adres
       // oddzialu lewej kolumny + cala prawa kolumna z Odbiorca). NIE break — continue.
-      if (/^REDYSTRYBUCJA\b|^ODDZIAŁ\b/i.test(l)) continue;
+      // UWAGA: zamiast \b uzywamy (?:\s|$) bo JS \b nie dziala po polskich literach
+      // (Ł jest non-word, wiec po Ł nie ma word boundary). Bez tego "ODDZIAŁ KATOWICE"
+      // by przeszlo i staloby sie odbiorca. Patrz PDF KK/112/26/04/0009963.
+      if (/^(?:REDYSTRYBUCJA|ODDZIAŁ)(?:\s|$)/i.test(l)) continue;
       // Faktyczny koniec sekcji dwukolumnowej (sekcje pojawiaja sie pod blokiem)
       if (/^Magazyn|^Forma\s+płatn|^Wydano|^Adres\s+dostawy|^e\s+wydaj/i.test(l)) break;
       if (/^HR\s*BDO:|^NR\s*BDO:/i.test(l) && (rightName || rightAddr.length > 0)) break;
