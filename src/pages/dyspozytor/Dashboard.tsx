@@ -517,8 +517,10 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                           const isFirst = pIdx === 0 || prevKey !== key;
                           const groupSize = kPrzSorted.filter(x => groupKeyOf(x) === key).length;
                           const displayNum = displayNumMap.get(key)!;
-                          // Drag&drop tylko dla statusu 'zaplanowany' (przed wyjazdem)
-                          const isDraggable = isFirst && kurs.status === 'zaplanowany';
+                          // Drag&drop dla zaplanowany / w_trasie / zakonczony
+                          // (kierowca czasem zmienia kolejnosc w terenie — dyspozytor
+                          // koryguje po fakcie i koszty kursu przeliczaja sie automatycznie)
+                          const isDraggable = isFirst && kurs.status !== 'usuniety';
                           const isDragSrc = dragKursId === kurs.id && dragGroupKey === key;
                           const isDragOver = dragKursId === kurs.id && dragOverGroupKey === key && dragGroupKey !== key;
                           return (
