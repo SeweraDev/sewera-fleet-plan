@@ -35,9 +35,9 @@ export default function WycenaPublicznaPage() {
       <header className="bg-white dark:bg-slate-800 border-b shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
           <img
-            src="/sewera-logo.png"
+            src="/sewera-logo.svg"
             alt="Sewera"
-            className="h-10 w-auto"
+            className="h-10 w-auto rounded"
             onError={(e) => {
               // Fallback gdy logo nie wgrane — pokaz tekstowe
               (e.target as HTMLImageElement).style.display = 'none';
