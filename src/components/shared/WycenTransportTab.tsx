@@ -538,7 +538,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                         <td className="text-center p-3 tabular-nums border-r border-gray-400">
                           {w.km} km
                         </td>
-                        <td className="text-center p-3 tabular-nums">
+                        <td className="text-center p-3 tabular-nums font-bold">
                           {w.kosztyWew.length === 0 ? '—' : (
                             <div className="space-y-1.5">
                               {w.kosztyWew.map((k, i) => (
@@ -555,7 +555,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                             </div>
                           )}
                         </td>
-                        <td className="text-center p-3 tabular-nums font-bold border-r border-gray-400">
+                        <td className="text-center p-3 tabular-nums border-r border-gray-400">
                           {w.kosztyWew.length === 0 ? '—' : (
                             <div className="space-y-1.5">
                               {w.kosztyWew.map((k, i) => (
@@ -568,7 +568,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                         </td>
                         {pokazZew && (
                           <>
-                            <td className="text-center p-3 tabular-nums">
+                            <td className="text-center p-3 tabular-nums font-bold">
                               {w.kosztyZew.length === 0 ? '—' : (
                                 <div className="space-y-1.5">
                                   {w.kosztyZew.map((k, i) => (
@@ -587,7 +587,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                                 </div>
                               )}
                             </td>
-                            <td className="text-center p-3 tabular-nums font-bold">
+                            <td className="text-center p-3 tabular-nums">
                               {w.kosztyZew.length === 0 ? '—' : (
                                 <div className="space-y-1.5">
                                   {w.kosztyZew.map((k, i) => (
