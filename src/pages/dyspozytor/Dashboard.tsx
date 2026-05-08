@@ -1075,6 +1075,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
   const [step, setStep] = useState(1);
   const [oddzialId, setOddzialId] = useState<number | null>(null);
   const [typPojazdu, setTypPojazdu] = useState('');
+  const [typKlienta, setTypKlienta] = useState('');
   const [dzien, setDzien] = useState('');
   const [godzina, setGodzina] = useState('');
   const [wzList, setWzList] = useState<WzInput[]>([{
@@ -1096,6 +1097,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
       await createBulkOne({
         oddzial_id: oddzialId,
         typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu,
+        typ_klienta: typKlienta,
         dzien,
         preferowana_godzina: godzina,
         wz_list: wzList,
@@ -1106,7 +1108,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
       toast.success(`✅ Utworzono ${okCount} ${okCount === 1 ? 'zlecenie' : okCount < 5 ? 'zlecenia' : 'zlecen'}`);
       onSuccess();
     }
-  }, [oddzialId, dzien, godzina, typPojazdu, createBulkOne, onSuccess]);
+  }, [oddzialId, dzien, godzina, typPojazdu, typKlienta, createBulkOne, onSuccess]);
 
   const handleGoToCheck = () => {
     // Klasyfikacja transportu jest OPCJONALNA — mozna uzupelnic pozniej
@@ -1134,7 +1136,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
 
   const handleSubmit = (forceVerify: boolean) => {
     if (!oddzialId || !dzien || !godzina) { toast.error('Uzupełnij wszystkie pola'); return; }
-    create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, dzien, preferowana_godzina: godzina, wz_list: wzList }, forceVerify);
+    create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, typ_klienta: typKlienta, dzien, preferowana_godzina: godzina, wz_list: wzList }, forceVerify);
   };
 
   return (
@@ -1143,6 +1145,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
       <CardContent className="space-y-4">
         {step === 1 && (
           <TypPojazduStep oddzialId={oddzialId} setOddzialId={setOddzialId} typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
+            typKlienta={typKlienta} setTypKlienta={setTypKlienta}
             oddzialy={oddzialy} loadingOddzialy={loadingOddzialy} flota={flotaList} loadingFlota={loadingFlota} onNext={() => setStep(2)} />
         )}
         {step === 2 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(1)} onNext={() => setStep(3)} />}

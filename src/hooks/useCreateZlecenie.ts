@@ -31,6 +31,8 @@ export interface WzInput {
 export interface ZlecenieInput {
   oddzial_id: number;
   typ_pojazdu: string;
+  /** Typ klienta — R/D/P/W/I/B (patrz lib/typy-klientow.ts). Wymagany. */
+  typ_klienta: string;
   dzien: string;
   preferowana_godzina: string;
   wz_list: WzInput[];
@@ -54,6 +56,7 @@ export function useCreateZlecenie(onSuccess?: () => void) {
         numer,
         oddzial_id: input.oddzial_id,
         typ_pojazdu: input.typ_pojazdu,
+        typ_klienta: input.typ_klienta || null,
         dzien: input.dzien,
         preferowana_godzina: input.preferowana_godzina,
         nadawca_id: user.id,

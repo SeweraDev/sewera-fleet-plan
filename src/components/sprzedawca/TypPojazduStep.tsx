@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { TYPY_KLIENTOW } from '@/lib/typy-klientow';
 
 const ERP_TYPES = [
   { kod: 'B', opis: 'Bez windy do 1,2t', typ: 'Dostawczy 1,2t' },
@@ -22,6 +23,9 @@ interface TypPojazduStepProps {
   setOddzialId: (v: number | null) => void;
   typPojazdu: string;
   setTypPojazdu: (v: string) => void;
+  /** Typ klienta — R/D/P/W/I/B. Wymagany przed przejsciem dalej. */
+  typKlienta: string;
+  setTypKlienta: (v: string) => void;
   oddzialy: { id: number; nazwa: string }[];
   loadingOddzialy: boolean;
   flota: { typ: string }[];
@@ -32,6 +36,7 @@ interface TypPojazduStepProps {
 export function TypPojazduStep({
   oddzialId, setOddzialId,
   typPojazdu, setTypPojazdu,
+  typKlienta, setTypKlienta,
   oddzialy, loadingOddzialy,
   flota, loadingFlota,
   onNext,
@@ -62,6 +67,21 @@ export function TypPojazduStep({
           <SelectTrigger><SelectValue placeholder={loadingOddzialy ? 'Ładowanie...' : 'Wybierz oddział'} /></SelectTrigger>
           <SelectContent>
             {oddzialy.map(o => <SelectItem key={o.id} value={o.id.toString()}>{o.nazwa}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <Label>Typ klienta *</Label>
+        <Select onValueChange={setTypKlienta} value={typKlienta}>
+          <SelectTrigger><SelectValue placeholder="Wybierz typ klienta" /></SelectTrigger>
+          <SelectContent>
+            {TYPY_KLIENTOW.map(t => (
+              <SelectItem key={t.kod} value={t.kod}>
+                <span className="font-mono font-bold mr-2">{t.kod}</span>
+                — {t.opis}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -177,7 +197,7 @@ export function TypPojazduStep({
         </Tabs>
       </div>
 
-      <Button onClick={onNext} disabled={!oddzialId || !typPojazdu}>Dalej →</Button>
+      <Button onClick={onNext} disabled={!oddzialId || !typPojazdu || !typKlienta}>Dalej →</Button>
     </div>
   );
 }

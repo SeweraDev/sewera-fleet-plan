@@ -86,6 +86,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [step, setStep] = useState(1);
   const [oddzialId, setOddzialId] = useState<number | null>(null);
   const [typPojazdu, setTypPojazdu] = useState('');
+  const [typKlienta, setTypKlienta] = useState('');
   const [dzien, setDzien] = useState('');
   const [godzina, setGodzina] = useState('');
   const [wzList, setWzList] = useState<WzInput[]>([{
@@ -109,6 +110,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
         await createBulkOne({
           oddzial_id: oddzialId,
           typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu,
+          typ_klienta: typKlienta,
           dzien,
           preferowana_godzina: godzina,
           wz_list: wzList,
@@ -124,7 +126,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
     } else {
       toast.error('Nie udalo sie utworzyc zadnego zlecenia');
     }
-  }, [oddzialId, dzien, godzina, typPojazdu, createBulkOne, onSuccess]);
+  }, [oddzialId, dzien, godzina, typPojazdu, typKlienta, createBulkOne, onSuccess]);
 
   const handleGoToCheck = () => {
     // Klasyfikacja transportu jest OPCJONALNA — dyspozytor moze ja uzupelnic pozniej
@@ -158,6 +160,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
     create({
       oddzial_id: oddzialId,
       typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu,
+      typ_klienta: typKlienta,
       dzien,
       preferowana_godzina: godzina,
       wz_list: wzList,
@@ -174,6 +177,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
           <TypPojazduStep
             oddzialId={oddzialId} setOddzialId={setOddzialId}
             typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
+            typKlienta={typKlienta} setTypKlienta={setTypKlienta}
             oddzialy={oddzialy} loadingOddzialy={loadingOddzialy}
             flota={flota} loadingFlota={loadingFlota}
             onNext={() => setStep(2)}
