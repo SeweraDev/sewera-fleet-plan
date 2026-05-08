@@ -51,6 +51,8 @@ export interface PrzystanekDto {
   /** Override km_prosta wpisany przez dyspozytora (np. gdy Photon myli adres) */
   km_prosta_override: number | null;
   klasyfikacja: string | null; // klasyfikacja rozliczeniowa WZ (A/B/C/D/E/F/H)
+  /** Typ klienta zlecenia (R/D/P/W/I/B) — dziedziczony z zlecenia.typ_klienta */
+  typ_klienta: string | null;
   wartosc_netto: number | null; // wartość netto dokumentu (do rozdziału kosztów)
   /** Współrzędne adresu z geocodingu (do grupowania luźnego po lokalizacji) */
   lat: number | null;
@@ -169,15 +171,19 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
         .order('kolejnosc');
 
       const zlecenieIds = (przData || []).map(p => p.zlecenie_id).filter(Boolean) as string[];
-      const zlecMap = new Map<string, { numer: string; preferowana_godzina: string | null }>();
+      const zlecMap = new Map<string, { numer: string; preferowana_godzina: string | null; typ_klienta: string | null }>();
       const wzListMap = new Map<string, any[]>();
 
       if (zlecenieIds.length > 0) {
         const { data: zlData } = await supabase
           .from('zlecenia')
-          .select('id, numer, preferowana_godzina')
+          .select('id, numer, preferowana_godzina, typ_klienta')
           .in('id', zlecenieIds);
-        (zlData || []).forEach(z => zlecMap.set(z.id, { numer: z.numer, preferowana_godzina: z.preferowana_godzina }));
+        (zlData || []).forEach(z => zlecMap.set(z.id, {
+          numer: z.numer,
+          preferowana_godzina: z.preferowana_godzina,
+          typ_klienta: (z as any).typ_klienta || null,
+        }));
 
         const { data: wzData } = await supabase
           .from('zlecenia_wz')
@@ -205,6 +211,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
             km_prosta: null,
             km_prosta_override: null,
             klasyfikacja: null,
+            typ_klienta: zl?.typ_klienta || null,
             wartosc_netto: null,
             lat: null,
             lng: null,
@@ -223,6 +230,7 @@ export function useKursyDnia(oddzialId: number | null, dzien: string, dzienDo?: 
               km_prosta: null,
               km_prosta_override: wAny.km_prosta_override != null ? Number(wAny.km_prosta_override) : null,
               klasyfikacja: wAny.klasyfikacja || null,
+              typ_klienta: zl?.typ_klienta || null,
               wartosc_netto: wAny.wartosc_netto != null ? Number(wAny.wartosc_netto) : null,
               lat: null,
               lng: null,

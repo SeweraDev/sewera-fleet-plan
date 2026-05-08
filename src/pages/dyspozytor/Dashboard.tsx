@@ -8,6 +8,7 @@ import { groupKey as groupKeyByAdresLatLng } from '@/lib/groupByAdres';
 import { EdytujKmModal } from '@/components/dyspozytor/EdytujKmModal';
 import { EdytujProstaModal } from '@/components/dyspozytor/EdytujProstaModal';
 import { KLASYFIKACJE } from '@/lib/klasyfikacje';
+import { TYPY_KLIENTOW, badgeClassesTypKlienta } from '@/lib/typy-klientow';
 import { ODDZIAL_COORDS, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
 import { Topbar } from '@/components/shared/Topbar';
 import { PageSidebar } from '@/components/shared/PageSidebar';
@@ -237,6 +238,20 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
     toast.success('Zmieniono klasyfikację');
     refetch();
   };
+
+  /** Zmien typ klienta dla zlecenia (per zlecenie_id — zmiana propaguje na wszystkie WZ tego zlecenia) */
+  const handleChangeTypKlienta = async (zlecenieId: string, kod: string) => {
+    if (!zlecenieId) return;
+    const { error } = await (supabase.from('zlecenia') as any)
+      .update({ typ_klienta: kod })
+      .eq('id', zlecenieId);
+    if (error) {
+      toast.error('Blad zmiany typu klienta: ' + error.message);
+      return;
+    }
+    toast.success(`Klient: ${kod}`);
+    refetch();
+  };
   const [przepnijPrz, setPrzepnijPrz] = useState<PrzystanekDto | null>(null);
   const [przepnijKurs, setPrzepnijKurs] = useState<KursDto | null>(null);
 
@@ -458,6 +473,7 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                         <TableHead>Odbiorca</TableHead>
                         <TableHead>Nr WZ</TableHead>
                         <TableHead>Adres</TableHead>
+                        <TableHead>Klient</TableHead>
                         <TableHead>Klasyf.</TableHead>
                         <TableHead className="text-right">Kg</TableHead>
                         <TableHead className="text-right">m³</TableHead>
@@ -571,6 +587,29 @@ function KursyTab({ oddzialId, oddzialNazwa, dzien, dzienDo, zlBezKursuCount, do
                               <div className="text-[10px] text-muted-foreground leading-tight">
                                 prosta: {p.km_prosta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km
                               </div>
+                            )}
+                          </TableCell>
+                          {/* Typ klienta — per zlecenie (multiple WZ z tego samego zlecenia maja ten sam kod).
+                              Pokazujemy per-row dropdown (zawsze edytowalne), update propaguje na cale zlecenie. */}
+                          <TableCell onClick={e => e.stopPropagation()}>
+                            {p.zlecenie_id ? (
+                              <Select
+                                value={p.typ_klienta || ''}
+                                onValueChange={(v) => handleChangeTypKlienta(p.zlecenie_id!, v)}
+                              >
+                                <SelectTrigger className={`h-7 w-14 text-[10px] px-2 font-mono ${p.typ_klienta ? badgeClassesTypKlienta(p.typ_klienta) : ''}`}>
+                                  <SelectValue placeholder="—" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {TYPY_KLIENTOW.map(t => (
+                                    <SelectItem key={t.kod} value={t.kod} className="text-xs">
+                                      <span className="font-mono">{t.kod}</span> — {t.opis}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </TableCell>
                           {isZakonczony ? (
