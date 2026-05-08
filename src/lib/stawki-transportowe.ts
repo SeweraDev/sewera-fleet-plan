@@ -237,6 +237,42 @@ function fallbackDirection(from: string, to: string): 'down' | 'up' | null {
  *  - fallback: czy to fallback (nie dokładny dopasowanie)
  *  - direction: 'down' (mniejszy niż żądany) / 'up' (większy) / null (dokładny albo ta sama klasa)
  */
+/**
+ * Znajdź WSZYSTKIE dostepne typy cennikowe dla oddzialu z tej samej rodziny pojazdow.
+ * Zwraca liste typow z FALLBACK_CHAIN ktore oddzial faktycznie ma w `flotaTypy`,
+ * uzywane do wyceny multi-typ (np. KAT z HDS 9,0t i HDS 12,0t pokaze dwie ceny).
+ *
+ * @returns lista typow uporzadkowana: oryginalny pierwszy (jesli dostepny), potem fallbacki
+ *          w kolejnosci z FALLBACK_CHAIN.
+ */
+export function findAllAvailableTypes(
+  typCennikowy: string,
+  flotaTypy: Set<string>,
+): { typ: string; isOriginal: boolean; direction: 'down' | 'up' | null }[] {
+  const result: { typ: string; isOriginal: boolean; direction: 'down' | 'up' | null }[] = [];
+
+  // Pierwszy: oryginalny typ jesli jest dostepny
+  const systemowe = CENNIKOWY_TO_SYSTEMOWE[typCennikowy] || [];
+  if (systemowe.some((t) => flotaTypy.has(t))) {
+    result.push({ typ: typCennikowy, isOriginal: true, direction: null });
+  }
+
+  // Potem: typy z fallback chain (wszystkie ktore oddzial ma)
+  const chain = FALLBACK_CHAIN[typCennikowy] || [];
+  for (const fallbackTyp of chain) {
+    const fbSystemowe = CENNIKOWY_TO_SYSTEMOWE[fallbackTyp] || [];
+    if (fbSystemowe.some((t) => flotaTypy.has(t))) {
+      result.push({
+        typ: fallbackTyp,
+        isOriginal: false,
+        direction: fallbackDirection(typCennikowy, fallbackTyp),
+      });
+    }
+  }
+
+  return result;
+}
+
 export function findBestAvailableType(
   typCennikowy: string,
   flotaTypy: Set<string>

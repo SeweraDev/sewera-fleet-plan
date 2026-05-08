@@ -23,6 +23,7 @@ import {
   obliczKosztyZewWszystkie,
   maStawkiZew,
   findBestAvailableType,
+  findAllAvailableTypes,
   mapTypNaCennikowy,
 } from '@/lib/stawki-transportowe';
 
@@ -38,18 +39,27 @@ interface KosztZewOferta {
   ladownoscLabel?: string;
 }
 
+/** Pojedyncza oferta wew Sewery — typ + cena. Lista bo oddzial moze miec wiele
+ *  typow z tej samej rodziny (np. KAT ma HDS 9,0t i HDS 12,0t — pokazujemy oba). */
+interface KosztWewOferta {
+  typCennikowy: string;
+  netto: number;
+  brutto: number;
+  /** True dla typu wybranego przez usera; false dla fallback z rodziny */
+  isOriginal: boolean;
+  direction: 'down' | 'up' | null;
+}
+
 interface WynikOddzialu {
   kod: string;
   nazwa: string;
   km: number;
-  kosztWew: { netto: number; brutto: number } | null;
+  /** Lista ofert wew Sewery — kazda z osobna cena per typ. Pusta gdy oddzial nie ma zadnego pasujacego. */
+  kosztyWew: KosztWewOferta[];
   /** Lista ofert zewnetrznych - posortowane od najtanszej. Pusta gdy brak. */
   kosztyZew: KosztZewOferta[];
   jestMojOddzial: boolean;
-  uzytTyp: string | null;
-  isFallback: boolean;
-  fallbackDirection: 'down' | 'up' | null;
-  wewTypy: string[]; // konkretne typy aut wew pasujące do żądanego typu
+  wewTypy: string[]; // konkretne typy aut wew pasujące do żądanego typu (z bazy flota)
   zewTypy: string[];
 }
 
@@ -310,24 +320,29 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const km = pickKmFromAlternatives(alternatives, typPojazdu);
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
-        const bestType = findBestAvailableType(typPojazdu, wlasneTypy);
-
-        let kosztWew: { netto: number; brutto: number } | null = null;
-        let uzytTyp: string | null = null;
-        let isFallback = false;
-        let fallbackDirection: 'down' | 'up' | null = null;
-
-        if (bestType) {
-          kosztWew = obliczKosztWew(km, bestType.typ);
-          uzytTyp = bestType.typ;
-          isFallback = bestType.fallback;
-          fallbackDirection = bestType.direction;
+        // Wszystkie dostepne typy z rodziny (oryginalny + fallback chain) — kazdy z osobna cena.
+        // KAT z HDS 9,0t i HDS 12,0t pokaze obie ceny przy wyborze HDS 9,0t.
+        const dostepneTypy = findAllAvailableTypes(typPojazdu, wlasneTypy);
+        const kosztyWew: KosztWewOferta[] = [];
+        for (const dt of dostepneTypy) {
+          const koszt = obliczKosztWew(km, dt.typ);
+          if (koszt) {
+            kosztyWew.push({
+              typCennikowy: dt.typ,
+              netto: koszt.netto,
+              brutto: koszt.brutto,
+              isOriginal: dt.isOriginal,
+              direction: dt.direction,
+            });
+          }
         }
 
-        const matchingWewTypy = bestType ? [...wlasneTypy].filter(t => {
+        // Lista typow systemowych z bazy ktore mapuja sie na ktorykolwiek z dostepnych typow cennikowych
+        const dostepneTypyCennikowe = new Set(dostepneTypy.map(d => d.typ));
+        const matchingWewTypy = [...wlasneTypy].filter(t => {
           const mapped = mapTypNaCennikowy(t);
-          return mapped === typPojazdu || mapped === bestType.typ;
-        }) : [];
+          return mapped != null && dostepneTypyCennikowe.has(mapped);
+        });
 
         const zewTypy = flotaZew.get(kod) || new Set<string>();
         const bestZewType = findBestAvailableType(typPojazdu, zewTypy);
@@ -344,12 +359,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           kod,
           nazwa: KOD_TO_NAZWA[kod] || kod,
           km,
-          kosztWew,
+          kosztyWew,
           kosztyZew,
           jestMojOddzial: kod === mojKod,
-          uzytTyp,
-          isFallback,
-          fallbackDirection,
           wewTypy: matchingWewTypy,
           zewTypy: matchingZewTypy,
         });
@@ -359,7 +371,7 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       // mają wysokie koszty, więc liczy się odległość. Ranking po km, nie po cenie.)
       const mojOddzial = results.find(r => r.jestMojOddzial);
       const inneNajblizsze = results
-        .filter(r => !r.jestMojOddzial && (r.kosztWew || r.kosztyZew.length > 0))
+        .filter(r => !r.jestMojOddzial && (r.kosztyWew.length > 0 || r.kosztyZew.length > 0))
         .sort((a, b) => a.km - b.km)
         .slice(0, 2); // top 2 najbliższych (plus mój = max 3 wiersze)
 
@@ -507,11 +519,6 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.jestMojOddzial && (
                             <span className="text-xs text-muted-foreground ml-1">(Twój)</span>
                           )}
-                          {w.isFallback && w.uzytTyp && (
-                            <div className="text-xs text-orange-600 dark:text-orange-400">
-                              {w.fallbackDirection === 'up' ? '↑' : w.fallbackDirection === 'down' ? '↓' : '↳'} auto: {w.uzytTyp}
-                            </div>
-                          )}
                           {(w.wewTypy || []).length > 0 && (
                             <div className="text-xs text-muted-foreground">
                               🚛 Sewera: {(w.wewTypy || []).join(', ')}
@@ -527,10 +534,32 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.km} km
                         </td>
                         <td className="text-center p-3 tabular-nums">
-                          {w.kosztWew ? formatPLN(w.kosztWew.netto) : '—'}
+                          {w.kosztyWew.length === 0 ? '—' : (
+                            <div className="space-y-1.5">
+                              {w.kosztyWew.map((k, i) => (
+                                <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
+                                  <span>{formatPLN(k.netto)}</span>
+                                  <span className="ml-1.5 text-[10px] font-medium text-muted-foreground">({k.typCennikowy})</span>
+                                  {!k.isOriginal && k.direction && (
+                                    <span className="ml-1 text-[10px] text-orange-600 dark:text-orange-400">
+                                      {k.direction === 'up' ? '↑' : '↓'}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="text-center p-3 tabular-nums font-bold border-r border-gray-400">
-                          {w.kosztWew ? formatPLN(w.kosztWew.brutto) : '—'}
+                          {w.kosztyWew.length === 0 ? '—' : (
+                            <div className="space-y-1.5">
+                              {w.kosztyWew.map((k, i) => (
+                                <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
+                                  {formatPLN(k.brutto)}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         {pokazZew && (
                           <>
