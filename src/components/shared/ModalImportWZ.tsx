@@ -1278,7 +1278,10 @@ export function parseWZText(rawText: string): WZImportData {
   // adresy Sewery (Tadeusza Kosciuszki, Katowice z kodem 40-608).
   if (!adres) {
     const addrParts: string[] = [];
-    const SEWERA_ADDR_FILTER = /Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|Ko[śs]ciuszki|40-?608\s+Katowice/i;
+    // UWAGA: filtrujemy konkretnie adres Sewery (Kościuszki 326 / kod 40-608),
+    // a nie samo "Kościuszki" — bo klienci tez bywaja na ul. Kosciuszki pod innymi
+    // numerami (np. STANEX-BUD: ul. KOSCIUSZKI 24, 40-048 Katowice).
+    const SEWERA_ADDR_FILTER = /Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|Ko[śs]ciuszki\s*326|40-?608\s+Katowice/i;
     // BARDZO WAZNE: regex (?:ul|al|os|pl)\. lapie tez "Os. kontaktowa", "Os. upowaznione"
     // (skroty od "osoba" a nie "osiedle"). Wykluczamy te linie z patternow adresu.
     const NOT_ADDR = /^Os\.\s*(kontaktowa|upoważnione|odpowiedzialna|odpowiedzialny|do\s+odbioru|os\.|osob)/i;
@@ -1329,7 +1332,7 @@ export function parseWZText(rawText: string): WZImportData {
         // Stop na granicy sekcji
         if (/^(Adres\s+dostawy|Wydano\s+na|Magazyn|Forma\s+płatn|Termin|RAZEM|Lp\.|Nr\s+zam|Sprzedawca|Nabywca|Odbiorca|NIP:|NR\s*BDO:)/i.test(l)) break;
         // Filtruj adres Sewery
-        if (/Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|Ko[śs]ciuszki|^ul\.\s+KO[ŚS]CIUSZKI|40-?608\s+Katowice/i.test(l)) continue;
+        if (/Tadeusza\s+Ko[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+|Ko[śs]ciuszki\s*326|40-?608\s+Katowice/i.test(l)) continue;
         // Akceptuj: ulica (ul./uł./al./pl.), kod pocztowy, lub linia tekstowa
         const isStreet = /^(?:ul|uł|u1|al|pl)\.\s/i.test(l);
         const isPostcode = /^\d{2}-?\d{3}\s+[A-ZĄĆĘŁŃÓŚŹŻ]/i.test(l);
@@ -1362,7 +1365,7 @@ export function parseWZText(rawText: string): WZImportData {
       if (!(isCityOnly && isStreet && isPostcode)) continue;
       const blok = `${l1} ${l2} ${l3}`;
       // Filtr: pomijamy adres Sewery (siedziby/oddzialow)
-      if (/Ko[śs]ciuszki|40[-]?608\s+Katowice|41[-]?214\s+Sosnowiec|44[-]?100\s+Gliwice|41[-]?303\s+D[ąa]browa|42[-]?600\s+Tarnowskie|32[-]?500\s+Chrzan[oó]w|32[-]?600\s+O[śs]wi[ęe]cim|Rudna\s+14|Dojazdowa\s+11|Kasprzaka\s+33|Nakielska\s+24|[ŚS]l[ąa]ska\s+64a|Wyzwolenia\s+19/i.test(blok)) continue;
+      if (/Ko[śs]ciuszki\s*326|40[-]?608\s+Katowice|41[-]?214\s+Sosnowiec|44[-]?100\s+Gliwice|41[-]?303\s+D[ąa]browa|42[-]?600\s+Tarnowskie|32[-]?500\s+Chrzan[oó]w|32[-]?600\s+O[śs]wi[ęe]cim|Rudna\s+14|Dojazdowa\s+11|Kasprzaka\s+33|Nakielska\s+24|[ŚS]l[ąa]ska\s+64a|Wyzwolenia\s+19/i.test(blok)) continue;
       adres = `${l1}, ${l2}, ${l3}`;
       console.log(`[parseWZText] adres z heurystyki 3-linii (wariant 5):`, adres);
       break;
