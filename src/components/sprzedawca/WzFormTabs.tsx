@@ -569,6 +569,31 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
               if (pdfBlobUrl) { URL.revokeObjectURL(pdfBlobUrl); setPdfBlobUrl(null); }
             }}>Nowy plik</Button>
           </div>
+
+          {/* DEBUG: tymczasowy panel z raw tekstem z pdfjs (do diagnozy parsera).
+              Po ustabilizowaniu — usunac. */}
+          {rawTextRef.current && (
+            <details className="border border-yellow-400 bg-yellow-50 rounded p-2 text-xs">
+              <summary className="cursor-pointer font-medium text-yellow-900">
+                🐛 DEBUG: raw tekst z PDF (kliknij aby rozwinąć — skopiuj i wklej do Claude Code)
+              </summary>
+              <textarea
+                readOnly
+                value={rawTextRef.current}
+                className="w-full mt-2 h-64 font-mono text-[10px] p-2 border bg-white"
+                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+              />
+              <button
+                type="button"
+                className="mt-1 px-2 py-1 bg-yellow-200 rounded text-yellow-900 hover:bg-yellow-300"
+                onClick={() => {
+                  if (rawTextRef.current) navigator.clipboard.writeText(rawTextRef.current);
+                }}
+              >
+                📋 Kopiuj do schowka
+              </button>
+            </details>
+          )}
         </div>
       )}
     </div>

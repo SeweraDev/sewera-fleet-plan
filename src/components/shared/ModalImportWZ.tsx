@@ -147,9 +147,6 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
   const [result, setResult] = useState<ParsedPdfResult | null>(null);
   const [formData, setFormData] = useState<WZImportData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // DEBUG (tymczasowo): pokaz raw tekst z pdfjs zeby user mogl skopiowac do
-  // Claude Code jak parser zle wyciagnie dane. Po ustabilizowaniu — usunac.
-  const [debugRawLines, setDebugRawLines] = useState<string | null>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -249,7 +246,6 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
 
         // Same pipeline as PasteTab: decodePUA → cleanText → parseWZText
         console.log("[PdfTab] extracted text:\n", rawText.substring(0, 500));
-        setDebugRawLines(rawText);
         const mapped = parseWZText(rawText);
         console.log("[PdfTab] parsed client-side with parseWZText (identical to PasteTab)");
 
@@ -388,31 +384,6 @@ function PdfTab({ onParsed, onSwitchManual }: { onParsed: (d: WZImportData) => v
           <Button onClick={() => onParsed(formData)} className="w-full">
             ✅ Użyj tych danych
           </Button>
-
-          {/* DEBUG: tymczasowy panel z raw tekstem z pdfjs (dla diagnozy parsera).
-              Po ustabilizowaniu — usunac. */}
-          {debugRawLines && (
-            <details className="border border-yellow-400 bg-yellow-50 rounded p-2 text-xs">
-              <summary className="cursor-pointer font-medium text-yellow-900">
-                🐛 DEBUG: raw tekst z PDF (kliknij żeby rozwinąć — skopiuj i wklej do Claude Code)
-              </summary>
-              <textarea
-                readOnly
-                value={debugRawLines}
-                className="w-full mt-2 h-64 font-mono text-[10px] p-2 border bg-white"
-                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-              />
-              <button
-                type="button"
-                className="mt-1 px-2 py-1 bg-yellow-200 rounded text-yellow-900 hover:bg-yellow-300"
-                onClick={() => {
-                  navigator.clipboard.writeText(debugRawLines);
-                }}
-              >
-                📋 Kopiuj do schowka
-              </button>
-            </details>
-          )}
         </div>
       )}
     </div>
