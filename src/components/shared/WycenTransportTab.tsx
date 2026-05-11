@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   ODDZIAL_COORDS,
   NAZWA_TO_KOD,
-  geocodeAddress,
+  geocodeAddressDetailed,
   getRouteAlternatives,
   pickKmFromAlternatives,
   searchAddress,
@@ -93,11 +93,14 @@ function loadLeaflet(): Promise<any> {
 export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [typPojazdu, setTypPojazdu] = useState('');
   const [adres, setAdres] = useState('');
-  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number; hasHouseNumber?: boolean; displayName?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [wyniki, setWyniki] = useState<WynikOddzialu[] | null>(null);
   const [error, setError] = useState('');
   const [pokazZew, setPokazZew] = useState(false);
+  // Info o precyzji geocodingu — gdy pin spadl na centroid ulicy (bez numeru),
+  // pokazujemy ostrzezenie nad tabela, zeby user wiedzial ze trzeba doprecyzowac.
+  const [geocodeWarning, setGeocodeWarning] = useState<string | null>(null);
 
   // Zamrożone parametry z czasu ostatniego udanego wyliczenia (żeby header tabeli
   // nie "kłamał" gdy user zmieni dropdown/adres/oddział bez ponownego kliknięcia Wylicz)
@@ -139,7 +142,12 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
   const handleSelectSuggestion = (s: SearchResult) => {
     setAdres(s.name);
-    setSelectedCoords({ lat: s.lat, lng: s.lng });
+    setSelectedCoords({
+      lat: s.lat,
+      lng: s.lng,
+      hasHouseNumber: s.hasHouseNumber,
+      displayName: s.name,
+    });
     setSuggestions([]);
     setShowSuggestions(false);
   };
@@ -236,16 +244,40 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     setError('');
     setWyniki(null);
     setDostawaCoords(null);
+    setGeocodeWarning(null);
 
     try {
       // 1. Geocoduj adres (użyj wybranych coords jeśli mamy)
-      const coords = selectedCoords || await geocodeAddress(adres);
+      let coords: { lat: number; lng: number } | null;
+      let hasHouseNumber: boolean;
+      let displayName: string;
+      if (selectedCoords) {
+        coords = { lat: selectedCoords.lat, lng: selectedCoords.lng };
+        hasHouseNumber = !!selectedCoords.hasHouseNumber;
+        displayName = selectedCoords.displayName || adres;
+      } else {
+        const detailed = await geocodeAddressDetailed(adres);
+        if (!detailed) {
+          setError('Nie udało się znaleźć adresu. Spróbuj podać bardziej szczegółowy adres (ulica, kod pocztowy, miasto).');
+          setLoading(false);
+          return;
+        }
+        coords = { lat: detailed.lat, lng: detailed.lng };
+        hasHouseNumber = detailed.hasHouseNumber;
+        displayName = detailed.displayName;
+      }
       if (!coords) {
-        setError('Nie udało się znaleźć adresu. Spróbuj podać bardziej szczegółowy adres (ulica, kod pocztowy, miasto).');
+        setError('Nie udało się znaleźć adresu.');
         setLoading(false);
         return;
       }
       setDostawaCoords(coords);
+      // Ostrzeżenie gdy geocoder nie trafił w konkretny numer domu — UI pokaze
+      // baner z prosba o klikniecie sugestii z dropdownu (bo wtedy mapa moze
+      // pokazywac centroid ulicy lub centroid miasta — niedokladne km).
+      if (!hasHouseNumber) {
+        setGeocodeWarning(`Adres został zlokalizowany niedokładnie (bez numeru domu): "${displayName}". Sprawdź czerwony pin na mapie. Jeśli to nie ten punkt, wpisz adres ponownie i wybierz właściwą sugestię z listy.`);
+      }
 
       // 2. Pobierz flotę WSZYSTKICH oddziałów (aktywne pojazdy własne + zewnętrzne)
       // UWAGA: tabela `flota` zawiera kolumne jest_zewnetrzny - zewnetrzne pojazdy
@@ -451,10 +483,20 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                 {suggestions.map((s, i) => (
                   <button
                     key={i}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors border-b last:border-0"
+                    className="w-full text-left px-3 py-2 hover:bg-muted transition-colors border-b last:border-0"
                     onClick={() => handleSelectSuggestion(s)}
                   >
-                    📍 {s.name}
+                    <div className="flex items-start gap-2">
+                      <span className="text-base leading-tight" title={s.hasHouseNumber ? 'Konkretny adres z numerem' : 'Tylko ulica (bez numeru) — mniej precyzyjne'}>
+                        {s.hasHouseNumber === false ? '📌' : '📍'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm">{s.name}</div>
+                        {s.subtitle && (
+                          <div className="text-[11px] text-muted-foreground">{s.subtitle}</div>
+                        )}
+                      </div>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -486,6 +528,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             <h3 className="font-semibold text-sm">
               Wyniki dla: <span className="text-primary">{lastCalc.typ}</span> → {lastCalc.adres}
             </h3>
+            {geocodeWarning && (
+              <div className="text-sm bg-orange-100 dark:bg-orange-900/30 border border-orange-400 text-orange-900 dark:text-orange-100 p-3 rounded-md">
+                📌 {geocodeWarning}
+              </div>
+            )}
             {(typPojazdu !== lastCalc.typ || adres !== lastCalc.adres || oddzialNazwa !== lastCalc.oddzialNazwa) && (
               <div className="text-sm bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-400 text-yellow-900 dark:text-yellow-100 p-3 rounded-md">
                 ⚠️ Zmieniłeś parametry — kliknij <strong>'Wylicz koszt'</strong>, aby zaktualizować wyniki.

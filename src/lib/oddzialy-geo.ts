@@ -85,10 +85,98 @@ function delay(ms: number): Promise<void> {
 }
 
 // Cache geocodingu — tylko udane wyniki (null NIE jest cache'owany → retry)
-const geocodeCache = new Map<string, { lat: number; lng: number }>();
+const geocodeCache = new Map<string, GeocodeDetailedResult>();
 
-// Geocoding adresu → Photon (Komoot) — darmowy, bez klucza API, bez rate limitu
+/** Pełny wynik geocodingu z metadanymi — używane przez UI do oceny precyzji. */
+export interface GeocodeDetailedResult {
+  lat: number;
+  lng: number;
+  /** True gdy Photon trafil w konkretny numer domu zgodny z query (lub jakikolwiek
+   *  numer gdy query bez numeru). False gdy spadl na centroid ulicy/miasta — wtedy
+   *  UI moze ostrzec usera ze trzeba wybrac sugestie z dropdownu. */
+  hasHouseNumber: boolean;
+  /** Sformatowana nazwa zwrocona przez Photon (ul. + nr + miasto). */
+  displayName: string;
+  postcode?: string;
+  district?: string;
+  city?: string;
+}
+
+// Wyciagnij numer domu z query (np. "Orla Bialego 29, 41-300" -> "29")
+// Numer domu = liczba 1-4 cyfr, opcjonalnie + jedna litera, ZA nazwa ulicy.
+// NIE mylic z kodem pocztowym (zawsze 5 cyfr z myslnikiem).
+function extractHouseNumber(query: string): string | null {
+  // Usun kody pocztowe zeby nie wpadly w match numeru
+  const cleaned = query.replace(/\d{2}-?\d{3}/g, '');
+  const m = cleaned.match(/\b(\d{1,4}[a-zA-Z]?)\b(?!\s*-\s*\d)/g);
+  if (!m) return null;
+  // Wez ostatni numer (numer domu zwykle przed kodem pocztowym lub miastem)
+  return m[m.length - 1].toLowerCase();
+}
+
+function extractPostcode(query: string): string | null {
+  const m = query.match(/\b(\d{2}-?\d{3})\b/);
+  if (!m) return null;
+  const raw = m[1];
+  return raw.includes('-') ? raw : `${raw.slice(0, 2)}-${raw.slice(2)}`;
+}
+
+// Format display name from Photon properties
+function formatDisplayName(props: any): string {
+  const parts: string[] = [];
+  if (props.street) {
+    let s = props.street;
+    if (props.housenumber) s += ' ' + props.housenumber;
+    parts.push(s);
+  } else if (props.name) {
+    parts.push(props.name);
+  }
+  if (props.postcode) parts.push(props.postcode);
+  if (props.city) parts.push(props.city);
+  else if (props.district) parts.push(props.district);
+  else if (props.county) parts.push(props.county);
+  return parts.filter(Boolean).join(', ');
+}
+
+// Wybierz najlepszy wynik Photon — preferencja:
+//   1. housenumber dokladnie pasujacy do query
+//   2. postcode dokladnie pasujacy do query
+//   3. jakikolwiek housenumber
+//   4. pierwszy z listy
+function pickBestPhotonFeature(features: any[], wantedNumber: string | null, wantedPostcode: string | null): any | null {
+  if (!features || features.length === 0) return null;
+  // Bounding box Slask
+  const inRegion = features.filter(f => {
+    const [lng, lat] = f.geometry?.coordinates || [0, 0];
+    return lat >= 49.0 && lat <= 52.0 && lng >= 17.0 && lng <= 21.0;
+  });
+  if (inRegion.length === 0) return null;
+
+  // 1. Trafienie numeru
+  if (wantedNumber) {
+    const exact = inRegion.find(f => (f.properties?.housenumber || '').toLowerCase() === wantedNumber);
+    if (exact) return exact;
+  }
+  // 2. Trafienie kodu pocztowego
+  if (wantedPostcode) {
+    const byPostcode = inRegion.find(f => f.properties?.postcode === wantedPostcode);
+    if (byPostcode) return byPostcode;
+  }
+  // 3. Jakikolwiek numer (lepsze niz centroid ulicy)
+  const withNumber = inRegion.find(f => !!f.properties?.housenumber);
+  if (withNumber) return withNumber;
+  // 4. Pierwszy w regionie
+  return inRegion[0];
+}
+
+// Geocoding adresu → Photon (Komoot) — darmowy, bez klucza API, bez rate limitu.
+// Zwraca podstawowe {lat, lng} dla kompatybilnosci. Pelne metadane uzyj geocodeAddressDetailed.
 export async function geocodeAddress(adres: string): Promise<{ lat: number; lng: number } | null> {
+  const result = await geocodeAddressDetailed(adres);
+  return result ? { lat: result.lat, lng: result.lng } : null;
+}
+
+export async function geocodeAddressDetailed(adres: string): Promise<GeocodeDetailedResult | null> {
   if (!adres || adres.length < 5) return null;
 
   const cleaned = cleanAddressForGeocoding(adres);
@@ -97,29 +185,39 @@ export async function geocodeAddress(adres: string): Promise<{ lat: number; lng:
 
   // Buduj query — usuń "ul." prefix (Photon lepiej rozumie bez niego)
   const queryBase = cleaned.replace(/^ul\.\s*/i, '').replace(/,\s*Polska$/i, '');
+  const wantedNumber = extractHouseNumber(queryBase);
+  const wantedPostcode = extractPostcode(queryBase);
 
   try {
     const q = encodeURIComponent(queryBase + ' Poland');
-    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=1`);
+    // Limit=5 — szukamy najlepszego wsrod 5 kandydatow (przy limit=1 Photon czesto
+    // zwracal centroid ulicy zamiast konkretnego numeru). Patrz pickBestPhotonFeature.
+    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=5`);
     if (!res.ok) {
       console.warn(`[geocode] Photon HTTP ${res.status}`);
       return null;
     }
     const data = await res.json();
-    if (data.features && data.features.length > 0) {
-      const [lng, lat] = data.features[0].geometry.coordinates;
-      // Bounding box: Sewera operuje na Śląsku i okolicach (~200km od Katowic)
-      // Odrzuć wyniki daleko poza region (błędny geocoding)
-      if (lat < 49.0 || lat > 52.0 || lng < 17.0 || lng > 21.0) {
-        console.warn(`[geocode] poza regionem: "${queryBase}" → ${lat}, ${lng} — odrzucam`);
-        return null;
-      }
-      const result = { lat, lng };
-      console.log(`[geocode] OK: "${queryBase}" → ${lat}, ${lng}`);
-      geocodeCache.set(cacheKey, result);
-      return result;
+    const best = pickBestPhotonFeature(data.features, wantedNumber, wantedPostcode);
+    if (!best) {
+      console.log(`[geocode] empty: "${queryBase}"`);
+      return null;
     }
-    console.log(`[geocode] empty: "${queryBase}"`);
+    const [lng, lat] = best.geometry.coordinates;
+    const props = best.properties || {};
+    const hasHouseNumber = !!props.housenumber && (!wantedNumber || (props.housenumber || '').toLowerCase() === wantedNumber);
+    const result: GeocodeDetailedResult = {
+      lat,
+      lng,
+      hasHouseNumber,
+      displayName: formatDisplayName(props),
+      postcode: props.postcode,
+      district: props.district,
+      city: props.city,
+    };
+    console.log(`[geocode] OK: "${queryBase}" → ${result.displayName} (${lat}, ${lng}) precise=${hasHouseNumber}`);
+    geocodeCache.set(cacheKey, result);
+    return result;
   } catch (e) {
     console.warn(`[geocode] error:`, e);
   }
@@ -176,6 +274,14 @@ export interface SearchResult {
   name: string;
   lat: number;
   lng: number;
+  /** True gdy sugestia wskazuje konkretny numer domu — pewniejszy punkt na mapie.
+   *  Sugestie bez numeru sa centroidem ulicy/miasta — wymaga uwagi usera. */
+  hasHouseNumber?: boolean;
+  postcode?: string;
+  district?: string;
+  /** Krotki tekst pomocniczy (np. "41-300 Dabrowa Gornicza, Gornicze")
+   *  do wyswietlenia pod glowna nazwa w dropdownie. */
+  subtitle?: string;
 }
 
 // Helper: kod → nazwa (wewnętrzny)
@@ -191,6 +297,8 @@ const SEWERA_SUGGESTIONS: SearchResult[] = Object.entries(ODDZIAL_COORDS)
     name: `Sewera ${KOD_TO_NAZWA_INTERNAL[kod] || kod}, ${dane.adres}`,
     lat: dane.lat,
     lng: dane.lng,
+    hasHouseNumber: true, // adresy oddzialow sa pelne (ul. + numer)
+    subtitle: 'Oddział Sewera',
   }));
 
 export async function searchAddress(query: string): Promise<SearchResult[]> {
@@ -218,7 +326,7 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
     const data = await res.json();
     if (!data.features) return seweraResults;
 
-    const results: SearchResult[] = [...seweraResults];
+    const photonResults: SearchResult[] = [];
     for (const f of data.features) {
       const [lng, lat] = f.geometry.coordinates;
       // Bounding box Śląsk
@@ -237,11 +345,32 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
 
       const name = parts.join(', ') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       // Nie duplikuj oddziałów Sewera
-      if (!seweraResults.some(s => Math.abs(s.lat - lat) < 0.01 && Math.abs(s.lng - lng) < 0.01)) {
-        results.push({ name, lat, lng });
-      }
+      if (seweraResults.some(s => Math.abs(s.lat - lat) < 0.01 && Math.abs(s.lng - lng) < 0.01)) continue;
+
+      // Subtitle: kod pocztowy + miasto + dzielnica — zeby user widzial CO wybiera
+      // (rozne dzielnice tego samego miasta to czesty problem przy 'Orla Bialego' w DG itp.)
+      const subParts: string[] = [];
+      if (props.postcode) subParts.push(props.postcode);
+      if (props.city) subParts.push(props.city);
+      if (props.district && props.district !== props.city) subParts.push(props.district);
+
+      photonResults.push({
+        name,
+        lat,
+        lng,
+        hasHouseNumber: !!props.housenumber,
+        postcode: props.postcode,
+        district: props.district,
+        subtitle: subParts.join(', ') || undefined,
+      });
     }
-    return results.slice(0, 8);
+    // Sortuj wyniki Photon — z numerem domu PRZED bez numeru (precyzyjniejsze).
+    photonResults.sort((a, b) => {
+      const ah = a.hasHouseNumber ? 1 : 0;
+      const bh = b.hasHouseNumber ? 1 : 0;
+      return bh - ah;
+    });
+    return [...seweraResults, ...photonResults].slice(0, 8);
   } catch {
     return seweraResults;
   }
