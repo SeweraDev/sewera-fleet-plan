@@ -28,6 +28,18 @@ import {
 } from '@/lib/stawki-transportowe';
 import { TYP_CAPACITY } from '@/lib/suggestRoutes';
 
+// Ladownosc per typ CENNIKOWY (nie systemowy) — uzywane do sortowania
+// kosztyWew/kosztyZew w spojnej kolejnosci rosnaco po wielkosci pojazdu.
+const KG_TYPU_CENNIKOWEGO: Record<string, number> = {
+  'do 700kg': 700,
+  'do 1,2t bez windy': 1200,
+  'z windą do 1,8t': 1800,
+  'z windą do 6t': 6300,
+  'z windą do 15t': 15800,
+  'HDS 9,0t': 9000,
+  'HDS 12,0t': 12000,
+};
+
 // Sortowanie typow pojazdow rosnaco po ladownosci (kg). Nieznany typ na koncu.
 function sortByCapacityKg(typy: string[]): string[] {
   return [...typy].sort((a, b) => {
@@ -58,6 +70,10 @@ interface KosztWewOferta {
   /** True dla typu wybranego przez usera; false dla fallback z rodziny */
   isOriginal: boolean;
   direction: 'down' | 'up' | null;
+  /** True gdy oddzial NIE MA tego typu pojazdu — pokazujemy cene z cennika
+   *  (jakby mial), zeby sprzedawca mogl odpowiedziec klientowi.
+   *  UI oznacza taka pozycje szaro + ikonka ostrzezenia. */
+  brakPojazdu?: boolean;
 }
 
 interface WynikOddzialu {
@@ -353,6 +369,24 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         // KAT z HDS 9,0t i HDS 12,0t pokaze obie ceny przy wyborze HDS 9,0t.
         const dostepneTypy = findAllAvailableTypes(typPojazdu, wlasneTypy);
         const kosztyWew: KosztWewOferta[] = [];
+        // Jesli oddzial NIE MA wybranego typu, dodajemy cene "teoretyczna" z cennika
+        // z flaga brakPojazdu=true. Dzieki temu sprzedawca w DG (brak 1,2t) widzi
+        // ile by kosztowal 1,2t i moze odpowiedziec klientowi lub zlecic innemu
+        // oddzialowi (cross-branch). UI oznaczy taka pozycje szaro + ostrzezenie.
+        const maWybranyTyp = dostepneTypy.some(d => d.isOriginal);
+        if (!maWybranyTyp) {
+          const kosztTeo = obliczKosztWew(km, typPojazdu);
+          if (kosztTeo) {
+            kosztyWew.push({
+              typCennikowy: typPojazdu,
+              netto: kosztTeo.netto,
+              brutto: kosztTeo.brutto,
+              isOriginal: true,
+              direction: null,
+              brakPojazdu: true,
+            });
+          }
+        }
         for (const dt of dostepneTypy) {
           const koszt = obliczKosztWew(km, dt.typ);
           if (koszt) {
@@ -365,6 +399,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             });
           }
         }
+        // Sortuj kosztyWew po ladownosci pojazdu rosnaco — spojny porzadek
+        // we wszystkich oddzialach (wybrany typ + fallback razem).
+        kosztyWew.sort((a, b) => {
+          const ka = KG_TYPU_CENNIKOWEGO[a.typCennikowy] ?? 999999;
+          const kb = KG_TYPU_CENNIKOWEGO[b.typCennikowy] ?? 999999;
+          return ka - kb;
+        });
 
         // Lista typow systemowych z bazy ktore mapuja sie na ktorykolwiek z dostepnych typow cennikowych
         const dostepneTypyCennikowe = new Set(dostepneTypy.map(d => d.typ));
@@ -661,12 +702,21 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.kosztyWew.length === 0 ? '—' : (
                             <div className="space-y-1.5">
                               {w.kosztyWew.map((k, i) => (
-                                <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
+                                <div
+                                  key={i}
+                                  className={`${i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''} ${k.brakPojazdu ? 'opacity-60' : ''}`}
+                                  title={k.brakPojazdu ? 'Brak takiego pojazdu w tym oddziale — cena teoretyczna z cennika' : undefined}
+                                >
                                   <span>{formatPLN(k.netto)}</span>
                                   <span className="ml-1.5 text-[10px] font-medium text-muted-foreground">({k.typCennikowy})</span>
                                   {!k.isOriginal && k.direction && (
                                     <span className="ml-1 text-[10px] text-orange-600 dark:text-orange-400">
                                       {k.direction === 'up' ? '↑' : '↓'}
+                                    </span>
+                                  )}
+                                  {k.brakPojazdu && (
+                                    <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400" title="Oddział nie ma tego pojazdu — cena z cennika">
+                                      ⚠️ brak pojazdu
                                     </span>
                                   )}
                                 </div>
@@ -678,7 +728,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                           {w.kosztyWew.length === 0 ? '—' : (
                             <div className="space-y-1.5">
                               {w.kosztyWew.map((k, i) => (
-                                <div key={i} className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}>
+                                <div
+                                  key={i}
+                                  className={`${i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''} ${k.brakPojazdu ? 'opacity-60' : ''}`}
+                                >
                                   {formatPLN(k.brutto)}
                                 </div>
                               ))}
