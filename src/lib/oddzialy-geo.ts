@@ -33,14 +33,14 @@ export function getOddzialTextColor(kod: string): string {
 
 // Współrzędne oddziałów SEWERA (hardcoded — znane adresy)
 export const ODDZIAL_COORDS: Record<string, { lat: number; lng: number; adres: string }> = {
-  KAT: { lat: 50.2162, lng: 18.9836, adres: 'ul. Kościuszki 326, 40-608 Katowice' },
-  R:   { lat: 50.2162, lng: 18.9836, adres: 'ul. Kościuszki 326, 40-608 Katowice' },
-  CH:  { lat: 50.1350, lng: 19.4050, adres: 'ul. Śląska 64a, 32-500 Chrzanów' },
+  KAT: { lat: 50.2181, lng: 18.9835, adres: 'ul. Kościuszki 326, 40-608 Katowice' },
+  R:   { lat: 50.2181, lng: 18.9835, adres: 'ul. Kościuszki 326, 40-608 Katowice' },
+  CH:  { lat: 50.1469, lng: 19.3816, adres: 'ul. Śląska 64a, 32-500 Chrzanów' },
   DG:  { lat: 50.3395, lng: 19.2525, adres: 'ul. Kasprzaka 33, 41-303 Dąbrowa Górnicza' },
-  GL:  { lat: 50.2930, lng: 18.6720, adres: 'ul. Dojazdowa 11, 44-100 Gliwice' },
-  OS:  { lat: 50.0377, lng: 19.1963, adres: 'ul. Wyzwolenia 19, 32-600 Oświęcim' },
-  SOS: { lat: 50.2870, lng: 19.1280, adres: 'ul. Rudna 14, 41-214 Sosnowiec' },
-  TG:  { lat: 50.4430, lng: 18.8570, adres: 'ul. Nakielska 24, 42-600 Tarnowskie Góry' },
+  GL:  { lat: 50.2744, lng: 18.6956, adres: 'ul. Dojazdowa 11, 44-100 Gliwice' },
+  OS:  { lat: 50.0378, lng: 19.1966, adres: 'ul. Wyzwolenia 19, 32-600 Oświęcim' },
+  SOS: { lat: 50.2870, lng: 19.1094, adres: 'ul. Rudna 14, 41-214 Sosnowiec' },
+  TG:  { lat: 50.4428, lng: 18.8679, adres: 'ul. Nakielska 24, 42-600 Tarnowskie Góry' },
 };
 
 // Mapowanie nazwa oddziału → kod

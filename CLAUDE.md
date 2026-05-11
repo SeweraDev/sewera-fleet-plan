@@ -78,14 +78,14 @@ src/
 
 | Kod | Miasto | Lat | Lng |
 |-----|--------|-----|-----|
-| KAT | Katowice | 50.2162 | 18.9836 |
-| R | Katowice (ten sam adres co KAT) | 50.2162 | 18.9836 |
-| SOS | Sosnowiec | 50.2870 | 19.1280 |
-| GL | Gliwice | 50.2930 | 18.6720 |
+| KAT | Katowice | 50.2181 | 18.9835 |
+| R | Katowice (ten sam adres co KAT) | 50.2181 | 18.9835 |
+| SOS | Sosnowiec | 50.2870 | 19.1094 |
+| GL | Gliwice | 50.2744 | 18.6956 |
 | DG | Dąbrowa Górnicza (w bazie: D.Górnicza) | 50.3395 | 19.2525 |
-| TG | Tarnowskie Góry (w bazie: T.Góry) | 50.4430 | 18.8570 |
-| CH | Chrzanów | 50.1350 | 19.4050 |
-| OS | Oświęcim | 50.0380 | 19.2440 |
+| TG | Tarnowskie Góry (w bazie: T.Góry) | 50.4428 | 18.8679 |
+| CH | Chrzanów | 50.1469 | 19.3816 |
+| OS | Oświęcim | 50.0378 | 19.1966 |
 
 ## Typy pojazdów
 
