@@ -497,6 +497,12 @@ export async function getRouteAlternatives(
     const res = await fetch(url);
     const data = await res.json();
     if (data.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
+      // Debug: pokaz wszystkie alternatywy OSRM (raw km + czas)
+      const debug = data.routes.map((r: any) => ({
+        km: +(r.distance / 1000).toFixed(2),
+        min: +(r.duration / 60).toFixed(1),
+      }));
+      console.log(`[osrm-alt] from=(${from.lat.toFixed(4)},${from.lng.toFixed(4)}) to=(${to.lat.toFixed(4)},${to.lng.toFixed(4)})`, debug);
       const kms = data.routes.map((r: any) => roundKm(r.distance / 1000));
       return kms;
     }
