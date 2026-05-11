@@ -448,20 +448,21 @@ export function getKmProstaFromOddzial(
 // co zabezpiecza fakturowanie przed zaniżeniem.
 
 /**
- * Strategia wyboru km z alternatyw OSRM zależna od typu pojazdu (hybryda C):
+ * Strategia wyboru km z alternatyw OSRM (TEST RYNKOWY od 11.05.2026):
  *
- * - Dostawczy 1,2t (kat. B, DMC ≤3,5t, wjedzie wszędzie) → najkrótsza zawsze:
- *   - dystans ≤ 10 km → ×1.1 (krótki dystans, ~1-2 km różnicy istotne w cenniku)
- *   - dystans > 10 km → bez mnożnika (OSRM już dokładny)
+ * ≤ 10 km (krotka trasa miejska) — NAJKROTSZA ×1.1 dla WSZYSTKICH typow:
+ *   Decyzja biznesowa: krotkie miejskie trasy zwykle bez objazdow tonazowych,
+ *   wszystkie pojazdy realnie pojada najkrotsza. Mnoznik ×1.1 = bufor 10% na
+ *   zatory/manewry/parkowanie. Po miesiacu test/ewaluacja.
  *
- * - Winda 1,8t (kat. C, ale lekka, miejska) → HYBRYDA:
- *   - ≤ 10 km → najkrótsza ×1.1 (krótkie miejskie trasy, mało zakazów)
- *   - > 10 km → mediana (dystans = wzrost ryzyka objazdów/zakazów)
- *
- * - Pozostałe typy (Winda 6t, HDS) → mediana z alternatyw zawsze:
- *   Odrzucamy 2 skrajne wartości z 3 alternatyw OSRM (najkrótsza + najdłuższa,
- *   zostaje środkowa). Dla 2 alternatyw → średnia. Dla 1 → ta jedna.
- *   Logika: duże ciężarówki muszą trzymać się głównych dróg, mediana = bezpieczny kompromis.
+ * > 10 km (dluzsze trasy) — strategia per typ:
+ *   - Dostawczy 1,2t (kat. B, ≤3,5t DMC) → najkrotsza bez mnoznika
+ *     (OSRM dokladny, mnoznik tylko zawyzal fakture)
+ *   - Pozostale (Winda 1,8t/6t/MAX, HDS) → mediana z alternatyw
+ *     Odrzucamy 2 skrajne wartosci z 3 alternatyw OSRM (najkrotsza + najdluzsza,
+ *     zostaje srodkowa). Dla 2 alternatyw → srednia. Dla 1 → ta jedna.
+ *     Logika: ciezarowki podlegaja zakazom tonazowym na dluzszych trasach,
+ *     mediana = bezpieczny kompromis.
  *
  * @param alternatives lista km z OSRM (do 3 wariantów)
  * @param typPojazdu opcjonalny typ — label cennikowy lub systemowy
@@ -478,22 +479,20 @@ export function pickKmFromAlternatives(alternatives: number[], typPojazdu?: stri
   else mediana = sorted[0];
 
   const tp = (typPojazdu || '').toLowerCase();
-
-  // Wybor strategii — wynik SUROWY (z dziesietnymi), zaokraglimy na koncu
   let surowyKm: number;
 
-  if (tp.includes('1,2t') || tp.includes('dostawczy')) {
-    // 1,2t / dostawczy — zawsze najkrotsza (×1.1 dla ≤10 km)
-    surowyKm = najkrotsza <= 10 ? najkrotsza * 1.1 : najkrotsza;
-  } else if (tp.includes('1,8t')) {
-    // 1,8t — hybryda: najkrotsza ×1.1 dla ≤10 km miejskich, mediana dla dluzszych
-    surowyKm = najkrotsza <= 10 ? najkrotsza * 1.1 : mediana;
+  // ≤10 km — najkrotsza ×1.1 dla WSZYSTKICH typow (test rynkowy 11.05.2026)
+  if (najkrotsza <= 10) {
+    surowyKm = najkrotsza * 1.1;
+  } else if (tp.includes('1,2t') || tp.includes('dostawczy')) {
+    // >10 km dla 1,2t — najkrotsza bez mnoznika
+    surowyKm = najkrotsza;
   } else {
-    // Pozostale (6t, 15t, HDS) — mediana zawsze (ciezarowki, ryzyko zakazow)
+    // >10 km dla wszystkich pozostalych typow — mediana (ciezarowki, zakazy)
     surowyKm = mediana;
   }
 
-  // FINALNE zaokraglenie do calych km — to jest jedyne miejsce gdzie zaokraglamy
+  // FINALNE zaokraglenie do calych km — jedyne miejsce gdzie zaokraglamy
   return Math.round(surowyKm);
 }
 
