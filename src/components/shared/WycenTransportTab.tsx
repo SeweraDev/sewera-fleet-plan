@@ -392,8 +392,19 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
       // 4. TOP najbliższych oddziałów (decyzja usera 30.04 — szczególnie HDS-y
       // mają wysokie koszty, więc liczy się odległość. Ranking po km, nie po cenie.)
-      const mojOddzial = results.find(r => r.jestMojOddzial);
-      const inneNajblizsze = results
+      // Odrzucamy oddzialy z km==0 (cel dostawy = adres oddzialu) — bezsensowna wycena 0 zl.
+      const resultsZKm = results.filter(r => r.km > 0);
+
+      // Specjalny case: cel dostawy to adres oddzialu Sewery (km=0 dla najblizszego)
+      const odrzuconyOddzial = results.find(r => r.km === 0);
+      if (odrzuconyOddzial && resultsZKm.length === 0) {
+        setError(`Adres dostawy to lokalizacja oddziału Sewera ${odrzuconyOddzial.nazwa} — wycena transportu nie ma sensu (0 km). Wpisz inny adres docelowy.`);
+        setLoading(false);
+        return;
+      }
+
+      const mojOddzial = resultsZKm.find(r => r.jestMojOddzial);
+      const inneNajblizsze = resultsZKm
         .filter(r => !r.jestMojOddzial && (r.kosztyWew.length > 0 || r.kosztyZew.length > 0))
         .sort((a, b) => a.km - b.km)
         .slice(0, 2); // top 2 najbliższych (plus mój = max 3 wiersze)
