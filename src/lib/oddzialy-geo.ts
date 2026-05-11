@@ -471,30 +471,38 @@ export function pickKmFromAlternatives(alternatives: number[], typPojazdu?: stri
   const sorted = [...alternatives].sort((a, b) => a - b);
   const najkrotsza = sorted[0];
 
-  // Mediana (dla > 1 alternatywy zawsze policzona — tania operacja)
+  // Mediana SUROWA (bez zaokraglania — zaokraglimy finalny wynik nizej)
   let mediana: number;
   if (sorted.length >= 3) mediana = sorted[Math.floor(sorted.length / 2)];
-  else if (sorted.length === 2) mediana = Math.round((sorted[0] + sorted[1]) / 2);
+  else if (sorted.length === 2) mediana = (sorted[0] + sorted[1]) / 2;
   else mediana = sorted[0];
 
   const tp = (typPojazdu || '').toLowerCase();
 
-  // 1,2t / dostawczy — zawsze najkrotsza (×1.1 dla ≤10 km)
+  // Wybor strategii — wynik SUROWY (z dziesietnymi), zaokraglimy na koncu
+  let surowyKm: number;
+
   if (tp.includes('1,2t') || tp.includes('dostawczy')) {
-    return najkrotsza <= 10 ? Math.round(najkrotsza * 1.1) : najkrotsza;
+    // 1,2t / dostawczy — zawsze najkrotsza (×1.1 dla ≤10 km)
+    surowyKm = najkrotsza <= 10 ? najkrotsza * 1.1 : najkrotsza;
+  } else if (tp.includes('1,8t')) {
+    // 1,8t — hybryda: najkrotsza ×1.1 dla ≤10 km miejskich, mediana dla dluzszych
+    surowyKm = najkrotsza <= 10 ? najkrotsza * 1.1 : mediana;
+  } else {
+    // Pozostale (6t, 15t, HDS) — mediana zawsze (ciezarowki, ryzyko zakazow)
+    surowyKm = mediana;
   }
 
-  // 1,8t — hybryda: najkrotsza dla krotkich tras miejskich, mediana dla dluzszych
-  if (tp.includes('1,8t')) {
-    return najkrotsza <= 10 ? Math.round(najkrotsza * 1.1) : mediana;
-  }
-
-  // Pozostale (6t, 15t, HDS) — mediana zawsze (ciezarowki, ryzyko zakazow)
-  return mediana;
+  // FINALNE zaokraglenie do calych km — to jest jedyne miejsce gdzie zaokraglamy
+  return Math.round(surowyKm);
 }
 
 // Pobierz WSZYSTKIE warianty trasy z OSRM (do 3 alternatyw).
 // Używane razem z pickKmFromAlternatives do wyboru km wg strategii typu pojazdu.
+// UWAGA: zwracamy SUROWE km z OSRM (z dwoma miejscami po przecinku). Zaokraglenie
+// do calych km odbywa sie dopiero w pickKmFromAlternatives na FINALNYM wyniku —
+// inaczej tracimy precyzje (np. 4.77 km najkrotsza × 1.1 powinno dac 5 km, ale
+// gdy zaokraglimy 4.77 -> 5 zanim ×1.1, dostajemy 5 × 1.1 = 5.5 -> 6 km).
 export async function getRouteAlternatives(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number }
@@ -510,7 +518,8 @@ export async function getRouteAlternatives(
         min: +(r.duration / 60).toFixed(1),
       }));
       console.log(`[osrm-alt] from=(${from.lat.toFixed(4)},${from.lng.toFixed(4)}) to=(${to.lat.toFixed(4)},${to.lng.toFixed(4)})`, debug);
-      const kms = data.routes.map((r: any) => roundKm(r.distance / 1000));
+      // Surowe km — zaokraglenie zrobi pickKmFromAlternatives na finalnym wyniku
+      const kms = data.routes.map((r: any) => r.distance / 1000);
       return kms;
     }
     console.warn(`[osrm-alt] no routes`, data);
