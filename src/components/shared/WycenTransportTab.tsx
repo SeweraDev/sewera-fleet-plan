@@ -362,6 +362,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       for (const [kod, dane] of oddzialyFiltered) {
         const alternatives = await getRouteAlternatives(dane, coords);
         if (!alternatives || alternatives.length === 0) continue;
+        // km dla typu wybranego w dropdownie — uzywane w kolumnie km tabeli.
+        // Dla kazdego typu w komorce ceny liczymy km osobno z odpowiednia strategia
+        // (1,2t/dostawczy → najkrotsza×1.1, 1,8t → hybryda, reszta → mediana).
+        // Bez tego fallback HDS pokazywalby cene wg trasy 1,2t = zaniza marze Sewery.
         const km = pickKmFromAlternatives(alternatives, typPojazdu);
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
@@ -375,7 +379,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         // oddzialowi (cross-branch). UI oznaczy taka pozycje szaro + ostrzezenie.
         const maWybranyTyp = dostepneTypy.some(d => d.isOriginal);
         if (!maWybranyTyp) {
-          const kosztTeo = obliczKosztWew(km, typPojazdu);
+          // Cena teoretyczna dla wybranego typu — km wg strategii TEGO typu
+          const kmTeo = pickKmFromAlternatives(alternatives, typPojazdu);
+          const kosztTeo = obliczKosztWew(kmTeo, typPojazdu);
           if (kosztTeo) {
             kosztyWew.push({
               typCennikowy: typPojazdu,
@@ -388,7 +394,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           }
         }
         for (const dt of dostepneTypy) {
-          const koszt = obliczKosztWew(km, dt.typ);
+          // KAZDY typ uzywa wlasnej strategii km (HDS = mediana, 1,2t = najkrotsza,
+          // 1,8t = hybryda) — zeby fallback HDS placil za swoja trase, nie za mniejsze.
+          const kmDlaTypu = pickKmFromAlternatives(alternatives, dt.typ);
+          const koszt = obliczKosztWew(kmDlaTypu, dt.typ);
           if (koszt) {
             kosztyWew.push({
               typCennikowy: dt.typ,
@@ -420,7 +429,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const dostepneTypyZew = findAllAvailableTypes(typPojazdu, zewTypy);
         const kosztyZew: KosztZewOferta[] = [];
         for (const dt of dostepneTypyZew) {
-          const oferty = obliczKosztyZewWszystkie(km, dt.typ, kod);
+          // Per-typ km (jak dla wew) — fallback HDS placi za swoja trase
+          const kmDlaTypu = pickKmFromAlternatives(alternatives, dt.typ);
+          const oferty = obliczKosztyZewWszystkie(kmDlaTypu, dt.typ, kod);
           kosztyZew.push(...oferty);
         }
         const dostepneTypyZewSet = new Set(dostepneTypyZew.map(d => d.typ));
