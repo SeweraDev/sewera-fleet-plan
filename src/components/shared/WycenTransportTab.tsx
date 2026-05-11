@@ -26,6 +26,16 @@ import {
   findAllAvailableTypes,
   mapTypNaCennikowy,
 } from '@/lib/stawki-transportowe';
+import { TYP_CAPACITY } from '@/lib/suggestRoutes';
+
+// Sortowanie typow pojazdow rosnaco po ladownosci (kg). Nieznany typ na koncu.
+function sortByCapacityKg(typy: string[]): string[] {
+  return [...typy].sort((a, b) => {
+    const ka = TYP_CAPACITY[a]?.kg ?? 999999;
+    const kb = TYP_CAPACITY[b]?.kg ?? 999999;
+    return ka - kb;
+  });
+}
 
 interface WycenTransportTabProps {
   /** Nazwa oddziału zalogowanego usera, np. "Gliwice" */
@@ -385,8 +395,11 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           kosztyWew,
           kosztyZew,
           jestMojOddzial: kod === mojKod,
-          wewTypy: matchingWewTypy,
-          zewTypy: matchingZewTypy,
+          // Sortowanie po ladownosci pojazdu rosnaco — etykiety floty pod
+          // nazwa oddzialu pokazuja "Dostawczy 1,2t, Winda 1,8t, Winda 6,3t..."
+          // niezaleznie od kolejnosci wpisow w bazie danych.
+          wewTypy: sortByCapacityKg(matchingWewTypy),
+          zewTypy: sortByCapacityKg(matchingZewTypy),
         });
       }
 
