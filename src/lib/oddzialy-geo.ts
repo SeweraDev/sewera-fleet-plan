@@ -448,16 +448,20 @@ export function getKmProstaFromOddzial(
 // co zabezpiecza fakturowanie przed zaniżeniem.
 
 /**
- * Strategia wyboru km z alternatyw OSRM zależna od typu pojazdu:
+ * Strategia wyboru km z alternatyw OSRM zależna od typu pojazdu (hybryda C):
  *
- * - Dostawczy 1,2t (małe auto) → najkrótsza + warunkowy mnożnik:
+ * - Dostawczy 1,2t (kat. B, DMC ≤3,5t, wjedzie wszędzie) → najkrótsza zawsze:
  *   - dystans ≤ 10 km → ×1.1 (krótki dystans, ~1-2 km różnicy istotne w cenniku)
  *   - dystans > 10 km → bez mnożnika (OSRM już dokładny)
  *
- * - Pozostałe typy (Winda, HDS) → mediana z alternatyw — odrzucamy 2 skrajne
- *   wartości z 3 alternatyw OSRM (najkrótsza i najdłuższa, zostaje środkowa).
- *   Dla 2 alternatyw → średnia. Dla 1 → ta jedna.
- *   Logika: większe auta jadą głównymi drogami, mediana = realny kompromis.
+ * - Winda 1,8t (kat. C, ale lekka, miejska) → HYBRYDA:
+ *   - ≤ 10 km → najkrótsza ×1.1 (krótkie miejskie trasy, mało zakazów)
+ *   - > 10 km → mediana (dystans = wzrost ryzyka objazdów/zakazów)
+ *
+ * - Pozostałe typy (Winda 6t, HDS) → mediana z alternatyw zawsze:
+ *   Odrzucamy 2 skrajne wartości z 3 alternatyw OSRM (najkrótsza + najdłuższa,
+ *   zostaje środkowa). Dla 2 alternatyw → średnia. Dla 1 → ta jedna.
+ *   Logika: duże ciężarówki muszą trzymać się głównych dróg, mediana = bezpieczny kompromis.
  *
  * @param alternatives lista km z OSRM (do 3 wariantów)
  * @param typPojazdu opcjonalny typ — label cennikowy lub systemowy
@@ -465,25 +469,28 @@ export function getKmProstaFromOddzial(
 export function pickKmFromAlternatives(alternatives: number[], typPojazdu?: string | null): number {
   if (alternatives.length === 0) return 0;
   const sorted = [...alternatives].sort((a, b) => a - b);
+  const najkrotsza = sorted[0];
 
-  // Małe auta — najkrótsza, ×1.1 tylko dla dystansu ≤ 10 km
+  // Mediana (dla > 1 alternatywy zawsze policzona — tania operacja)
+  let mediana: number;
+  if (sorted.length >= 3) mediana = sorted[Math.floor(sorted.length / 2)];
+  else if (sorted.length === 2) mediana = Math.round((sorted[0] + sorted[1]) / 2);
+  else mediana = sorted[0];
+
   const tp = (typPojazdu || '').toLowerCase();
+
+  // 1,2t / dostawczy — zawsze najkrotsza (×1.1 dla ≤10 km)
   if (tp.includes('1,2t') || tp.includes('dostawczy')) {
-    const najkrotsza = sorted[0];
-    if (najkrotsza <= 10) {
-      return Math.round(najkrotsza * 1.1);
-    }
-    return najkrotsza;
+    return najkrotsza <= 10 ? Math.round(najkrotsza * 1.1) : najkrotsza;
   }
 
-  // Pozostałe — mediana / środkowa
-  if (sorted.length >= 3) {
-    return sorted[Math.floor(sorted.length / 2)];
+  // 1,8t — hybryda: najkrotsza dla krotkich tras miejskich, mediana dla dluzszych
+  if (tp.includes('1,8t')) {
+    return najkrotsza <= 10 ? Math.round(najkrotsza * 1.1) : mediana;
   }
-  if (sorted.length === 2) {
-    return Math.round((sorted[0] + sorted[1]) / 2);
-  }
-  return sorted[0];
+
+  // Pozostale (6t, 15t, HDS) — mediana zawsze (ciezarowki, ryzyko zakazow)
+  return mediana;
 }
 
 // Pobierz WSZYSTKIE warianty trasy z OSRM (do 3 alternatyw).
