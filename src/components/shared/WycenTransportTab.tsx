@@ -101,6 +101,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   // Info o precyzji geocodingu — gdy pin spadl na centroid ulicy (bez numeru),
   // pokazujemy ostrzezenie nad tabela, zeby user wiedzial ze trzeba doprecyzowac.
   const [geocodeWarning, setGeocodeWarning] = useState<string | null>(null);
+  // Alternatywy z numerem domu — pokazywane gdy geocoding zwrocil centroid bez
+  // numeru. Klikniecie karty od razu uruchamia ponowne wyliczenie.
+  const [geocodeAlternatives, setGeocodeAlternatives] = useState<SearchResult[]>([]);
 
   // Zamrożone parametry z czasu ostatniego udanego wyliczenia (żeby header tabeli
   // nie "kłamał" gdy user zmieni dropdown/adres/oddział bez ponownego kliknięcia Wylicz)
@@ -230,54 +233,37 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     };
   }, [wyniki, dostawaCoords]);
 
-  const handleWylicz = useCallback(async () => {
-    if (!typPojazdu) {
-      setError('Wybierz typ pojazdu');
-      return;
-    }
-    if (!adres || adres.length < 5) {
-      setError('Wpisz adres dostawy');
-      return;
-    }
-
+  // Wykonuje calosc obliczenia kosztow dla podanych coords. Wydzielone z
+  // handleWylicz, zeby selectAlternative mogl od razu liczyc dla wybranej karty.
+  const runCalculation = useCallback(async (
+    coords: { lat: number; lng: number },
+    hasHouseNumber: boolean,
+    displayName: string,
+    queryAdres: string,
+  ) => {
     setLoading(true);
     setError('');
     setWyniki(null);
-    setDostawaCoords(null);
+    setDostawaCoords(coords);
     setGeocodeWarning(null);
 
+    // Ostrzezenie + alternatywy gdy pin spadl bez numeru — user moze szybko
+    // wybrac konkretny adres z numerami (auto-recalc po kliknieciu).
+    if (!hasHouseNumber) {
+      setGeocodeWarning(`Adres został zlokalizowany niedokładnie (bez numeru domu): "${displayName}". Sprawdź czerwony pin na mapie. Wybierz precyzyjny adres z listy poniżej lub wpisz adres z numerem domu.`);
+      // Pobierz alternatywy z numerami z tej samej ulicy/okolicy
+      try {
+        const alts = await searchAddress(queryAdres);
+        const withNumber = alts.filter(a => a.hasHouseNumber).slice(0, 5);
+        setGeocodeAlternatives(withNumber);
+      } catch {
+        setGeocodeAlternatives([]);
+      }
+    } else {
+      setGeocodeAlternatives([]);
+    }
+
     try {
-      // 1. Geocoduj adres (użyj wybranych coords jeśli mamy)
-      let coords: { lat: number; lng: number } | null;
-      let hasHouseNumber: boolean;
-      let displayName: string;
-      if (selectedCoords) {
-        coords = { lat: selectedCoords.lat, lng: selectedCoords.lng };
-        hasHouseNumber = !!selectedCoords.hasHouseNumber;
-        displayName = selectedCoords.displayName || adres;
-      } else {
-        const detailed = await geocodeAddressDetailed(adres);
-        if (!detailed) {
-          setError('Nie udało się znaleźć adresu. Spróbuj podać bardziej szczegółowy adres (ulica, kod pocztowy, miasto).');
-          setLoading(false);
-          return;
-        }
-        coords = { lat: detailed.lat, lng: detailed.lng };
-        hasHouseNumber = detailed.hasHouseNumber;
-        displayName = detailed.displayName;
-      }
-      if (!coords) {
-        setError('Nie udało się znaleźć adresu.');
-        setLoading(false);
-        return;
-      }
-      setDostawaCoords(coords);
-      // Ostrzeżenie gdy geocoder nie trafił w konkretny numer domu — UI pokaze
-      // baner z prosba o klikniecie sugestii z dropdownu (bo wtedy mapa moze
-      // pokazywac centroid ulicy lub centroid miasta — niedokladne km).
-      if (!hasHouseNumber) {
-        setGeocodeWarning(`Adres został zlokalizowany niedokładnie (bez numeru domu): "${displayName}". Sprawdź czerwony pin na mapie. Jeśli to nie ten punkt, wpisz adres ponownie i wybierz właściwą sugestię z listy.`);
-      }
 
       // 2. Pobierz flotę WSZYSTKICH oddziałów (aktywne pojazdy własne + zewnętrzne)
       // UWAGA: tabela `flota` zawiera kolumne jest_zewnetrzny - zewnetrzne pojazdy
@@ -422,14 +408,56 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const jestZew = finalResults.some(r => r.kosztyZew.length > 0);
       setPokazZew(jestZew);
       setWyniki(finalResults);
-      setLastCalc({ typ: typPojazdu, adres, oddzialNazwa });
+      setLastCalc({ typ: typPojazdu, adres: queryAdres, oddzialNazwa });
     } catch (e) {
       console.error('[WycenTransport] error:', e);
       setError('Wystąpił błąd podczas wyliczania. Spróbuj ponownie.');
     } finally {
       setLoading(false);
     }
-  }, [typPojazdu, adres, mojKod, selectedCoords, oddzialNazwa]);
+  }, [typPojazdu, mojKod, oddzialNazwa]);
+
+  // Entry point dla przycisku Wylicz koszt — najpierw geokoduje, potem liczy
+  const handleWylicz = useCallback(async () => {
+    if (!typPojazdu) {
+      setError('Wybierz typ pojazdu');
+      return;
+    }
+    if (!adres || adres.length < 5) {
+      setError('Wpisz adres dostawy');
+      return;
+    }
+
+    setError('');
+
+    let coords: { lat: number; lng: number };
+    let hasHouseNumber: boolean;
+    let displayName: string;
+    if (selectedCoords) {
+      coords = { lat: selectedCoords.lat, lng: selectedCoords.lng };
+      hasHouseNumber = !!selectedCoords.hasHouseNumber;
+      displayName = selectedCoords.displayName || adres;
+    } else {
+      const detailed = await geocodeAddressDetailed(adres);
+      if (!detailed) {
+        setError('Nie udało się znaleźć adresu. Spróbuj podać bardziej szczegółowy adres (ulica, kod pocztowy, miasto).');
+        return;
+      }
+      coords = { lat: detailed.lat, lng: detailed.lng };
+      hasHouseNumber = detailed.hasHouseNumber;
+      displayName = detailed.displayName;
+    }
+    await runCalculation(coords, hasHouseNumber, displayName, adres);
+  }, [typPojazdu, adres, selectedCoords, runCalculation]);
+
+  // Wybor alternatywy z banera "bez numeru" — od razu przelicz dla wybranego punktu
+  const selectAlternative = useCallback(async (s: SearchResult) => {
+    setAdres(s.name);
+    setSelectedCoords({ lat: s.lat, lng: s.lng, hasHouseNumber: s.hasHouseNumber, displayName: s.name });
+    setSuggestions([]);
+    setShowSuggestions(false);
+    await runCalculation({ lat: s.lat, lng: s.lng }, !!s.hasHouseNumber, s.name, s.name);
+  }, [runCalculation]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !loading) {
@@ -529,8 +557,28 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
               Wyniki dla: <span className="text-primary">{lastCalc.typ}</span> → {lastCalc.adres}
             </h3>
             {geocodeWarning && (
-              <div className="text-sm bg-orange-100 dark:bg-orange-900/30 border border-orange-400 text-orange-900 dark:text-orange-100 p-3 rounded-md">
-                📌 {geocodeWarning}
+              <div className="text-sm bg-orange-100 dark:bg-orange-900/30 border border-orange-400 text-orange-900 dark:text-orange-100 p-3 rounded-md space-y-2">
+                <div>📌 {geocodeWarning}</div>
+                {geocodeAlternatives.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-xs font-semibold">Wybierz precyzyjny adres:</div>
+                    <div className="flex flex-col gap-1">
+                      {geocodeAlternatives.map((s, i) => (
+                        <button
+                          key={i}
+                          onClick={() => selectAlternative(s)}
+                          disabled={loading}
+                          className="text-left px-3 py-2 bg-white dark:bg-orange-950/40 border border-orange-300 dark:border-orange-700 rounded hover:bg-orange-50 dark:hover:bg-orange-900/60 transition-colors disabled:opacity-50"
+                        >
+                          <div className="text-sm font-medium">📍 {s.name}</div>
+                          {s.subtitle && (
+                            <div className="text-[11px] text-orange-700 dark:text-orange-300">{s.subtitle}</div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {(typPojazdu !== lastCalc.typ || adres !== lastCalc.adres || oddzialNazwa !== lastCalc.oddzialNazwa) && (
