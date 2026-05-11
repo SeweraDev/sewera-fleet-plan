@@ -82,7 +82,7 @@ src/
 | R | Katowice (ten sam adres co KAT) | 50.2162 | 18.9836 |
 | SOS | Sosnowiec | 50.2870 | 19.1280 |
 | GL | Gliwice | 50.2930 | 18.6720 |
-| DG | Dąbrowa Górnicza (w bazie: D.Górnicza) | 50.3340 | 19.1890 |
+| DG | Dąbrowa Górnicza (w bazie: D.Górnicza) | 50.3395 | 19.2525 |
 | TG | Tarnowskie Góry (w bazie: T.Góry) | 50.4430 | 18.8570 |
 | CH | Chrzanów | 50.1350 | 19.4050 |
 | OS | Oświęcim | 50.0380 | 19.2440 |

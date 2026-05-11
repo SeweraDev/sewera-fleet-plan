@@ -36,7 +36,7 @@ export const ODDZIAL_COORDS: Record<string, { lat: number; lng: number; adres: s
   KAT: { lat: 50.2162, lng: 18.9836, adres: 'ul. Kościuszki 326, 40-608 Katowice' },
   R:   { lat: 50.2162, lng: 18.9836, adres: 'ul. Kościuszki 326, 40-608 Katowice' },
   CH:  { lat: 50.1350, lng: 19.4050, adres: 'ul. Śląska 64a, 32-500 Chrzanów' },
-  DG:  { lat: 50.3340, lng: 19.1890, adres: 'ul. Kasprzaka 33, 41-303 Dąbrowa Górnicza' },
+  DG:  { lat: 50.3395, lng: 19.2525, adres: 'ul. Kasprzaka 33, 41-303 Dąbrowa Górnicza' },
   GL:  { lat: 50.2930, lng: 18.6720, adres: 'ul. Dojazdowa 11, 44-100 Gliwice' },
   OS:  { lat: 50.0377, lng: 19.1963, adres: 'ul. Wyzwolenia 19, 32-600 Oświęcim' },
   SOS: { lat: 50.2870, lng: 19.1280, adres: 'ul. Rudna 14, 41-214 Sosnowiec' },
