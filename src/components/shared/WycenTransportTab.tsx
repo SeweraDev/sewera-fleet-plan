@@ -248,14 +248,14 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     setGeocodeWarning(null);
 
     // Ostrzezenie + alternatywy gdy pin spadl bez numeru — user moze szybko
-    // wybrac konkretny adres z numerami (auto-recalc po kliknieciu).
+    // wybrac konkretny adres (auto-recalc po kliknieciu).
     if (!hasHouseNumber) {
-      setGeocodeWarning(`Adres został zlokalizowany niedokładnie (bez numeru domu): "${displayName}". Sprawdź czerwony pin na mapie. Wybierz precyzyjny adres z listy poniżej lub wpisz adres z numerem domu.`);
-      // Pobierz alternatywy z numerami z tej samej ulicy/okolicy
+      setGeocodeWarning(`Adres został zlokalizowany niedokładnie (bez numeru domu): "${displayName}". Sprawdź czerwony pin na mapie. Wybierz właściwy adres z listy poniżej lub wpisz adres z numerem domu.`);
+      // Pokaz WSZYSTKIE alternatywy Photon (top 5) — w OSM czesto nie ma numerow
+      // na ulicy, ale Photon zwraca rozne dzielnice/centroidy, user wybiera
       try {
         const alts = await searchAddress(queryAdres);
-        const withNumber = alts.filter(a => a.hasHouseNumber).slice(0, 5);
-        setGeocodeAlternatives(withNumber);
+        setGeocodeAlternatives(alts.slice(0, 5));
       } catch {
         setGeocodeAlternatives([]);
       }
