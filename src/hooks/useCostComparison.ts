@@ -194,7 +194,10 @@ export function useCostComparison(
         try {
           const alternatives = await getRouteAlternatives(dane, coords);
           if (!alternatives || alternatives.length === 0) continue;
-          const km = pickKmFromAlternatives(alternatives, typPojazduSystemowy);
+          // Wybrany typ (z formularza krok 1) → isOriginal=true, najkrotsza km
+          // (zgodnosc ze starym kalkulatorem). Banner Krok 4 pokazuje koszt wybranego
+          // typu w innych oddzialach, wiec uzywamy tej samej strategii.
+          const km = pickKmFromAlternatives(alternatives, typPojazduSystemowy, true);
 
           const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
           const bestType = findBestAvailableType(typCennikowy, wlasneTypy);

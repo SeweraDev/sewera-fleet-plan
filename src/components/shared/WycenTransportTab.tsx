@@ -458,10 +458,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const alternatives = await getRouteAlternatives(dane, coords);
         if (!alternatives || alternatives.length === 0) continue;
         // km dla typu wybranego w dropdownie — uzywane w kolumnie km tabeli.
-        // Dla kazdego typu w komorce ceny liczymy km osobno z odpowiednia strategia
-        // (1,2t/dostawczy → najkrotsza×1.1, 1,8t → hybryda, reszta → mediana).
-        // Bez tego fallback HDS pokazywalby cene wg trasy 1,2t = zaniza marze Sewery.
-        const km = pickKmFromAlternatives(alternatives, typPojazdu);
+        // isOriginal=true → najkrotsza km (zgodnosc ze starym kalkulatorem).
+        // Fallback typy w komorce ceny licza km osobno (mediana / mediana×1,05).
+        const km = pickKmFromAlternatives(alternatives, typPojazdu, true);
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
         // Wszystkie dostepne typy z rodziny (oryginalny + fallback chain) — kazdy z osobna cena.
@@ -474,8 +473,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         // oddzialowi (cross-branch). UI oznaczy taka pozycje szaro + ostrzezenie.
         const maWybranyTyp = dostepneTypy.some(d => d.isOriginal);
         if (!maWybranyTyp) {
-          // Cena teoretyczna dla wybranego typu — km wg strategii TEGO typu
-          const kmTeo = pickKmFromAlternatives(alternatives, typPojazdu);
+          // Cena teoretyczna dla wybranego typu — wybrany typ, najkrotsza km
+          const kmTeo = pickKmFromAlternatives(alternatives, typPojazdu, true);
           const kosztTeo = obliczKosztWew(kmTeo, typPojazdu);
           if (kosztTeo) {
             kosztyWew.push({
@@ -489,9 +488,10 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           }
         }
         for (const dt of dostepneTypy) {
-          // KAZDY typ uzywa wlasnej strategii km (HDS = mediana, 1,2t = najkrotsza,
-          // 1,8t = hybryda) — zeby fallback HDS placil za swoja trase, nie za mniejsze.
-          const kmDlaTypu = pickKmFromAlternatives(alternatives, dt.typ);
+          // Wybrany typ (isOriginal=true) → najkrotsza. Fallback → strategia per typ
+          // (mediana dla 1,8t, mediana×1,05 dla 6t/MAX/HDS). Pozwala pokazac realny
+          // koszt dla wybranego typu (jak stary kalkulator) i bufor dla wiekszych aut.
+          const kmDlaTypu = pickKmFromAlternatives(alternatives, dt.typ, dt.isOriginal);
           const koszt = obliczKosztWew(kmDlaTypu, dt.typ);
           if (koszt) {
             kosztyWew.push({
@@ -524,8 +524,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         const dostepneTypyZew = findAllAvailableTypes(typPojazdu, zewTypy);
         const kosztyZew: KosztZewOferta[] = [];
         for (const dt of dostepneTypyZew) {
-          // Per-typ km (jak dla wew) — fallback HDS placi za swoja trase
-          const kmDlaTypu = pickKmFromAlternatives(alternatives, dt.typ);
+          // Per-typ km (jak dla wew) — wybrany typ → najkrotsza, fallback → mediana/×1,05
+          const kmDlaTypu = pickKmFromAlternatives(alternatives, dt.typ, dt.isOriginal);
           const oferty = obliczKosztyZewWszystkie(kmDlaTypu, dt.typ, kod);
           kosztyZew.push(...oferty);
         }
