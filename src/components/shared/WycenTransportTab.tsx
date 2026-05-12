@@ -11,6 +11,7 @@ import {
   NAZWA_TO_KOD,
   geocodeAddressDetailed,
   getRouteAlternatives,
+  getRouteGeometry,
   pickKmFromAlternatives,
   searchAddress,
   ODDZIAL_COLORS,
@@ -147,6 +148,13 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [dostawaCoords, setDostawaCoords] = useState<{ lat: number; lng: number } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  // Klikniety wiersz tabeli wynikow — rysujemy trase tylko dla wybranego oddzialu
+  // w jego kolorze (Opcja B z 12.05). Brak konfliktu z kolorami rankingu tabeli.
+  const [selectedOddzialKod, setSelectedOddzialKod] = useState<string | null>(null);
+  // Cache geometrii — klucz: kod oddzialu. Resetowany przy nowych wyliczeniach.
+  const routeCacheRef = useRef<Map<string, [number, number][]>>(new Map());
+  // Layer polyline na mapie — trzymamy referencje zeby usunac przy zmianie wyboru.
+  const routeLayerRef = useRef<any>(null);
 
   const mojKod = NAZWA_TO_KOD[oddzialNazwa] || '';
 
@@ -194,6 +202,24 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  // Klik w wiersz tabeli wynikow — pokaz/ukryj trase dla tego oddzialu.
+  // Toggle: ponowny klik w ten sam wiersz = odznacz. Geometria lazy z cache.
+  const handleSelectOddzial = useCallback(async (kod: string) => {
+    if (selectedOddzialKod === kod) {
+      setSelectedOddzialKod(null);
+      return;
+    }
+    // Prefetch geometrii do cache — UI rysuje useEffect ponizej.
+    if (!routeCacheRef.current.has(kod)) {
+      const oddzialCoord = ODDZIAL_COORDS[kod];
+      if (oddzialCoord && dostawaCoords) {
+        const geom = await getRouteGeometry(oddzialCoord, dostawaCoords);
+        if (geom) routeCacheRef.current.set(kod, geom);
+      }
+    }
+    setSelectedOddzialKod(kod);
+  }, [selectedOddzialKod, dostawaCoords]);
 
   // Render mini-map when wyniki change
   useEffect(() => {
@@ -256,8 +282,41 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
+      // Layer polyline znika razem z mapa — referencja juz nieaktualna
+      routeLayerRef.current = null;
     };
   }, [wyniki, dostawaCoords]);
+
+  // Rysuj/usun polyline gdy zmienia sie wybrany oddzial. Osobny useEffect zeby
+  // nie przerysowywac calej mapy (markery + bounds) tylko przy zmianie wyboru.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const L = (window as any).L;
+    if (!L) return;
+
+    // Usun poprzednia polyline jesli byla
+    if (routeLayerRef.current) {
+      map.removeLayer(routeLayerRef.current);
+      routeLayerRef.current = null;
+    }
+
+    if (!selectedOddzialKod) return;
+    const geom = routeCacheRef.current.get(selectedOddzialKod);
+    if (!geom || geom.length === 0) return;
+
+    const color = ODDZIAL_COLORS[selectedOddzialKod] || '#6b7280';
+    const wynik = wyniki?.find(w => w.kod === selectedOddzialKod);
+    const polyline = L.polyline(geom, {
+      color,
+      weight: 5,
+      opacity: 0.85,
+    }).addTo(map);
+    if (wynik) {
+      polyline.bindPopup(`<b>${wynik.nazwa}</b> → dostawa<br/>${wynik.km} km`);
+    }
+    routeLayerRef.current = polyline;
+  }, [selectedOddzialKod, wyniki]);
 
   // Wykonuje calosc obliczenia kosztow dla podanych coords. Wydzielone z
   // handleWylicz, zeby selectAlternative mogl od razu liczyc dla wybranej karty.
@@ -272,6 +331,9 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     setWyniki(null);
     setDostawaCoords(coords);
     setGeocodeWarning(null);
+    // Reset wyboru trasy — nowy adres = nowe geometrie, stary cache niewazny
+    setSelectedOddzialKod(null);
+    routeCacheRef.current.clear();
 
     // Ostrzezenie + alternatywy gdy pin spadl bez numeru — user moze szybko
     // wybrac konkretny adres (auto-recalc po kliknieciu).
@@ -688,10 +750,25 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
                 <tbody>
                   {wyniki.map((w, idx) => {
                     const color = getRowColor(idx, wyniki.length);
+                    const isSelected = selectedOddzialKod === w.kod;
                     return (
-                      <tr key={w.kod} className={`${color} border-t`}>
+                      <tr
+                        key={w.kod}
+                        onClick={() => handleSelectOddzial(w.kod)}
+                        className={`${color} border-t cursor-pointer transition-shadow hover:brightness-95 ${isSelected ? 'ring-2 ring-inset ring-slate-900 dark:ring-white' : ''}`}
+                        title={isSelected ? 'Kliknij ponownie aby ukryć trasę' : 'Kliknij aby pokazać trasę na mapie'}
+                      >
                         <td className="p-3 font-medium">
                           {w.jestMojOddzial ? '📍 ' : ''}{w.nazwa}
+                          {isSelected && (
+                            <span
+                              className="ml-1.5 text-[10px] font-bold"
+                              style={{ color: ODDZIAL_COLORS[w.kod] || '#6b7280' }}
+                              title="Trasa widoczna na mapie"
+                            >
+                              ▬▬ trasa
+                            </span>
+                          )}
                           {w.jestMojOddzial && (
                             <span className="text-xs text-muted-foreground ml-1">(Twój)</span>
                           )}

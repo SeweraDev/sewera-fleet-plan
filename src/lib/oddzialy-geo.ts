@@ -536,6 +536,27 @@ export async function getRouteAlternatives(
   return null;
 }
 
+// Pobierz geometrie trasy (najszybsza wg OSRM) jako lista punktow [lat, lng].
+// Uzywane do wizualizacji trasy na mapie (Leaflet polyline). Nie wplywa na km
+// w wycenie — to osobne zapytanie z overview=full geometries=geojson.
+export async function getRouteGeometry(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+): Promise<[number, number][] | null> {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
+      // GeoJSON ma format [lng, lat], Leaflet wymaga [lat, lng]
+      return data.routes[0].geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+    }
+  } catch (e) {
+    console.warn(`[osrm-geometry] error`, e);
+  }
+  return null;
+}
+
 // Oblicz łączną trasę: oddział → stop1 → stop2 → ... (OSRM multi-waypoint)
 export async function calculateRouteTotal(
   oddzialNazwa: string,
