@@ -12,7 +12,9 @@ import {
   geocodeAddressDetailed,
   getRouteAlternatives,
   getRouteGeometry,
+  parseCoordsFromQuery,
   pickKmFromAlternatives,
+  reverseGeocode,
   searchAddress,
   ODDZIAL_COLORS,
   getOddzialTextColor,
@@ -163,6 +165,35 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     setAdres(val);
     setSelectedCoords(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    // GPS bypass — jesli user wkleil wspolrzedne lub link Google Maps,
+    // omijamy autocomplete i ustawiamy coords bezposrednio. Przydatne dla
+    // budow bez adresu pocztowego (klient daje pinezke z Google Maps).
+    const gpsCoords = parseCoordsFromQuery(val);
+    if (gpsCoords) {
+      const provisionalName = `${gpsCoords.lat.toFixed(5)}, ${gpsCoords.lng.toFixed(5)}`;
+      setSelectedCoords({
+        lat: gpsCoords.lat,
+        lng: gpsCoords.lng,
+        hasHouseNumber: false,
+        displayName: provisionalName,
+      });
+      setSuggestions([]);
+      setShowSuggestions(false);
+      // Reverse geocode w tle - jesli Photon zwroci nazwe miejsca, podmieniamy
+      // displayName z surowych wspolrzednych na ladniejszy adres ("ul. X, Miasto").
+      reverseGeocode(gpsCoords.lat, gpsCoords.lng).then((name) => {
+        if (name) {
+          setSelectedCoords((prev) =>
+            prev && prev.lat === gpsCoords.lat && prev.lng === gpsCoords.lng
+              ? { ...prev, displayName: name }
+              : prev
+          );
+        }
+      });
+      return;
+    }
+
     if (val.length < 3) {
       setSuggestions([]);
       setShowSuggestions(false);

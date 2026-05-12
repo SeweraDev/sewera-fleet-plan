@@ -169,6 +169,74 @@ function pickBestPhotonFeature(features: any[], wantedNumber: string | null, wan
   return inRegion[0];
 }
 
+// Wykrywa GPS w polu adresu - obsluguje 3 formaty:
+//   1. Surowe wspolrzedne: "50.2181, 18.9835" lub "50.2181 18.9835"
+//   2. Link Google Maps z @lat,lng (np. https://www.google.com/maps/@50.2181,18.9835,15z)
+//   3. Link Google Maps z ?q=lat,lng (np. https://maps.google.com/?q=50.2181,18.9835)
+//   4. URI geo:lat,lng (mobile share intent)
+// Zwraca null gdy query nie pasuje do zadnego formatu lub wspolrzedne sa nieprawidlowe.
+// Pozwala wkleic pinezke z Google Maps do pola adresu - przydatne dla budow bez numeru.
+export function parseCoordsFromQuery(query: string): { lat: number; lng: number } | null {
+  if (!query) return null;
+  const trimmed = query.trim();
+
+  // 1. Link Google Maps z @lat,lng (najczesty format share z Google Maps)
+  const atMatch = trimmed.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 2. Link Google Maps z ?q=lat,lng lub &q=lat,lng (URL encoded "%2C" tez OK)
+  const qMatch = trimmed.match(/[?&]q=(-?\d+\.\d+)(?:,|%2C|\s)\s*(-?\d+\.\d+)/i);
+  if (qMatch) {
+    const lat = parseFloat(qMatch[1]);
+    const lng = parseFloat(qMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 3. URI geo:lat,lng (Android share intent)
+  const geoMatch = trimmed.match(/^geo:(-?\d+\.\d+),(-?\d+\.\d+)/i);
+  if (geoMatch) {
+    const lat = parseFloat(geoMatch[1]);
+    const lng = parseFloat(geoMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 4. Surowe wspolrzedne "50.2181, 18.9835" lub "50.2181 18.9835"
+  // Na koncu bo regex jest najluzniejszy, moglby zlapac falszywie z 1-3.
+  const rawMatch = trimmed.match(/^(-?\d{1,2}\.\d+)[\s,]+(-?\d{1,3}\.\d+)$/);
+  if (rawMatch) {
+    const lat = parseFloat(rawMatch[1]);
+    const lng = parseFloat(rawMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  return null;
+}
+
+function isValidLatLng(lat: number, lng: number): boolean {
+  return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
+// Reverse geocoding - z lat/lng do tekstowego adresu (Photon).
+// Uzywane po wykryciu GPS w polu adresu zeby pokazac userowi nazwe miejsca.
+// Zwraca null gdy Photon nie znalazl niczego lub blad sieci.
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&limit=1`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const f = data.features?.[0];
+    if (!f) return null;
+    return formatDisplayName(f.properties || {});
+  } catch (e) {
+    console.warn('[reverse-geocode] error', e);
+    return null;
+  }
+}
+
 // Geocoding adresu → Photon (Komoot) — darmowy, bez klucza API, bez rate limitu.
 // Zwraca podstawowe {lat, lng} dla kompatybilnosci. Pelne metadane uzyj geocodeAddressDetailed.
 export async function geocodeAddress(adres: string): Promise<{ lat: number; lng: number } | null> {
