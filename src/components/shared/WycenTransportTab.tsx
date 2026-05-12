@@ -169,13 +169,15 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     // GPS bypass — jesli user wkleil wspolrzedne lub link Google Maps,
     // omijamy autocomplete i ustawiamy coords bezposrednio. Przydatne dla
     // budow bez adresu pocztowego (klient daje pinezke z Google Maps).
+    // hasHouseNumber=true bo GPS to dokladny punkt na mapie — nie pokazujemy
+    // ostrzezenia "adres niedokladny" mimo ze tekstowo brak numeru domu.
     const gpsCoords = parseCoordsFromQuery(val);
     if (gpsCoords) {
       const provisionalName = `${gpsCoords.lat.toFixed(5)}, ${gpsCoords.lng.toFixed(5)}`;
       setSelectedCoords({
         lat: gpsCoords.lat,
         lng: gpsCoords.lng,
-        hasHouseNumber: false,
+        hasHouseNumber: true,
         displayName: provisionalName,
       });
       setSuggestions([]);
