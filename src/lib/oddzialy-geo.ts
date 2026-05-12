@@ -575,8 +575,12 @@ export function pickKmFromAlternatives(alternatives: number[], typPojazdu?: stri
     surowyKm = mediana * 1.05;
   }
 
-  // FINALNE zaokraglenie do calych km — jedyne miejsce gdzie zaokraglamy
-  return Math.round(surowyKm);
+  // FINALNE zaokraglenie do calych km — jedyne miejsce gdzie zaokraglamy.
+  // Math.max(1, ...) tylko gdy surowyKm > 0 — zabezpiecza przed zaokragleniem
+  // bardzo krotkich tras (np. 0,4 km KAT → Fabryczna 9 = 357m) do 0 km, co
+  // wyrzucalo oddzial z wynikow przez filtr `km > 0`. Surowe 0 (cel = adres
+  // oddzialu, OSRM zwraca 0,0 m) zostaje 0 — wtedy slusznie odrzucamy.
+  return surowyKm > 0 ? Math.max(1, Math.round(surowyKm)) : 0;
 }
 
 // Pobierz WSZYSTKIE warianty trasy z OSRM (do 3 alternatyw).
