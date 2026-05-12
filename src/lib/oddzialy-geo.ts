@@ -448,21 +448,25 @@ export function getKmProstaFromOddzial(
 // co zabezpiecza fakturowanie przed zaniżeniem.
 
 /**
- * Strategia wyboru km z alternatyw OSRM (TEST RYNKOWY od 11.05.2026):
+ * Strategia wyboru km z alternatyw OSRM (od 12.05.2026):
  *
  * ≤ 10 km (krotka trasa miejska) — NAJKROTSZA ×1.1 dla WSZYSTKICH typow:
  *   Decyzja biznesowa: krotkie miejskie trasy zwykle bez objazdow tonazowych,
  *   wszystkie pojazdy realnie pojada najkrotsza. Mnoznik ×1.1 = bufor 10% na
- *   zatory/manewry/parkowanie. Po miesiacu test/ewaluacja.
+ *   zatory/manewry/parkowanie.
  *
  * > 10 km (dluzsze trasy) — strategia per typ:
  *   - Dostawczy 1,2t (kat. B, ≤3,5t DMC) → najkrotsza bez mnoznika
- *     (OSRM dokladny, mnoznik tylko zawyzal fakture)
- *   - Pozostale (Winda 1,8t/6t/MAX, HDS) → mediana z alternatyw
+ *     OSRM dokladny dla osobowek/busow, mnoznik tylko zawyzal fakture.
+ *   - Winda 1,8t (lzejsza ciezarowka kat. C) → mediana z alternatyw
  *     Odrzucamy 2 skrajne wartosci z 3 alternatyw OSRM (najkrotsza + najdluzsza,
  *     zostaje srodkowa). Dla 2 alternatyw → srednia. Dla 1 → ta jedna.
- *     Logika: ciezarowki podlegaja zakazom tonazowym na dluzszych trasach,
- *     mediana = bezpieczny kompromis.
+ *   - Winda 6,3t / MAX / HDS 9 / HDS 12 → mediana × 1,05
+ *     +5% margines na objazdy ciezarowek przez tereny pokopalniane (Bytom Karb/
+ *     Mikulczyce/Bobrek, Chorzow Batory), zakazy tonazowe na drogach DTS,
+ *     trudnodostepne ulice techniczne. OSRM nie zna profilu truck, wiec daje
+ *     trasy techniczne ktore realnie sa nieprzejezdne dla duzych aut.
+ *     Test rynkowy 12.05.2026 — po 15-20 testach ewaluacja.
  *
  * @param alternatives lista km z OSRM (do 3 wariantów)
  * @param typPojazdu opcjonalny typ — label cennikowy lub systemowy
@@ -481,15 +485,19 @@ export function pickKmFromAlternatives(alternatives: number[], typPojazdu?: stri
   const tp = (typPojazdu || '').toLowerCase();
   let surowyKm: number;
 
-  // ≤10 km — najkrotsza ×1.1 dla WSZYSTKICH typow (test rynkowy 11.05.2026)
+  // ≤10 km — najkrotsza ×1.1 dla WSZYSTKICH typow
   if (najkrotsza <= 10) {
     surowyKm = najkrotsza * 1.1;
   } else if (tp.includes('1,2t') || tp.includes('dostawczy')) {
     // >10 km dla 1,2t — najkrotsza bez mnoznika
     surowyKm = najkrotsza;
-  } else {
-    // >10 km dla wszystkich pozostalych typow — mediana (ciezarowki, zakazy)
+  } else if (tp.includes('1,8t') || tp.includes('1,8')) {
+    // >10 km dla windy 1,8t — mediana bez mnoznika (lzejsza ciezarowka)
     surowyKm = mediana;
+  } else {
+    // >10 km dla windy 6,3t / MAX / HDS — mediana × 1,05
+    // Bufor 5% na objazdy ciezarowek (tereny pokopalniane, zakazy tonazowe).
+    surowyKm = mediana * 1.05;
   }
 
   // FINALNE zaokraglenie do calych km — jedyne miejsce gdzie zaokraglamy
