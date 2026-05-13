@@ -24,6 +24,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { wyciagnijDateZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
 import { useKursyDnia } from '@/hooks/useKursyDnia';
 import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
 import { useZleceniaBezKursu } from '@/hooks/useZleceniaBezKursu';
@@ -1116,8 +1117,8 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
   const [oddzialId, setOddzialId] = useState<number | null>(null);
   const [typPojazdu, setTypPojazdu] = useState('');
   const [typKlienta, setTypKlienta] = useState('');
-  const [dzien, setDzien] = useState('');
-  const [godzina, setGodzina] = useState('');
+  const [dzien, setDzien] = useState(domyslnyDzienDostawy());
+  const [godzina, setGodzina] = useState('dowolna');
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
   }]);
@@ -1179,27 +1180,36 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
     create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, typ_klienta: typKlienta, dzien, preferowana_godzina: godzina, wz_list: wzList, pominieta_oszczednosc_pln: pominietaOszczednosc ?? null }, forceVerify);
   };
 
-  // Po imporcie WZ z PDF/OCR/Paste — wykryj prefix oddziału z numeru WZ lub
-  // zamówienia. Jeśli inny niż aktualnie wybrany — toast z akcją zmiany.
-  const handleWzImported = useCallback((numer_wz: string | null, nr_zamowienia: string | null) => {
-    const detectedKod = wyciagnijOddzialZNumeru(numer_wz, nr_zamowienia);
-    if (!detectedKod) return;
-    const currentOddzial = oddzialy.find(o => o.id === oddzialId);
-    const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
-    if (currentKod === detectedKod) return;
-    const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
-    if (!detectedOddzial) return;
-    toast.warning(
-      `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
-      {
-        action: {
-          label: `Zmień na ${detectedOddzial.nazwa}`,
-          onClick: () => setOddzialId(detectedOddzial.id),
-        },
-        duration: 10000,
-      },
-    );
-  }, [oddzialId, oddzialy]);
+  // Po imporcie WZ z PDF/OCR/Paste — smart prefill (sesja 13.05.2026):
+  //  1. Wykryj oddział z prefiksu numeru WZ/zamówienia, toast z akcją zmiany
+  //  2. Wyciągnij datę dostawy z uwag ("transport DD.MM.YYYY") → setDzien
+  const handleWzImported = useCallback((wz: WzInput) => {
+    const detectedKod = wyciagnijOddzialZNumeru(wz.numer_wz, wz.nr_zamowienia);
+    if (detectedKod) {
+      const currentOddzial = oddzialy.find(o => o.id === oddzialId);
+      const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
+      if (currentKod !== detectedKod) {
+        const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
+        if (detectedOddzial) {
+          toast.warning(
+            `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
+            {
+              action: {
+                label: `Zmień na ${detectedOddzial.nazwa}`,
+                onClick: () => setOddzialId(detectedOddzial.id),
+              },
+              duration: 10000,
+            },
+          );
+        }
+      }
+    }
+    const dataZUwag = wyciagnijDateZUwag(wz.uwagi);
+    if (dataZUwag && dataZUwag !== dzien) {
+      setDzien(dataZUwag);
+      toast.info(`Data dostawy: ${dataZUwag} (wykryto z uwag)`, { duration: 5000 });
+    }
+  }, [oddzialId, oddzialy, dzien]);
 
   return (
     <Card>

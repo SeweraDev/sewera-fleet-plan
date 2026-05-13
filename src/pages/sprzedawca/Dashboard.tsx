@@ -11,6 +11,7 @@ import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { toast } from 'sonner';
 import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { wyciagnijDateZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
 import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
 import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
@@ -88,8 +89,8 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [oddzialId, setOddzialId] = useState<number | null>(null);
   const [typPojazdu, setTypPojazdu] = useState('');
   const [typKlienta, setTypKlienta] = useState('');
-  const [dzien, setDzien] = useState('');
-  const [godzina, setGodzina] = useState('');
+  const [dzien, setDzien] = useState(domyslnyDzienDostawy());
+  const [godzina, setGodzina] = useState('dowolna');
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
   }]);
@@ -169,28 +170,40 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
     }, forceVerify);
   };
 
-  // Po imporcie WZ z PDF/OCR/Paste — wyciągnij prefix oddziału z numeru WZ lub
-  // zamówienia. Jeśli inny niż aktualnie wybrany — toast z akcją zmiany.
-  // Mapowanie prefiksów: KK→KAT, RE→R, SO→SOS, OM→OS, reszta identyczna.
-  const handleWzImported = useCallback((numer_wz: string | null, nr_zamowienia: string | null) => {
-    const detectedKod = wyciagnijOddzialZNumeru(numer_wz, nr_zamowienia);
-    if (!detectedKod) return; // nieznany prefix → user uzupełnia ręcznie
-    const currentOddzial = oddzialy.find(o => o.id === oddzialId);
-    const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
-    if (currentKod === detectedKod) return; // ten sam oddział — nie pytaj
-    const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
-    if (!detectedOddzial) return;
-    toast.warning(
-      `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
-      {
-        action: {
-          label: `Zmień na ${detectedOddzial.nazwa}`,
-          onClick: () => setOddzialId(detectedOddzial.id),
-        },
-        duration: 10000,
-      },
-    );
-  }, [oddzialId, oddzialy]);
+  // Po imporcie WZ z PDF/OCR/Paste — smart prefill (sesja 13.05.2026):
+  //  1. Wykryj oddział z prefiksu numeru WZ/zamówienia (KK→KAT, RE→R, SO→SOS,
+  //     OM→OS, GL/TG/CH/DG identyczne). Toast z akcją zmiany gdy różny.
+  //  2. Wyciągnij datę dostawy z uwag ("transport DD.MM.YYYY") → setDzien.
+  //  Nieznany prefix → user uzupełnia ręcznie (decyzja 3.C).
+  const handleWzImported = useCallback((wz: WzInput) => {
+    // 1. Detekcja oddziału
+    const detectedKod = wyciagnijOddzialZNumeru(wz.numer_wz, wz.nr_zamowienia);
+    if (detectedKod) {
+      const currentOddzial = oddzialy.find(o => o.id === oddzialId);
+      const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
+      if (currentKod !== detectedKod) {
+        const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
+        if (detectedOddzial) {
+          toast.warning(
+            `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
+            {
+              action: {
+                label: `Zmień na ${detectedOddzial.nazwa}`,
+                onClick: () => setOddzialId(detectedOddzial.id),
+              },
+              duration: 10000,
+            },
+          );
+        }
+      }
+    }
+    // 2. Data dostawy z uwag
+    const dataZUwag = wyciagnijDateZUwag(wz.uwagi);
+    if (dataZUwag && dataZUwag !== dzien) {
+      setDzien(dataZUwag);
+      toast.info(`Data dostawy: ${dataZUwag} (wykryto z uwag)`, { duration: 5000 });
+    }
+  }, [oddzialId, oddzialy, dzien]);
 
   return (
     <Card>

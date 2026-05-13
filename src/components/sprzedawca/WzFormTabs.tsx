@@ -28,11 +28,12 @@ interface WzFormTabsProps {
    *  Zdefiniowane → tab "Wiele PDF" jest dostępny. */
   onBulkSubmit?: (wzListPerZlecenie: WzInput[][]) => Promise<void>;
   bulkSubmitting?: boolean;
-  /** Callback wywoływany po imporcie z PDF/OCR/Paste — przekazuje numery
-   *  dokumentu żeby parent mógł rozpoznać oddział wystawiający (przez
-   *  `wyciagnijOddzialZNumeru` z `lib/oddzialy-geo`) i zaproponować zmianę
-   *  oddziału jeśli różni się od aktualnie wybranego. */
-  onWzImported?: (numer_wz: string | null, nr_zamowienia: string | null) => void;
+  /** Callback wywoływany po imporcie z PDF/OCR/Paste — przekazuje pierwsze
+   *  zaimportowane WZ. Parent używa do:
+   *   - detekcji oddziału (wyciagnijOddzialZNumeru z numer_wz/nr_zamowienia)
+   *   - wyciągania daty dostawy z uwag ("transport DD.MM.YYYY")
+   *  Sesja 13.05.2026 — Smart Prefill faza 1. */
+  onWzImported?: (wz: WzInput) => void;
 }
 
 
@@ -1778,15 +1779,23 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
   // Plus notyfikacja parent (Dashboard) o numerach dokumentu — żeby mógł
   // wykryć oddział wystawiający i zaproponować zmianę gdy różny od wybranego.
   const setWzListFromImport = useCallback((next: WzInput[]) => {
-    // Jeśli mamy auto-klasyfikację, nadpisz ją na każdym importowanym WZ (parser
-    // mógł wstawić własną, ale user explicit wskazał typ pojazdu — jego intencja
-    // wygrywa).
-    const final = autoKlas ? next.map(w => ({ ...w, klasyfikacja: autoKlas })) : next;
+    // Auto-uzupełnienia:
+    //  - auto-klasyfikacja z typu pojazdu (jeśli user wybrał typ)
+    //  - "Bez palet" gdy parser zwrócił 0 palet (klient luźnym/karton)
+    //  - "Luźne/karton" gdy parser zwrócił 0 m³ (palety bez objętości)
+    // User może później odznaczyć w trybie Ręcznie.
+    const final = next.map(w => {
+      const updated: WzInput = { ...w };
+      if (autoKlas) updated.klasyfikacja = autoKlas;
+      if ((updated.ilosc_palet ?? 0) === 0 && !updated.bez_palet) updated.bez_palet = true;
+      if ((updated.objetosc_m3 ?? 0) === 0 && !updated.luzne_karton) updated.luzne_karton = true;
+      return updated;
+    });
     setWzList(final);
     setActiveTab('reczne');
     toast.success('✅ WZ dodane do listy — sprawdź w zakładce Ręcznie');
     if (onWzImported && final.length > 0) {
-      onWzImported(final[0].numer_wz ?? null, final[0].nr_zamowienia ?? null);
+      onWzImported(final[0]);
     }
   }, [setWzList, autoKlas, onWzImported]);
 
