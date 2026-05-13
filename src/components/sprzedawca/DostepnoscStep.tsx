@@ -1,16 +1,18 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSprawdzDostepnosc, pctColor, pctBg, type VehicleOccupancy } from '@/hooks/useSprawdzDostepnosc';
 import { useCostComparison } from '@/hooks/useCostComparison';
 import { ODDZIAL_COORDS, ODDZIAL_COLORS, getOddzialTextColor } from '@/lib/oddzialy-geo';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 
-/** Próg w zł netto — banner pojawia się gdy alternatywa jest tańsza o przynajmniej tyle.
- *  Aktualnie 0 → banner zawsze gdy istnieje tańszy oddział (próg do ustalenia po obserwacji
- *  produkcyjnej i raporcie zarządu — patrz `zlecenia.pominieta_oszczednosc_pln`). */
-const COST_THRESHOLD_PLN = 0;
+/** Lista typów pojazdów dla dropdownu porównania kosztów (lokalnie w bannerze). */
+const TYPY_POJAZDOW_CMP = [
+  'Dostawczy 1,2t', 'Winda 1,8t', 'Winda 6,3t', 'Winda MAX 15,8t',
+  'HDS 9,0t', 'HDS 12,0t',
+];
 
 // Leaflet lazy load (z CDN, jak w innych mapach w projekcie)
 let leafletLoaded = false;
@@ -129,9 +131,15 @@ export function DostepnoscStep({
   const totalPalet = wzList.reduce((s, w) => s + (w.ilosc_palet || 0), 0);
 
   // Porównanie kosztów: bierzemy adres z PIERWSZEJ WZ-tki (zwykle wszystkie WZ jednego zlecenia
-  // mają ten sam adres dostawy)
+  // mają ten sam adres dostawy). Banner pokazuje się ZAWSZE (gdy mamy adres + obecny oddział),
+  // a typ domyślny gdy user nie wybrał = "Dostawczy 1,2t" (najczęstszy).
   const adresDostawy = wzList[0]?.adres || '';
-  const cmp = useCostComparison(oddzialNazwa, typPojazdu, adresDostawy);
+  const [cmpTypOverride, setCmpTypOverride] = useState<string>('');
+  const effectiveCmpTyp = cmpTypOverride
+    || (typPojazdu && typPojazdu !== 'bez_preferencji' && typPojazdu !== 'zewnetrzny'
+      ? typPojazdu
+      : 'Dostawczy 1,2t');
+  const cmp = useCostComparison(oddzialNazwa, effectiveCmpTyp, adresDostawy);
 
   // Mini-mapa: container ref + instance ref
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -222,23 +230,26 @@ export function DostepnoscStep({
 
   const isExternalOrNoPref = !typPojazdu || typPojazdu === 'bez_preferencji' || typPojazdu === 'zewnetrzny';
 
-  // Banner porównania kosztów: pokazuj tylko gdy istnieje tańsza alternatywa o > próg.
+  // Banner porównania kosztów — widoczny ZAWSZE gdy mamy obecny oddział + adres
+  // (niezależnie od savings). Header dynamiczny: amber gdy istnieje tańsza alternatywa,
+  // green gdy obecny oddział jest najlepszy.
   // UWAGA biznesowa: zlecenie zawsze startuje z oddziału który wystawia WZ — bo każdy
   // oddział ma swoje stany magazynowe i WZ (towar fizycznie wychodzi z tego oddziału).
-  // Banner jest INFORMACYJNY — uświadamia że bliższy oddział byłby tańszy. User wybiera
-  // świadomie "Zleć mimo wszystko" i wartość oszczędności zapisuje się do
-  // `zlecenia.pominieta_oszczednosc_pln` → raport dla zarządu (kosztów które poniesiono
-  // mimo tańszej alternatywy).
-  const showCostBanner = !!cmp.savings && cmp.savings >= COST_THRESHOLD_PLN && !!cmp.cheapest && !!cmp.current;
+  // Banner jest INFORMACYJNY. Gdy istnieje tańsza alternatywa user wybiera świadomie
+  // "Zleć mimo wszystko" → oszczędność zapisuje się do `zlecenia.pominieta_oszczednosc_pln`
+  // (raport dla zarządu — koszt poniesiony mimo tańszej alternatywy).
+  const hasComparison = !!cmp.current && !cmp.loading;
+  const showSavings = !!cmp.savings && cmp.savings > 0 && !!cmp.cheapest;
+  const noTypeSelected = !typPojazdu || typPojazdu === 'bez_preferencji' || typPojazdu === 'zewnetrzny';
 
-  // Helper — przekazuje pominiętą oszczędność gdy banner widoczny (świadoma decyzja usera)
+  // Helper — przekazuje pominiętą oszczędność tylko gdy istnieje rzeczywista oszczędność
   const handleConfirmedSubmit = (forceVerify: boolean) => {
-    onSubmit(forceVerify, showCostBanner ? Math.round(cmp.savings!) : null);
+    onSubmit(forceVerify, showSavings ? Math.round(cmp.savings!) : null);
   };
 
-  // Etykieta przycisku submit: gdy banner widoczny — "Zleć mimo wszystko" (świadoma akcja),
+  // Etykieta przycisku submit: gdy istnieje tańsza alternatywa — "Zleć mimo wszystko",
   // inaczej oryginalna etykieta z kontekstu (Złóż / Załóż).
-  const submitLabel = (base: string) => showCostBanner ? '✅ Zleć mimo wszystko' : `✅ ${base}`;
+  const submitLabel = (base: string) => showSavings ? '✅ Zleć mimo wszystko' : `✅ ${base}`;
 
   return (
     <div className="space-y-4">
@@ -254,21 +265,46 @@ export function DostepnoscStep({
         </p>
       </div>
 
-      {/* Banner porównania kosztów — pokazujemy tylko gdy istnieje tańsza alternatywa */}
-      {showCostBanner && (
-        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 space-y-3">
+      {/* Banner porównania kosztów — widoczny zawsze gdy mamy obecny oddział + adres.
+          Header amber gdy istnieje tańsza alternatywa, green gdy obecny oddział jest najlepszy. */}
+      {hasComparison && (
+        <div className={`rounded-lg border-2 p-3 space-y-3 ${
+          showSavings
+            ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700'
+            : 'border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-700'
+        }`}>
           <div className="flex items-start gap-2">
-            <span className="text-lg">💡</span>
+            <span className="text-lg">{showSavings ? '💡' : '✓'}</span>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                Inny oddział byłby tańszy o {fmtPLN(Math.round(cmp.savings!))}
+              <p className={`text-sm font-semibold ${showSavings ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'}`}>
+                {showSavings
+                  ? `Inny oddział byłby tańszy o ${fmtPLN(Math.round(cmp.savings!))}`
+                  : `Ten oddział (${oddzialNazwa}) jest najlepszy dla tego adresu`}
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                Adres dostawy jest bliżej oddziału {cmp.cheapest!.oddzialNazwa} (informacyjnie).
-                Zlecenie i tak zostanie utworzone w Twoim oddziale, żeby marża i koszt transportu
-                pozostały razem.
-              </p>
+              {showSavings && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  Adres dostawy jest bliżej oddziału {cmp.cheapest!.oddzialNazwa} (informacyjnie).
+                  Zlecenie i tak zostanie utworzone w Twoim oddziale, żeby marża i koszt transportu
+                  pozostały razem.
+                </p>
+              )}
             </div>
+          </div>
+
+          {/* Dropdown wyboru typu do porównania (lokalnie — nie zmienia typu w zleceniu) */}
+          <div className="flex items-center gap-2 text-xs flex-wrap">
+            <span className="text-muted-foreground">Porównanie dla typu:</span>
+            <Select value={effectiveCmpTyp} onValueChange={(v) => setCmpTypOverride(v)}>
+              <SelectTrigger className="h-7 text-xs w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPY_POJAZDOW_CMP.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {noTypeSelected && (
+              <span className="text-[10px] text-muted-foreground italic">(brak wyboru typu — domyślnie Dostawczy 1,2t)</span>
+            )}
           </div>
 
           {/* Tabelka: obecny + top najbliższych (zgodnie z logiką z Wycen Transport) */}
