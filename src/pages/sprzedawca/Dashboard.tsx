@@ -152,7 +152,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
     setStep(4);
   };
 
-  const handleSubmit = (forceVerify: boolean) => {
+  const handleSubmit = (forceVerify: boolean, pominietaOszczednosc?: number | null) => {
     if (!oddzialId || !dzien || !godzina) {
       toast.error('Uzupełnij wszystkie pola');
       return;
@@ -164,6 +164,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       dzien,
       preferowana_godzina: godzina,
       wz_list: wzList,
+      pominieta_oszczednosc_pln: pominietaOszczednosc ?? null,
     }, forceVerify);
   };
 

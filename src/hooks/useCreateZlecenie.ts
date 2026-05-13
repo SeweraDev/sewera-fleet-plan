@@ -36,6 +36,11 @@ export interface ZlecenieInput {
   dzien: string;
   preferowana_godzina: string;
   wz_list: WzInput[];
+  /** Oszczędność (zł netto) jaką dawałoby zrealizowanie zlecenia z innego, bliższego
+   *  oddziału. Wypełnione gdy user świadomie wybrał "Zleć mimo wszystko" w bannerze
+   *  porównania kosztów. NULL = brak alternatywy / nieaktywne. Używane przez raport
+   *  zarządu — lista zleceń realizowanych z droższego oddziału. */
+  pominieta_oszczednosc_pln?: number | null;
 }
 
 export function useCreateZlecenie(onSuccess?: () => void) {
@@ -61,7 +66,8 @@ export function useCreateZlecenie(onSuccess?: () => void) {
         preferowana_godzina: input.preferowana_godzina,
         nadawca_id: user.id,
         status: forceVerify ? 'do_weryfikacji' : 'robocza',
-      })
+        pominieta_oszczednosc_pln: input.pominieta_oszczednosc_pln ?? null,
+      } as any)
       .select('id')
       .single();
 

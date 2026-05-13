@@ -16,6 +16,7 @@ import { KLASYFIKACJE } from '@/lib/klasyfikacje';
 import { geocodeAddress } from '@/lib/oddzialy-geo';
 import { canPrzekazZlecenie } from '@/lib/przekazanieZlecenia';
 import { useOddzialy } from '@/hooks/useOddzialy';
+import { useCostComparison } from '@/hooks/useCostComparison';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -103,6 +104,18 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
     const result = await geocodeAddress(adres);
     setAdresStatus(prev => ({ ...prev, [idx]: result ? 'ok' : 'fail' }));
   }, []);
+
+  // Porównanie kosztów: banner-sugestia gdy bliższy oddział byłby tańszy.
+  // UWAGA biznesowa: zlecenie zawsze startuje z oddziału który wystawia WZ — towar fizycznie
+  // wychodzi z magazynu tego oddziału, nie można "przepiąć" do innego. Banner jest tylko
+  // INFORMACYJNY, a wybór "Zleć mimo wszystko" zapisuje pominiętą oszczędność do bazy
+  // (`zlecenia.pominieta_oszczednosc_pln`) → raport dla zarządu.
+  const oddzialNazwa = wszystkieOddzialy.find(o => o.id === zlecenie?.oddzial_id)?.nazwa || '';
+  const adresDostawy = wzList[0]?.adres || '';
+  const typForCmp = (typPojazdu === 'brak' || !typPojazdu) ? '' : typPojazdu;
+  const cmp = useCostComparison(oddzialNazwa, typForCmp, adresDostawy);
+  const showCostBanner = !!cmp.savings && cmp.savings > 0 && !!cmp.cheapest && !!cmp.current;
+  const fmtPLN = (v: number): string => v.toFixed(2).replace('.', ',') + ' zł';
 
   // Pojemność pojazdu z kursu
   const [capacity, setCapacity] = useState<{ kg: number; m3: number; pal: number }>({ kg: 0, m3: 0, pal: 0 });
@@ -290,13 +303,20 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
     setShowResztaChoice(false);
     setSaving(true);
 
+    // Gdy banner widoczny — zapisz pominiętą oszczędność (świadoma decyzja usera).
+    // Inaczej nie ruszamy kolumny (NULL pozostaje NULL — niezmienione).
+    const updatePayload: Record<string, unknown> = {
+      dzien: dzien || zlecenie?.dzien,
+      preferowana_godzina: godzina === 'dowolna' ? null : godzina,
+      typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
+    };
+    if (showCostBanner) {
+      updatePayload.pominieta_oszczednosc_pln = Math.round(cmp.savings!);
+    }
+
     const { error: zlErr } = await supabase
       .from('zlecenia')
-      .update({
-        dzien: dzien || zlecenie?.dzien,
-        preferowana_godzina: godzina === 'dowolna' ? null : godzina,
-        typ_pojazdu: typPojazdu === 'brak' ? null : typPojazdu,
-      })
+      .update(updatePayload as any)
       .eq('id', zlecenieId);
 
     // Zapisz wszystkie WZ
@@ -441,6 +461,55 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                   </Select>
                 </div>
               </div>
+
+              {/* Banner porównania kosztów — bliższy oddział byłby tańszy */}
+              {showCostBanner && (
+                <div className="rounded-lg border-2 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">💡</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        Inny oddział byłby tańszy o {fmtPLN(Math.round(cmp.savings!))}
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                        Adres dostawy jest bliżej oddziału {cmp.cheapest!.oddzialNazwa}.
+                        Towar musi wyjść z {oddzialNazwa} (WZ + stany magazynowe), więc to tylko informacja —
+                        wybierając „Zleć mimo wszystko" zatwierdzasz świadomie wyższy koszt.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="rounded border bg-white/70 dark:bg-black/20 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-2 py-1 font-medium">Oddział</th>
+                          <th className="text-right px-2 py-1 font-medium">km</th>
+                          <th className="text-right px-2 py-1 font-medium">Sewera (netto)</th>
+                          <th className="text-right px-2 py-1 font-medium">Zewn. (netto)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cmp.rows.map(r => {
+                          const isCheapest = !!cmp.cheapest && r.oddzialKod === cmp.cheapest.oddzialKod && !r.isCurrent;
+                          return (
+                            <tr key={r.oddzialKod} className={r.isCurrent ? 'bg-orange-100 dark:bg-orange-900/30 font-medium' : isCheapest ? 'bg-green-100 dark:bg-green-900/30' : ''}>
+                              <td className="px-2 py-1.5">
+                                {isCheapest && '🟢 '}{r.isCurrent && '📍 '}{r.oddzialNazwa}
+                                {r.isCurrent && <span className="text-muted-foreground"> (Ten)</span>}
+                              </td>
+                              <td className="text-right px-2 py-1.5 text-muted-foreground">{r.km} km</td>
+                              <td className="text-right px-2 py-1.5">{r.kosztWew ? fmtPLN(r.kosztWew.netto) : '—'}</td>
+                              <td className="text-right px-2 py-1.5">
+                                {r.kosztyZew.length === 0 ? '—' : fmtPLN(r.kosztyZew[0].netto)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* WZ list */}
               <div className="flex items-center justify-between">
@@ -588,7 +657,13 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                 </Button>
               )}
               <Button onClick={handleSaveClick} disabled={saving || loading || showResztaChoice} variant={isOverloaded ? 'destructive' : 'default'}>
-                {saving ? 'Zapisywanie...' : isOverloaded ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)` : `Zapisz zmiany (${wzList.length} WZ)`}
+                {saving
+                  ? 'Zapisywanie...'
+                  : isOverloaded
+                  ? `⚠️ Zapisz mimo przekroczenia (${wzList.length} WZ)`
+                  : showCostBanner
+                  ? `✅ Zleć mimo wszystko (${wzList.length} WZ)`
+                  : `Zapisz zmiany (${wzList.length} WZ)`}
               </Button>
             </DialogFooter>
           )}

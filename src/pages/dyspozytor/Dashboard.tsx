@@ -1173,9 +1173,9 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
     setStep(4);
   };
 
-  const handleSubmit = (forceVerify: boolean) => {
+  const handleSubmit = (forceVerify: boolean, pominietaOszczednosc?: number | null) => {
     if (!oddzialId || !dzien || !godzina) { toast.error('Uzupełnij wszystkie pola'); return; }
-    create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, typ_klienta: typKlienta, dzien, preferowana_godzina: godzina, wz_list: wzList }, forceVerify);
+    create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, typ_klienta: typKlienta, dzien, preferowana_godzina: godzina, wz_list: wzList, pominieta_oszczednosc_pln: pominietaOszczednosc ?? null }, forceVerify);
   };
 
   return (

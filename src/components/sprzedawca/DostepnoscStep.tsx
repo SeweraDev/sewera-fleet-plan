@@ -7,8 +7,10 @@ import { useCostComparison } from '@/hooks/useCostComparison';
 import { ODDZIAL_COORDS, ODDZIAL_COLORS, getOddzialTextColor } from '@/lib/oddzialy-geo';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 
-/** Próg w zł netto — banner pojawia się gdy alternatywa jest tańsza o tyle. */
-const COST_THRESHOLD_PLN = 30;
+/** Próg w zł netto — banner pojawia się gdy alternatywa jest tańsza o przynajmniej tyle.
+ *  Aktualnie 0 → banner zawsze gdy istnieje tańszy oddział (próg do ustalenia po obserwacji
+ *  produkcyjnej i raporcie zarządu — patrz `zlecenia.pominieta_oszczednosc_pln`). */
+const COST_THRESHOLD_PLN = 0;
 
 // Leaflet lazy load (z CDN, jak w innych mapach w projekcie)
 let leafletLoaded = false;
@@ -41,7 +43,9 @@ interface DostepnoscStepProps {
   /** Lista wszystkich oddziałów (do mapowania nazwy → id przy zmianie). */
   oddzialy: { id: number; nazwa: string }[];
   onBack: () => void;
-  onSubmit: (forceVerify: boolean) => void;
+  /** Drugi argument = pominięta oszczędność w zł netto (gdy user świadomie wybrał
+   *  "Zleć mimo wszystko" pomimo widocznego bannera). Null gdy brak bannera. */
+  onSubmit: (forceVerify: boolean, pominietaOszczednosc?: number | null) => void;
   submitting: boolean;
   onChangeDzien?: (newDzien: string) => void;
   onChangeGodzina?: (newGodzina: string) => void;
@@ -219,12 +223,22 @@ export function DostepnoscStep({
   const isExternalOrNoPref = !typPojazdu || typPojazdu === 'bez_preferencji' || typPojazdu === 'zewnetrzny';
 
   // Banner porównania kosztów: pokazuj tylko gdy istnieje tańsza alternatywa o > próg.
-  // UWAGA biznesowa: zlecenie zawsze startuje z oddziału który wystawia WZ — żeby
-  // marża na fakturze i koszt transportu pozostały po tej samej stronie. Banner
-  // jest tylko INFORMACYJNY (świadomość kosztu); dyspozytor może po utworzeniu
-  // zlecenia świadomie skorzystać z funkcji "Przekaż do oddziału", która przenosi
-  // całe zlecenie wraz z towarem.
+  // UWAGA biznesowa: zlecenie zawsze startuje z oddziału który wystawia WZ — bo każdy
+  // oddział ma swoje stany magazynowe i WZ (towar fizycznie wychodzi z tego oddziału).
+  // Banner jest INFORMACYJNY — uświadamia że bliższy oddział byłby tańszy. User wybiera
+  // świadomie "Zleć mimo wszystko" i wartość oszczędności zapisuje się do
+  // `zlecenia.pominieta_oszczednosc_pln` → raport dla zarządu (kosztów które poniesiono
+  // mimo tańszej alternatywy).
   const showCostBanner = !!cmp.savings && cmp.savings >= COST_THRESHOLD_PLN && !!cmp.cheapest && !!cmp.current;
+
+  // Helper — przekazuje pominiętą oszczędność gdy banner widoczny (świadoma decyzja usera)
+  const handleConfirmedSubmit = (forceVerify: boolean) => {
+    onSubmit(forceVerify, showCostBanner ? Math.round(cmp.savings!) : null);
+  };
+
+  // Etykieta przycisku submit: gdy banner widoczny — "Zleć mimo wszystko" (świadoma akcja),
+  // inaczej oryginalna etykieta z kontekstu (Złóż / Załóż).
+  const submitLabel = (base: string) => showCostBanner ? '✅ Zleć mimo wszystko' : `✅ ${base}`;
 
   return (
     <div className="space-y-4">
@@ -351,8 +365,8 @@ export function DostepnoscStep({
           </p>
           <div className="flex gap-2 mt-4">
             <Button variant="outline" onClick={onBack}>← Wstecz</Button>
-            <Button onClick={() => onSubmit(false)} disabled={submitting}>
-              {submitting ? 'Wysyłanie...' : '✅ Złóż zlecenie'}
+            <Button onClick={() => handleConfirmedSubmit(false)} disabled={submitting}>
+              {submitting ? 'Wysyłanie...' : submitLabel('Złóż zlecenie')}
             </Button>
           </div>
         </div>
@@ -361,8 +375,8 @@ export function DostepnoscStep({
           <p className="text-sm text-muted-foreground">Brak pojazdów typu „{typPojazdu}" w tym oddziale.</p>
           <div className="flex gap-2 mt-4">
             <Button variant="outline" onClick={onBack}>← Zmień typ / termin</Button>
-            <Button variant="secondary" onClick={() => onSubmit(true)} disabled={submitting}>
-              {submitting ? 'Wysyłanie...' : '✅ Załóż zlecenie'}
+            <Button variant="secondary" onClick={() => handleConfirmedSubmit(true)} disabled={submitting}>
+              {submitting ? 'Wysyłanie...' : submitLabel('Załóż zlecenie')}
             </Button>
           </div>
         </div>
@@ -378,8 +392,8 @@ export function DostepnoscStep({
           {anyFits ? (
             <div className="flex gap-2">
               <Button variant="outline" onClick={onBack}>← Wstecz</Button>
-              <Button onClick={() => onSubmit(false)} disabled={submitting}>
-                {submitting ? 'Wysyłanie...' : '✅ Złóż zlecenie'}
+              <Button onClick={() => handleConfirmedSubmit(false)} disabled={submitting}>
+                {submitting ? 'Wysyłanie...' : submitLabel('Złóż zlecenie')}
               </Button>
             </div>
           ) : (
@@ -436,8 +450,8 @@ export function DostepnoscStep({
                 <Button variant="outline" onClick={onBack}>
                   Zmień termin / pojazd
                 </Button>
-                <Button variant="secondary" onClick={() => onSubmit(true)} disabled={submitting}>
-                  {submitting ? 'Wysyłanie...' : '✅ Załóż zlecenie'}
+                <Button variant="secondary" onClick={() => handleConfirmedSubmit(true)} disabled={submitting}>
+                  {submitting ? 'Wysyłanie...' : submitLabel('Załóż zlecenie')}
                 </Button>
               </div>
             </div>
