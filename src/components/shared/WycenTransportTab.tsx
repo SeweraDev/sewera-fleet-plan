@@ -30,6 +30,7 @@ import {
   mapTypNaCennikowy,
 } from '@/lib/stawki-transportowe';
 import { TYP_CAPACITY } from '@/lib/suggestRoutes';
+import { searchKlienciCache, ensureGeocoded, logSearch, type KlientCacheResult } from '@/lib/wycenaCache';
 
 // Ladownosc per typ CENNIKOWY (nie systemowy) — uzywane do sortowania
 // kosztyWew/kosztyZew w spojnej kolejnosci rosnaco po wielkosci pojazdu.
@@ -55,6 +56,9 @@ function sortByCapacityKg(typy: string[]): string[] {
 interface WycenTransportTabProps {
   /** Nazwa oddziału zalogowanego usera, np. "Gliwice" */
   oddzialNazwa: string;
+  /** Skad pochodzi wycena — do statystyk admina (publiczna_wycena = bez logowania,
+   *  wewnetrzna = z aplikacji). Default: 'wewnetrzna'. */
+  zrodlo?: 'publiczna_wycena' | 'wewnetrzna';
 }
 
 interface KosztZewOferta {
@@ -119,7 +123,7 @@ function loadLeaflet(): Promise<any> {
   });
 }
 
-export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
+export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: WycenTransportTabProps) {
   const [typPojazdu, setTypPojazdu] = useState('');
   const [adres, setAdres] = useState('');
   const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number; hasHouseNumber?: boolean; displayName?: string } | null>(null);
@@ -172,6 +176,12 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
 
   const mojKod = NAZWA_TO_KOD[oddzialNazwa] || '';
 
+  // Czy user zalogowany — uzywane do flagi w log statystyk
+  const [zalogowany, setZalogowany] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setZalogowany(!!data.session));
+  }, []);
+
   // Debounced address search
   const handleAdresChange = (val: string) => {
     setAdres(val);
@@ -217,23 +227,65 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     }
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
-      const results = await searchAddress(val);
-      setSuggestions(results);
-      setShowSuggestions(results.length > 0);
+      // Rownolegle: historia Sewery (z bazy zlecen) + Photon (mapa OSM).
+      // Historia ma priorytet bo pochodzi z naszych rzeczywistych dostaw — najpewniejsze.
+      const [cacheResults, photonResults] = await Promise.all([
+        searchKlienciCache(val),
+        searchAddress(val),
+      ]);
+      // Pomin Photon-wyniki ktore duplikuja cache (po lat/lng z dokladnoscia ~100m).
+      // needsGeocode w cache = lat=0/lng=0, wiec nie zaduplikuja sie z Photon.
+      const cacheWithCoords = cacheResults.filter(c => !c.needsGeocode);
+      const filteredPhoton = photonResults.filter(p =>
+        !cacheWithCoords.some(c => Math.abs(c.lat - p.lat) < 0.001 && Math.abs(c.lng - p.lng) < 0.001)
+      );
+      const merged: SearchResult[] = [
+        ...cacheResults.slice(0, 5),  // top 5 z historii Sewery (z dostawami)
+        ...filteredPhoton.slice(0, 5),  // top 5 z OpenStreetMap
+      ];
+      setSuggestions(merged);
+      setShowSuggestions(merged.length > 0);
       setSearching(false);
     }, 300);
   };
 
-  const handleSelectSuggestion = (s: SearchResult) => {
+  const handleSelectSuggestion = async (s: SearchResult) => {
     setAdres(s.name);
+    setSuggestions([]);
+    setShowSuggestions(false);
+
+    // Wynik z cache klientow bez lat/lng (needsGeocode=true) — geocode lazy.
+    // Jesli kliknal historyczny adres ktory nigdy nie byl geocode'owany,
+    // robimy to teraz i zapisujemy w geocode_cache (raz na cala baze).
+    const cacheRes = s as KlientCacheResult;
+    if (cacheRes.needsGeocode) {
+      setSearching(true);
+      // Adres bazowy do geocodingu — czysty adres dostawy (bez "Hadex —" prefix dodawanego w UI).
+      const adresDoGeo = cacheRes.odbiorca && s.name.includes(' — ')
+        ? s.name.split(' — ').slice(1).join(' — ')
+        : s.name;
+      const geo = await ensureGeocoded(adresDoGeo);
+      setSearching(false);
+      if (geo) {
+        setSelectedCoords({
+          lat: geo.lat,
+          lng: geo.lng,
+          hasHouseNumber: geo.hasHouseNumber,
+          displayName: geo.displayName,
+        });
+        return;
+      }
+      // Geocode nie powiodl sie — pokazujemy blad, user musi wpisac dokladny adres
+      setError(`Nie udało się zlokalizować adresu "${adresDoGeo}". Wpisz ulicę + numer + miasto.`);
+      return;
+    }
+
     setSelectedCoords({
       lat: s.lat,
       lng: s.lng,
       hasHouseNumber: s.hasHouseNumber,
       displayName: s.name,
     });
-    setSuggestions([]);
-    setShowSuggestions(false);
   };
 
   // Close suggestions on outside click
@@ -594,13 +646,29 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       setPokazZew(jestZew);
       setWyniki(finalResults);
       setLastCalc({ typ: typPojazdu, adres: queryAdres, oddzialNazwa });
+
+      // Statystyki: log udane wyliczenie. Best-effort, nie blokuje UI.
+      const myResult = finalResults.find(r => r.jestMojOddzial) || finalResults[0];
+      const myNetto = myResult?.kosztyWew.find(k => k.isOriginal)?.netto ?? null;
+      logSearch({
+        query: queryAdres,
+        oddzialKod: mojKod,
+        typPojazdu,
+        znalezionoAdres: displayName,
+        hasHouseNumber,
+        nameMatch: true, // jesli doszlismy do runCalculation, nameMatch=true (lub user nadpisal)
+        zrodlo,
+        zalogowany,
+        wynikKm: myResult?.km ?? null,
+        wynikKosztNetto: myNetto,
+      });
     } catch (e) {
       console.error('[WycenTransport] error:', e);
       setError('Wystąpił błąd podczas wyliczania. Spróbuj ponownie.');
     } finally {
       setLoading(false);
     }
-  }, [typPojazdu, mojKod, oddzialNazwa]);
+  }, [typPojazdu, mojKod, oddzialNazwa, zrodlo, zalogowany]);
 
   // Entry point dla przycisku Wylicz koszt — najpierw geokoduje, potem liczy
   const handleWylicz = useCallback(async () => {
@@ -628,6 +696,19 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
       const detailed = await geocodeAddressDetailed(adres);
       if (!detailed) {
         setError('Nie udało się znaleźć adresu. Spróbuj wpisać dokładny adres: nazwa firmy + miasto, lub ulica + numer (np. "Hadex Tychy" lub "ul. Kościuszki 326, Katowice").');
+        // Statystyki: log nieudane wyszukiwanie (zeby admin widzial jakie frazy nie sa znajdowane)
+        logSearch({
+          query: adres,
+          oddzialKod: mojKod,
+          typPojazdu,
+          znalezionoAdres: null,
+          hasHouseNumber: false,
+          nameMatch: false,
+          zrodlo,
+          zalogowany,
+          wynikKm: null,
+          wynikKosztNetto: null,
+        });
         return;
       }
       coords = { lat: detailed.lat, lng: detailed.lng };
@@ -647,11 +728,25 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
           alternatives: alternatives.slice(0, 5),
         });
         setWyniki(null);
+        // Statystyki: log "name mismatch" — system znalazl ale nazwa nie pasuje.
+        // Te wyszukiwania trafia do sekcji "wyceny z problemem" w raporcie admina.
+        logSearch({
+          query: adres,
+          oddzialKod: mojKod,
+          typPojazdu,
+          znalezionoAdres: displayName,
+          hasHouseNumber,
+          nameMatch: false,
+          zrodlo,
+          zalogowany,
+          wynikKm: null,
+          wynikKosztNetto: null,
+        });
         return;
       }
     }
     await runCalculation(coords, hasHouseNumber, displayName, adres);
-  }, [typPojazdu, adres, selectedCoords, runCalculation]);
+  }, [typPojazdu, adres, selectedCoords, runCalculation, mojKod, zrodlo, zalogowany]);
 
   // User potwierdzil "Tak, wylicz mimo to" w bannerze nameMatch — kontynuujemy wycene
   const confirmAndCalculate = useCallback(async () => {
@@ -727,27 +822,44 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
             {showSuggestions && suggestions.length > 0 && (
               <div
                 ref={suggestionsRef}
-                className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-auto"
+                className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-72 overflow-auto"
               >
-                {suggestions.map((s, i) => (
-                  <button
-                    key={i}
-                    className="w-full text-left px-3 py-2 hover:bg-muted transition-colors border-b last:border-0"
-                    onClick={() => handleSelectSuggestion(s)}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="text-base leading-tight" title={s.hasHouseNumber ? 'Konkretny adres z numerem' : 'Tylko ulica (bez numeru) — mniej precyzyjne'}>
-                        {s.hasHouseNumber === false ? '📌' : '📍'}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm">{s.name}</div>
-                        {s.subtitle && (
-                          <div className="text-[11px] text-muted-foreground">{s.subtitle}</div>
-                        )}
+                {suggestions.map((s, i) => {
+                  const isCache = s.source === 'cache';
+                  const isSewera = s.source === 'sewera';
+                  const icon = isCache ? '🏗️' : isSewera ? '🏢' : (s.hasHouseNumber === false ? '📌' : '📍');
+                  const iconTitle = isCache ? 'Historyczny adres dostawy Sewery' :
+                    isSewera ? 'Oddział Sewery' :
+                    s.hasHouseNumber === false ? 'Tylko ulica (bez numeru) — mniej precyzyjne' : 'Konkretny adres z numerem';
+                  const rowBg = isCache ? 'bg-green-50 dark:bg-green-950/20 hover:bg-green-100 dark:hover:bg-green-900/30' :
+                    isSewera ? 'bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/30' :
+                    'hover:bg-muted';
+                  return (
+                    <button
+                      key={i}
+                      className={`w-full text-left px-3 py-2 transition-colors border-b last:border-0 ${rowBg}`}
+                      onClick={() => handleSelectSuggestion(s)}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-base leading-tight" title={iconTitle}>{icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm">{s.name}</div>
+                          {s.subtitle && (
+                            <div className={`text-[11px] ${isCache ? 'text-green-700 dark:text-green-300 font-medium' : 'text-muted-foreground'}`}>
+                              {s.subtitle}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
+                {/* Legenda — pomoc dla usera ze kolory cos znacza */}
+                {suggestions.some(s => s.source === 'cache') && (
+                  <div className="px-3 py-1.5 text-[10px] text-muted-foreground bg-muted/50 border-t">
+                    🏗️ Historyczny adres Sewery · 🏢 Oddział · 📍 Mapa
+                  </div>
+                )}
               </div>
             )}
           </div>

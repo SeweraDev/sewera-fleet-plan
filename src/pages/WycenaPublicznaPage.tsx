@@ -79,7 +79,7 @@ export default function WycenaPublicznaPage() {
           </CardContent>
         </Card>
 
-        {oddzialNazwa && <WycenTransportTab oddzialNazwa={oddzialNazwa} />}
+        {oddzialNazwa && <WycenTransportTab oddzialNazwa={oddzialNazwa} zrodlo="publiczna_wycena" />}
 
         {!oddzialNazwa && (
           <Card>

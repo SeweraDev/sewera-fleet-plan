@@ -486,6 +486,12 @@ export interface SearchResult {
   /** Krotki tekst pomocniczy (np. "41-300 Dabrowa Gornicza, Gornicze")
    *  do wyswietlenia pod glowna nazwa w dropdownie. */
   subtitle?: string;
+  /** Zrodlo sugestii — UI uzywa do wyboru ikony:
+   *  - 'sewera': adres oddzialu Sewera (🏢)
+   *  - 'cache': historyczny adres dostawy z bazy zlecen (🏗️)
+   *  - 'photon': wynik z OpenStreetMap przez Photon (📍/📌)
+   */
+  source?: 'sewera' | 'cache' | 'photon';
 }
 
 // Helper: kod → nazwa (wewnętrzny)
@@ -503,6 +509,7 @@ const SEWERA_SUGGESTIONS: SearchResult[] = Object.entries(ODDZIAL_COORDS)
     lng: dane.lng,
     hasHouseNumber: true, // adresy oddzialow sa pelne (ul. + numer)
     subtitle: 'Oddział Sewera',
+    source: 'sewera' as const,
   }));
 
 export async function searchAddress(query: string): Promise<SearchResult[]> {
@@ -566,6 +573,7 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
         postcode: props.postcode,
         district: props.district,
         subtitle: subParts.join(', ') || undefined,
+        source: 'photon',
       });
     }
     // Sortuj wyniki Photon — z numerem domu PRZED bez numeru (precyzyjniejsze).
