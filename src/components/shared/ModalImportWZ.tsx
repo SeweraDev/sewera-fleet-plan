@@ -1662,9 +1662,14 @@ export function parseWZText(rawText: string): WZImportData {
         .replace(/Dup\s*likat/gi, " ")
         .replace(/Dokument\s+wydania/gi, " ");
       if (escapedWz) s = s.replace(new RegExp(escapedWz, "gi"), " ");
-      // "Miasto, DD.MM.YYYY" na początku linii (data wystawienia w stopce)
-      s = s.replace(/^\s*[A-ZŁŚŻŹĆ][A-Za-ząęółśżźćń]+,\s*\d{1,2}\.\d{1,2}\.\d{4}\s+/, " ");
-      return s.replace(/\s{2,}/g, " ").trim();
+      // "Miasto, DD.MM.YYYY" gdziekolwiek (data wystawienia w stopce)
+      s = s.replace(/[A-ZŁŚŻŹĆ][A-Za-ząęółśżźćń]+,\s*\d{1,2}\.\d{1,2}\.\d{4}/g, " ");
+      // Osierocone separatory ";" pozostałe po wycięciu części stopki
+      s = s.replace(/\s*;\s*/g, " ");
+      return s
+        .replace(/\s{2,}/g, " ")
+        .replace(/^[\s;,]+|[\s;,]+$/g, "")
+        .trim();
     };
     const afterLines: string[] = [];
     for (let i = uwagiIdx + 1; i < lines.length; i++) {
