@@ -278,16 +278,9 @@ export function DostepnoscStep({
             <div className="flex-1">
               <p className={`text-sm font-semibold ${showSavings ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'}`}>
                 {showSavings
-                  ? `Inny oddział byłby tańszy o ${fmtPLN(Math.round(cmp.savings!))}`
+                  ? `Koszty z najbliższego oddziału (${cmp.cheapest!.oddzialNazwa}) byłyby tańsze o ${fmtPLN(Math.round(cmp.savings!))}`
                   : `Ten oddział (${oddzialNazwa}) jest najlepszy dla tego adresu`}
               </p>
-              {showSavings && (
-                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                  Adres dostawy jest bliżej oddziału {cmp.cheapest!.oddzialNazwa} (informacyjnie).
-                  Zlecenie i tak zostanie utworzone w Twoim oddziale, żeby marża i koszt transportu
-                  pozostały razem.
-                </p>
-              )}
             </div>
           </div>
 
