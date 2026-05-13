@@ -10,6 +10,7 @@ import { useOddzialy } from '@/hooks/useOddzialy';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { toast } from 'sonner';
+import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
 import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
 import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
@@ -168,6 +169,29 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
     }, forceVerify);
   };
 
+  // Po imporcie WZ z PDF/OCR/Paste — wyciągnij prefix oddziału z numeru WZ lub
+  // zamówienia. Jeśli inny niż aktualnie wybrany — toast z akcją zmiany.
+  // Mapowanie prefiksów: KK→KAT, RE→R, SO→SOS, OM→OS, reszta identyczna.
+  const handleWzImported = useCallback((numer_wz: string | null, nr_zamowienia: string | null) => {
+    const detectedKod = wyciagnijOddzialZNumeru(numer_wz, nr_zamowienia);
+    if (!detectedKod) return; // nieznany prefix → user uzupełnia ręcznie
+    const currentOddzial = oddzialy.find(o => o.id === oddzialId);
+    const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
+    if (currentKod === detectedKod) return; // ten sam oddział — nie pytaj
+    const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
+    if (!detectedOddzial) return;
+    toast.warning(
+      `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
+      {
+        action: {
+          label: `Zmień na ${detectedOddzial.nazwa}`,
+          onClick: () => setOddzialId(detectedOddzial.id),
+        },
+        duration: 10000,
+      },
+    );
+  }, [oddzialId, oddzialy]);
+
   return (
     <Card>
       <CardHeader>
@@ -203,6 +227,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             typPojazdu={typPojazdu}
             onBulkSubmit={handleBulkSubmit}
             bulkSubmitting={bulkSubmitting}
+            onWzImported={handleWzImported}
           />
         )}
         {step === 4 && oddzialId && (

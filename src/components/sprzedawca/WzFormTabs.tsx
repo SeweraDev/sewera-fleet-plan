@@ -28,6 +28,11 @@ interface WzFormTabsProps {
    *  Zdefiniowane → tab "Wiele PDF" jest dostępny. */
   onBulkSubmit?: (wzListPerZlecenie: WzInput[][]) => Promise<void>;
   bulkSubmitting?: boolean;
+  /** Callback wywoływany po imporcie z PDF/OCR/Paste — przekazuje numery
+   *  dokumentu żeby parent mógł rozpoznać oddział wystawiający (przez
+   *  `wyciagnijOddzialZNumeru` z `lib/oddzialy-geo`) i zaproponować zmianę
+   *  oddziału jeśli różni się od aktualnie wybranego. */
+  onWzImported?: (numer_wz: string | null, nr_zamowienia: string | null) => void;
 }
 
 
@@ -1752,7 +1757,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
   );
 }
 
-export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit, typPojazdu, onBulkSubmit, bulkSubmitting }: WzFormTabsProps) {
+export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit, typPojazdu, onBulkSubmit, bulkSubmitting, onWzImported }: WzFormTabsProps) {
   const [activeTab, setActiveTab] = useState<string>('reczne');
 
   // Auto-klasyfikacja z typu pojazdu — gdy user wybrał konkretny typ (nie 'bez_preferencji'),
@@ -1770,6 +1775,8 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
   // zakładkę 'Ręcznie' (gdzie user widzi swoje dodane WZ) + toast potwierdzający.
   // Dzięki temu po kliknięciu 'Użyj tych danych' user NIE zostaje zagubiony
   // na pustym ekranie uploadu OCR/PDF — widzi od razu że dane zostały zapisane.
+  // Plus notyfikacja parent (Dashboard) o numerach dokumentu — żeby mógł
+  // wykryć oddział wystawiający i zaproponować zmianę gdy różny od wybranego.
   const setWzListFromImport = useCallback((next: WzInput[]) => {
     // Jeśli mamy auto-klasyfikację, nadpisz ją na każdym importowanym WZ (parser
     // mógł wstawić własną, ale user explicit wskazał typ pojazdu — jego intencja
@@ -1778,7 +1785,10 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
     setWzList(final);
     setActiveTab('reczne');
     toast.success('✅ WZ dodane do listy — sprawdź w zakładce Ręcznie');
-  }, [setWzList, autoKlas]);
+    if (onWzImported && final.length > 0) {
+      onWzImported(final[0].numer_wz ?? null, final[0].nr_zamowienia ?? null);
+    }
+  }, [setWzList, autoKlas, onWzImported]);
 
   return (
     <div className="space-y-4">

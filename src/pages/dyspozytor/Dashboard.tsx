@@ -23,6 +23,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
+import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
 import { useKursyDnia } from '@/hooks/useKursyDnia';
 import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
 import { useZleceniaBezKursu } from '@/hooks/useZleceniaBezKursu';
@@ -1178,6 +1179,28 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
     create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, typ_klienta: typKlienta, dzien, preferowana_godzina: godzina, wz_list: wzList, pominieta_oszczednosc_pln: pominietaOszczednosc ?? null }, forceVerify);
   };
 
+  // Po imporcie WZ z PDF/OCR/Paste — wykryj prefix oddziału z numeru WZ lub
+  // zamówienia. Jeśli inny niż aktualnie wybrany — toast z akcją zmiany.
+  const handleWzImported = useCallback((numer_wz: string | null, nr_zamowienia: string | null) => {
+    const detectedKod = wyciagnijOddzialZNumeru(numer_wz, nr_zamowienia);
+    if (!detectedKod) return;
+    const currentOddzial = oddzialy.find(o => o.id === oddzialId);
+    const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
+    if (currentKod === detectedKod) return;
+    const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
+    if (!detectedOddzial) return;
+    toast.warning(
+      `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
+      {
+        action: {
+          label: `Zmień na ${detectedOddzial.nazwa}`,
+          onClick: () => setOddzialId(detectedOddzial.id),
+        },
+        duration: 10000,
+      },
+    );
+  }, [oddzialId, oddzialy]);
+
   return (
     <Card>
       <CardHeader><CardTitle className="text-lg">Nowe zlecenie — Krok {step}/4</CardTitle></CardHeader>
@@ -1189,7 +1212,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
         )}
         {step === 2 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step === 3 && (
-          <WzFormTabs wzList={wzList} setWzList={setWzList} error={error} submitting={submitting} onBack={() => setStep(2)} onSubmit={handleGoToCheck} typPojazdu={typPojazdu} onBulkSubmit={handleBulkSubmit} bulkSubmitting={bulkSubmitting} />
+          <WzFormTabs wzList={wzList} setWzList={setWzList} error={error} submitting={submitting} onBack={() => setStep(2)} onSubmit={handleGoToCheck} typPojazdu={typPojazdu} onBulkSubmit={handleBulkSubmit} bulkSubmitting={bulkSubmitting} onWzImported={handleWzImported} />
         )}
         {step === 4 && oddzialId && (
           <DostepnoscStep oddzialId={oddzialId}

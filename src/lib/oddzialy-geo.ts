@@ -43,6 +43,65 @@ export const ODDZIAL_COORDS: Record<string, { lat: number; lng: number; adres: s
   TG:  { lat: 50.4428, lng: 18.8679, adres: 'ul. Nakielska 24, 42-600 Tarnowskie Góry' },
 };
 
+/**
+ * Mapowanie prefiksu w numerze dokumentu (Ekonom) → kod oddziału w bazie.
+ *
+ * Dokumenty Sewery (WZ, WZS, PZ, zamówienia R5/R7) niosą w numerze prefiks
+ * oddziału wystawiającego, np. "WZ GL/312/26/05/0008451" → "GL", lub
+ * "R5/RE/2026/05/00007" → "RE" (drugi segment).
+ *
+ * 4 prefiksy różnią się od kodu bazy (KK/RE/SO/OM), pozostałe 4 są identyczne.
+ * Potwierdzone przez usera 13.05.2026 na realnych dokumentach.
+ */
+export const PREFIKS_DOKUMENTU_TO_KOD: Record<string, string> = {
+  KK: 'KAT',  // Katowice
+  RE: 'R',    // Redystrybucja (ten sam adres co KAT)
+  SO: 'SOS',  // Sosnowiec
+  OM: 'OS',   // Oświęcim
+  GL: 'GL',   // Gliwice (identyczny)
+  TG: 'TG',   // Tarnowskie Góry (identyczny)
+  CH: 'CH',   // Chrzanów (identyczny)
+  DG: 'DG',   // Dąbrowa Górnicza (identyczny)
+};
+
+/**
+ * Wyciąga kod oddziału wystawiającego z numeru dokumentu (WZ/WZS/PZ lub zamówienie).
+ *
+ * Priorytet: najpierw numer WZ (najpewniejszy), potem numer zamówienia.
+ *
+ * Format WZ:        "WZ SO/212/26/04/0013513"   → prefix "SO" → "SOS"
+ * Format WZS:       "WZS KK/149/26/05/0000026"  → prefix "KK" → "KAT"
+ * Format PZ:        "PZ DG/.../..."             → prefix "DG" → "DG"
+ * Format zamówienia: "R5/RE/2026/05/00007"     → drugi segment "RE" → "R"
+ *                    "R7/SO/2026/04/00139"     → drugi segment "SO" → "SOS"
+ *
+ * @returns kod oddziału (KAT/R/SOS/GL/DG/TG/CH/OS) lub null gdy nie udało się rozpoznać
+ */
+export function wyciagnijOddzialZNumeru(
+  numer_wz?: string | null,
+  nr_zamowienia?: string | null,
+): string | null {
+  // 1. Spróbuj z numeru WZ — pierwszy segment po "WZ/WZS/PZ "
+  if (numer_wz) {
+    const m = numer_wz.match(/^(?:WZS?|PZ)\s+([A-Z]{2})\b/i);
+    if (m) {
+      const prefix = m[1].toUpperCase();
+      const kod = PREFIKS_DOKUMENTU_TO_KOD[prefix];
+      if (kod) return kod;
+    }
+  }
+  // 2. Spróbuj z numeru zamówienia — drugi segment po "R5/" lub "R7/" / "T7/" / "K7/" / "O7/"
+  if (nr_zamowienia) {
+    const m = nr_zamowienia.match(/^[A-Z]\d?\s*\/\s*([A-Z]{2})\b/i);
+    if (m) {
+      const prefix = m[1].toUpperCase();
+      const kod = PREFIKS_DOKUMENTU_TO_KOD[prefix];
+      if (kod) return kod;
+    }
+  }
+  return null;
+}
+
 // Mapowanie nazwa oddziału → kod
 export const NAZWA_TO_KOD: Record<string, string> = {
   'Katowice': 'KAT',
