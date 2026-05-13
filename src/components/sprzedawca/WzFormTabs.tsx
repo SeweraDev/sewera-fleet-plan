@@ -19,7 +19,9 @@ interface WzFormTabsProps {
   setWzList: (wz: WzInput[]) => void;
   error: string | null;
   submitting: boolean;
-  onBack: () => void;
+  /** Opcjonalne — gdy ten widok jest pierwszym krokiem (po refactorze 13.05),
+   *  przycisk "Wstecz" jest ukryty. */
+  onBack?: () => void;
   onSubmit: () => void;
   /** Typ pojazdu wybrany w kroku 2 (TypPojazduStep). Gdy konkretny typ —
    *  klasyfikacja jest auto-ustawiana z tego typu i ukrywana w UI.
@@ -1841,13 +1843,13 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
       {error && <p className="text-sm text-destructive">{error}</p>}
       {activeTab !== 'pdf-bulk' && (
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onBack}>← Wstecz</Button>
+          {onBack && <Button variant="outline" onClick={onBack}>← Wstecz</Button>}
           <Button onClick={onSubmit} disabled={submitting}>
-            {submitting ? 'Wysyłanie...' : 'Sprawdź dostępność →'}
+            {submitting ? 'Wysyłanie...' : 'Dalej →'}
           </Button>
         </div>
       )}
-      {activeTab === 'pdf-bulk' && (
+      {activeTab === 'pdf-bulk' && onBack && (
         <div className="flex gap-2">
           <Button variant="outline" onClick={onBack} disabled={bulkSubmitting}>← Wstecz</Button>
         </div>

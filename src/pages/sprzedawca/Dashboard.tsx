@@ -130,8 +130,11 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
     }
   }, [oddzialId, dzien, godzina, typPojazdu, typKlienta, createBulkOne, onSuccess]);
 
-  const handleGoToCheck = () => {
-    // Klasyfikacja transportu jest OPCJONALNA — dyspozytor moze ja uzupelnic pozniej
+  // Walidacja WZ (kompletność pól) + przejście do kolejnego kroku.
+  // Po refactorze 13.05.2026: import WZ jest Krokiem 1, więc po walidacji
+  // przechodzimy do Kroku 2 (TypPojazduStep). Klasyfikacja zostaje opcjonalna —
+  // jeśli typ pojazdu zostanie wybrany w Kroku 2, klasyfikacja auto-uzupełni się.
+  const handleZatwierdzWZ = () => {
     const invalid = wzList.find(w => {
       if (!w.odbiorca || !w.masa_kg) return true;
       if (!w.adres || w.adres.trim().length < 5) return true;
@@ -151,7 +154,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       toast.error(`Uzupełnij: ${missing.join(', ')}`);
       return;
     }
-    setStep(4);
+    setStep(2);
   };
 
   const handleSubmit = (forceVerify: boolean, pominietaOszczednosc?: number | null) => {
@@ -211,38 +214,43 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
         <CardTitle className="text-lg">Nowe zlecenie — Krok {step}/4</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Krok 1: Import dokumentu WZ (refactor 13.05.2026 — zaczynamy od WZ
+            zamiast od oddziału/typu, bo z dokumentu auto-wypełnimy większość pól) */}
         {step === 1 && (
-          <TypPojazduStep
-            oddzialId={oddzialId} setOddzialId={setOddzialId}
-            typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
-            typKlienta={typKlienta} setTypKlienta={setTypKlienta}
-            oddzialy={oddzialy} loadingOddzialy={loadingOddzialy}
-            flota={flota} loadingFlota={loadingFlota}
-            onNext={() => setStep(2)}
-          />
-        )}
-        {step === 2 && (
-          <CzasDostawyStep
-            dzien={dzien} setDzien={setDzien}
-            godzina={godzina} setGodzina={setGodzina}
-            oddzialId={oddzialId}
-            typPojazdu={typPojazdu}
-            onBack={() => setStep(1)}
-            onNext={() => setStep(3)}
-          />
-        )}
-        {step === 3 && (
           <WzFormTabs
             wzList={wzList} setWzList={setWzList}
             error={error} submitting={submitting}
-            onBack={() => setStep(2)}
-            onSubmit={handleGoToCheck}
+            onSubmit={handleZatwierdzWZ}
             typPojazdu={typPojazdu}
             onBulkSubmit={handleBulkSubmit}
             bulkSubmitting={bulkSubmitting}
             onWzImported={handleWzImported}
           />
         )}
+        {/* Krok 2: Oddział + typ pojazdu + typ klienta (pre-wypełniony z WZ) */}
+        {step === 2 && (
+          <TypPojazduStep
+            oddzialId={oddzialId} setOddzialId={setOddzialId}
+            typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
+            typKlienta={typKlienta} setTypKlienta={setTypKlienta}
+            oddzialy={oddzialy} loadingOddzialy={loadingOddzialy}
+            flota={flota} loadingFlota={loadingFlota}
+            onBack={() => setStep(1)}
+            onNext={() => setStep(3)}
+          />
+        )}
+        {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag WZ lub default) */}
+        {step === 3 && (
+          <CzasDostawyStep
+            dzien={dzien} setDzien={setDzien}
+            godzina={godzina} setGodzina={setGodzina}
+            oddzialId={oddzialId}
+            typPojazdu={typPojazdu}
+            onBack={() => setStep(2)}
+            onNext={() => setStep(4)}
+          />
+        )}
+        {/* Krok 4: Sprawdzenie dostępności + banner kosztów + złóż zlecenie */}
         {step === 4 && oddzialId && (
           <DostepnoscStep
             oddzialId={oddzialId}
@@ -255,9 +263,9 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             onBack={() => setStep(3)}
             onSubmit={handleSubmit}
             submitting={submitting}
-            onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(2); }}
-            onChangeGodzina={(newGodzina) => { setGodzina(newGodzina); setStep(2); }}
-            onChangeOddzial={(newOddzialId) => { setOddzialId(newOddzialId); setStep(1); }}
+            onChangeDzien={(newDzien) => { setDzien(newDzien); setStep(3); }}
+            onChangeGodzina={(newGodzina) => { setGodzina(newGodzina); setStep(3); }}
+            onChangeOddzial={(newOddzialId) => { setOddzialId(newOddzialId); setStep(2); }}
           />
         )}
       </CardContent>

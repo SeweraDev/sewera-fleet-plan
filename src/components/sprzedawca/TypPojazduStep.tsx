@@ -31,6 +31,9 @@ interface TypPojazduStepProps {
   flota: { typ: string }[];
   loadingFlota: boolean;
   onNext: () => void;
+  /** Opcjonalny callback wstecz — używany gdy ten krok nie jest pierwszy
+   *  (po refactorze 13.05 ten krok jest Krokiem 2 — po imporcie WZ). */
+  onBack?: () => void;
 }
 
 export function TypPojazduStep({
@@ -40,6 +43,7 @@ export function TypPojazduStep({
   oddzialy, loadingOddzialy,
   flota, loadingFlota,
   onNext,
+  onBack,
 }: TypPojazduStepProps) {
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
   const [tab, setTab] = useState('pojazd');
@@ -197,7 +201,10 @@ export function TypPojazduStep({
         </Tabs>
       </div>
 
-      <Button onClick={onNext} disabled={!oddzialId || !typPojazdu || !typKlienta}>Dalej →</Button>
+      <div className="flex gap-2">
+        {onBack && <Button variant="outline" onClick={onBack}>← Wstecz</Button>}
+        <Button onClick={onNext} disabled={!oddzialId || !typPojazdu || !typKlienta}>Dalej →</Button>
+      </div>
     </div>
   );
 }
