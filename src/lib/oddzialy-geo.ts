@@ -154,11 +154,83 @@ export interface GeocodeDetailedResult {
    *  numer gdy query bez numeru). False gdy spadl na centroid ulicy/miasta — wtedy
    *  UI moze ostrzec usera ze trzeba wybrac sugestie z dropdownu. */
   hasHouseNumber: boolean;
+  /** True gdy slowa kluczowe z query usera (np. "romibud") znajduja sie w nazwie
+   *  znalezionego obiektu. False gdy Photon zwrocil COS INNEGO o tym samym miescie
+   *  (np. user pisze "romibud czerwionka" → Photon zwraca "Urzad Gminy Czerwionka").
+   *  UI musi wymagac potwierdzenia od usera zanim wyliczy koszt — fundamentalna
+   *  ochrona przed falszywa wycena. */
+  nameMatch: boolean;
   /** Sformatowana nazwa zwrocona przez Photon (ul. + nr + miasto). */
   displayName: string;
   postcode?: string;
   district?: string;
   city?: string;
+}
+
+/** Normalizacja slowa do porownania — lowercase + usuniecie polskich znakow + tylko alfanumeryczne.
+ *  Pozwala porownac "Łódź" z "lodz" itp. */
+function normalizeWord(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/ą/g, 'a').replace(/ć/g, 'c').replace(/ę/g, 'e').replace(/ł/g, 'l')
+    .replace(/ń/g, 'n').replace(/ó/g, 'o').replace(/ś/g, 's').replace(/ź/g, 'z').replace(/ż/g, 'z')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/** Wyciaga slowa kluczowe z query usera, pomijajac:
+ *  - kody pocztowe (5 cyfr)
+ *  - numery domow (do 4 cyfr opcjonalnie z litera)
+ *  - typowe prefixy adresowe (ul., al., pl., os.)
+ *  - slowa "Poland"/"Polska"
+ *  - krotkie slowa (<4 znakow)
+ *  Pozostale slowa to "nazwa" — np. "Romibud Czerwionka" → ["romibud", "czerwionka"].
+ */
+function extractQueryKeywords(query: string): string[] {
+  const cleaned = query
+    .replace(/\d{2}-?\d{3}/g, ' ') // kod pocztowy
+    .replace(/\b\d{1,4}[a-zA-Z]?\b/g, ' ') // numer domu
+    .toLowerCase();
+  const skipWords = new Set(['ul', 'ulica', 'al', 'aleja', 'pl', 'plac', 'os', 'osiedle', 'poland', 'polska', 'gmina', 'miasto']);
+  return cleaned
+    .split(/[\s,;\.\-]+/)
+    .map(normalizeWord)
+    .filter(w => w.length >= 4 && !skipWords.has(w));
+}
+
+/** Buduje "kontekst" znalezionego obiektu OSM ze wszystkich istotnych pol,
+ *  zeby latwo sprawdzic czy slowo z query w nim wystepuje. */
+function buildFeatureContext(props: any): string {
+  const parts = [
+    props.name,
+    props.street,
+    props.city,
+    props.district,
+    props.county,
+    props.locality,
+    props.state,
+    props.suburb,
+    props.postcode,
+  ];
+  return parts
+    .filter(Boolean)
+    .map(normalizeWord)
+    .join(' ');
+}
+
+/** Sprawdza czy WSZYSTKIE slowa kluczowe z query usera znajduja sie w kontekscie
+ *  znalezionego obiektu. Klucz do unikniecia "falszywej wyceny" gdy Photon trafil
+ *  w przypadkowy obiekt z tym samym miastem.
+ *
+ *  Przyklady:
+ *  - query "romibud czerwionka", feature "Urzad Gminy Czerwionka-Leszczyny" → false
+ *  - query "hadex tychy", feature "Hadex, ul. ... Tychy" → true
+ *  - query "ul. Kosciuszki 326 Katowice", feature "Kosciuszki 326, Katowice" → true
+ *  - query bez slow kluczowych (sam numer/kod) → true (nic do sprawdzenia)
+ */
+function checkNameMatch(queryKeywords: string[], props: any): boolean {
+  if (queryKeywords.length === 0) return true;
+  const context = buildFeatureContext(props);
+  return queryKeywords.every(w => context.includes(w));
 }
 
 // Wyciagnij numer domu z query (np. "Orla Bialego 29, 41-300" -> "29")
@@ -333,16 +405,21 @@ export async function geocodeAddressDetailed(adres: string): Promise<GeocodeDeta
     const [lng, lat] = best.geometry.coordinates;
     const props = best.properties || {};
     const hasHouseNumber = !!props.housenumber && (!wantedNumber || (props.housenumber || '').toLowerCase() === wantedNumber);
+    // Sprawdzenie czy nazwa znalezionego obiektu pasuje do tego co user wpisal.
+    // Klucz do unikniecia "falszywej wyceny" (np. "Romibud Czerwionka" → "Urzad Gminy Czerwionka")
+    const queryKeywords = extractQueryKeywords(queryBase);
+    const nameMatch = checkNameMatch(queryKeywords, props);
     const result: GeocodeDetailedResult = {
       lat,
       lng,
       hasHouseNumber,
+      nameMatch,
       displayName: formatDisplayName(props),
       postcode: props.postcode,
       district: props.district,
       city: props.city,
     };
-    console.log(`[geocode] OK: "${queryBase}" → ${result.displayName} (${lat}, ${lng}) precise=${hasHouseNumber}`);
+    console.log(`[geocode] OK: "${queryBase}" → ${result.displayName} (${lat}, ${lng}) precise=${hasHouseNumber} nameMatch=${nameMatch} keywords=[${queryKeywords.join(',')}]`);
     geocodeCache.set(cacheKey, result);
     return result;
   } catch (e) {

@@ -142,6 +142,18 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searching, setSearching] = useState(false);
+
+  // "Czy to ten adres?" — pokazywane gdy geocoder znalazl COS INNEGO niz user wpisal
+  // (np. user: "romibud czerwionka", Photon: "Urzad Gminy Czerwionka"). Wymaga
+  // potwierdzenia zanim kalkulator wyliczy koszt — fundamentalna ochrona przed
+  // falszywa wycena (Photon czesto trafia w urzad/poczte gdy POI klienta nie ma w OSM).
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    coords: { lat: number; lng: number };
+    hasHouseNumber: boolean;
+    displayName: string;
+    queryAdres: string;
+    alternatives: SearchResult[];
+  } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -164,6 +176,8 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
   const handleAdresChange = (val: string) => {
     setAdres(val);
     setSelectedCoords(null);
+    // Edycja pola → banner "czy to ten adres?" znika (nieaktualny dla nowego query)
+    if (pendingConfirm) setPendingConfirm(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     // GPS bypass — jesli user wkleil wspolrzedne lub link Google Maps,
@@ -600,26 +614,62 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
     }
 
     setError('');
+    setPendingConfirm(null);
 
     let coords: { lat: number; lng: number };
     let hasHouseNumber: boolean;
     let displayName: string;
     if (selectedCoords) {
+      // User wybral z dropdown autocomplete — widzial co wybiera, ufamy mu (skip nameMatch).
       coords = { lat: selectedCoords.lat, lng: selectedCoords.lng };
       hasHouseNumber = !!selectedCoords.hasHouseNumber;
       displayName = selectedCoords.displayName || adres;
     } else {
       const detailed = await geocodeAddressDetailed(adres);
       if (!detailed) {
-        setError('Nie udało się znaleźć adresu. Spróbuj podać bardziej szczegółowy adres (ulica, kod pocztowy, miasto).');
+        setError('Nie udało się znaleźć adresu. Spróbuj wpisać dokładny adres: nazwa firmy + miasto, lub ulica + numer (np. "Hadex Tychy" lub "ul. Kościuszki 326, Katowice").');
         return;
       }
       coords = { lat: detailed.lat, lng: detailed.lng };
       hasHouseNumber = detailed.hasHouseNumber;
       displayName = detailed.displayName;
+
+      // Ochrona przed falszywa wycena — jesli Photon znalazl COS INNEGO niz user wpisal
+      // (np. "Romibud Czerwionka" → "Urzad Gminy Czerwionka-Leszczyny"), wymagamy
+      // potwierdzenia. Pobieramy tez liste alternatyw z autocomplete.
+      if (!detailed.nameMatch) {
+        const alternatives = await searchAddress(adres);
+        setPendingConfirm({
+          coords,
+          hasHouseNumber,
+          displayName,
+          queryAdres: adres,
+          alternatives: alternatives.slice(0, 5),
+        });
+        setWyniki(null);
+        return;
+      }
     }
     await runCalculation(coords, hasHouseNumber, displayName, adres);
   }, [typPojazdu, adres, selectedCoords, runCalculation]);
+
+  // User potwierdzil "Tak, wylicz mimo to" w bannerze nameMatch — kontynuujemy wycene
+  const confirmAndCalculate = useCallback(async () => {
+    if (!pendingConfirm) return;
+    const pc = pendingConfirm;
+    setPendingConfirm(null);
+    await runCalculation(pc.coords, pc.hasHouseNumber, pc.displayName, pc.queryAdres);
+  }, [pendingConfirm, runCalculation]);
+
+  // User wybral alternatywe z bannera — przeliczamy dla wybranego punktu
+  const confirmAlternative = useCallback(async (s: SearchResult) => {
+    setAdres(s.name);
+    setSelectedCoords({ lat: s.lat, lng: s.lng, hasHouseNumber: s.hasHouseNumber, displayName: s.name });
+    setPendingConfirm(null);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    await runCalculation({ lat: s.lat, lng: s.lng }, !!s.hasHouseNumber, s.name, s.name);
+  }, [runCalculation]);
 
   // Wybor alternatywy z banera "bez numeru" — od razu przelicz dla wybranego punktu
   const selectAlternative = useCallback(async (s: SearchResult) => {
@@ -718,6 +768,83 @@ export function WycenTransportTab({ oddzialNazwa }: WycenTransportTabProps) {
         {error && (
           <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
             {error}
+          </div>
+        )}
+
+        {/* Banner "Czy to ten adres?" — ochrona przed falszywa wycena.
+            Photon trafil w inny obiekt z tym samym miastem (np. "Romibud Czerwionka"
+            → "Urzad Gminy Czerwionka"). User musi potwierdzic lub wybrac alternatywe. */}
+        {pendingConfirm && (
+          <div className="bg-red-50 dark:bg-red-950/30 border-2 border-red-400 dark:border-red-700 rounded-md p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="text-xl">⚠️</span>
+              <div className="flex-1 space-y-2">
+                <div className="font-semibold text-red-900 dark:text-red-100">
+                  Czy to na pewno ten adres?
+                </div>
+                <div className="text-sm space-y-1">
+                  <div>
+                    <span className="text-muted-foreground">Wpisałeś:</span>{' '}
+                    <strong>{pendingConfirm.queryAdres}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">System znalazł:</span>{' '}
+                    <strong className="text-red-900 dark:text-red-100">{pendingConfirm.displayName}</strong>
+                  </div>
+                </div>
+                <div className="text-xs text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/40 p-2 rounded">
+                  💡 Znaleziona lokalizacja może nie być tym czego szukasz. System
+                  szuka po mapie OpenStreetMap, w której nie wszystkie firmy są oznaczone.
+                  Zalecamy wpisać <strong>dokładny adres</strong> (ulica + numer + miasto) lub wybrać z alternatyw poniżej.
+                </div>
+              </div>
+            </div>
+
+            {pendingConfirm.alternatives.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold text-red-900 dark:text-red-100">
+                  Inne propozycje z mapy:
+                </div>
+                <div className="flex flex-col gap-1">
+                  {pendingConfirm.alternatives.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => confirmAlternative(s)}
+                      disabled={loading}
+                      className="text-left px-3 py-2 bg-white dark:bg-red-950/50 border border-red-300 dark:border-red-700 rounded hover:bg-red-50 dark:hover:bg-red-900/60 transition-colors disabled:opacity-50"
+                    >
+                      <div className="text-sm font-medium">📍 {s.name}</div>
+                      {s.subtitle && (
+                        <div className="text-[11px] text-red-700 dark:text-red-300">{s.subtitle}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPendingConfirm(null);
+                  inputRef.current?.focus();
+                }}
+                className="border-red-400 text-red-900 dark:text-red-100 hover:bg-red-100 dark:hover:bg-red-900/40"
+              >
+                ✏️ Popraw adres
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={confirmAndCalculate}
+                disabled={loading}
+                className="text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/40"
+              >
+                Wylicz mimo to (ryzyko niepoprawnej wyceny) →
+              </Button>
+            </div>
           </div>
         )}
 
