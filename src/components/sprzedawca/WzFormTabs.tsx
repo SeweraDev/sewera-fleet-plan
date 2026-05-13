@@ -1779,18 +1779,11 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
   // Plus notyfikacja parent (Dashboard) o numerach dokumentu — żeby mógł
   // wykryć oddział wystawiający i zaproponować zmianę gdy różny od wybranego.
   const setWzListFromImport = useCallback((next: WzInput[]) => {
-    // Auto-uzupełnienia:
-    //  - auto-klasyfikacja z typu pojazdu (jeśli user wybrał typ)
-    //  - "Bez palet" gdy parser zwrócił 0 palet (klient luźnym/karton)
-    //  - "Luźne/karton" gdy parser zwrócił 0 m³ (palety bez objętości)
-    // User może później odznaczyć w trybie Ręcznie.
-    const final = next.map(w => {
-      const updated: WzInput = { ...w };
-      if (autoKlas) updated.klasyfikacja = autoKlas;
-      if ((updated.ilosc_palet ?? 0) === 0 && !updated.bez_palet) updated.bez_palet = true;
-      if ((updated.objetosc_m3 ?? 0) === 0 && !updated.luzne_karton) updated.luzne_karton = true;
-      return updated;
-    });
+    // Jeśli mamy auto-klasyfikację, nadpisz ją na każdym importowanym WZ (parser
+    // mógł wstawić własną, ale user explicit wskazał typ pojazdu — jego intencja
+    // wygrywa). Wagę / m³ / palety pozostawiamy bez auto-check — gdy parser
+    // zwraca 0 to nie zawsze znaczy "nie ma" (może być błąd parsera).
+    const final = autoKlas ? next.map(w => ({ ...w, klasyfikacja: autoKlas })) : next;
     setWzList(final);
     setActiveTab('reczne');
     toast.success('✅ WZ dodane do listy — sprawdź w zakładce Ręcznie');
