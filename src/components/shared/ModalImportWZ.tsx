@@ -904,6 +904,7 @@ export function parseWZText(rawText: string): WZImportData {
 
     let rightName: string | null = null;
     const rightAddr: string[] = [];
+    let prevWasOddzial = false; // po "ODDZIAŁ X" kolejna linia z "ul." to adres tego oddzialu — tez lewa kolumna
     // Okno 10 linii (bylo 6) — REDYSTRYBUCJA + adres oddzialu wsuwaja prawa kolumne dalej.
     // Wieksze okno + Nr ewid jako "stop" zeby nie wciagnac sekcji "Adres dostawy" pod spodem.
     for (let i = mergedHeaderIdx + 1; i < Math.min(mergedHeaderIdx + 10, lines.length); i++) {
@@ -921,7 +922,17 @@ export function parseWZText(rawText: string): WZImportData {
       // UWAGA: zamiast \b uzywamy (?:\s|$) bo JS \b nie dziala po polskich literach
       // (Ł jest non-word, wiec po Ł nie ma word boundary). Bez tego "ODDZIAŁ KATOWICE"
       // by przeszlo i staloby sie odbiorca. Patrz PDF KK/112/26/04/0009963.
-      if (/^(?:REDYSTRYBUCJA|ODDZIAŁ)(?:\s|$)/i.test(l)) continue;
+      if (/^(?:REDYSTRYBUCJA|ODDZIAŁ)(?:\s|$)/i.test(l)) {
+        prevWasOddzial = true;
+        continue;
+      }
+      // Adres oddziału Sewery (linia "ul. ... MIASTO" zaraz po "ODDZIAŁ X") — lewa kolumna, skip.
+      // Generyczne — działa dla wszystkich oddziałów (GL: DOJAZDOWA, DG: Kasprzaka, CH: Śląska itd.)
+      if (prevWasOddzial && /^ul\.\s/i.test(l)) {
+        prevWasOddzial = false;
+        continue;
+      }
+      prevWasOddzial = false;
       // Faktyczny koniec sekcji dwukolumnowej (sekcje pojawiaja sie pod blokiem)
       if (/^Magazyn|^Forma\s+płatn|^Wydano|^Adres\s+dostawy|^e\s+wydaj/i.test(l)) break;
       if (/^HR\s*BDO:|^NR\s*BDO:/i.test(l) && (rightName || rightAddr.length > 0)) break;
