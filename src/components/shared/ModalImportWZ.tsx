@@ -1644,9 +1644,28 @@ export function parseWZText(rawText: string): WZImportData {
 
   // 9. uwagi — text after "Uwagi:" or "Uwagi dot. wysyłki:" up to "Na podstawie art."
   //    Skip "Nr zamówienia (systemowy):" and "Nr oferty:" lines
+  //    Multipage PDF: bierz OSTATNIE wystąpienie "Uwagi:" (na ostatniej stronie),
+  //    a z każdej linii wycinaj śmieci stopki/nagłówka strony (Proman/Ekonom, Duplikat itp.)
   let uwagi: string | null = null;
-  const uwagiIdx = lines.findIndex((l) => /^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(l));
+  let uwagiIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^Uwagi(?:\s+dot\.\s+wysy[łl]ki)?\s*:/i.test(lines[i])) { uwagiIdx = i; break; }
+  }
   if (uwagiIdx >= 0) {
+    const escapedWz = numer_wz ? numer_wz.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : null;
+    const stripPageJunk = (line: string): string => {
+      let s = line
+        .replace(/Strona\s+\d+\s+z\s+\d+/gi, " ")
+        .replace(/Wydruk\s+z\s+programu(?:\s+Ekonom)?/gi, " ")
+        .replace(/©\s*Proman\s+Sp\.\s*z\s*o\.?\s*o\.?\s*\.?/gi, " ")
+        .replace(/Modu[łl]\s+v\.\s*[\d.]+/gi, " ")
+        .replace(/Dup\s*likat/gi, " ")
+        .replace(/Dokument\s+wydania/gi, " ");
+      if (escapedWz) s = s.replace(new RegExp(escapedWz, "gi"), " ");
+      // "Miasto, DD.MM.YYYY" na początku linii (data wystawienia w stopce)
+      s = s.replace(/^\s*[A-ZŁŚŻŹĆ][A-Za-ząęółśżźćń]+,\s*\d{1,2}\.\d{1,2}\.\d{4}\s+/, " ");
+      return s.replace(/\s{2,}/g, " ").trim();
+    };
     const afterLines: string[] = [];
     for (let i = uwagiIdx + 1; i < lines.length; i++) {
       const l = lines[i];
@@ -1654,9 +1673,8 @@ export function parseWZText(rawText: string): WZImportData {
       if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
       if (/Nr\s+oferty/i.test(l)) continue;
       if (nr_zamowienia && l.trim() === nr_zamowienia) continue;
-      // Stopka Ekonoma (Proman): "Strona X z Y Wydruk z programu Ekonom © Proman Sp. z o.o.; ..."
-      if (/Strona\s+\d+\s+z\s+\d+|Wydruk\s+z\s+programu|Proman\s+Sp\.\s*z\s*o\.?\s*o/i.test(l)) continue;
-      afterLines.push(l);
+      const cleaned = stripPageJunk(l);
+      if (cleaned) afterLines.push(cleaned);
     }
     uwagi = afterLines.join("\n").trim() || null;
   }
