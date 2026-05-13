@@ -1214,7 +1214,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <Card>
-      <CardHeader><CardTitle className="text-lg">Nowe zlecenie — Krok {step}/4 <span className="text-xs text-muted-foreground font-normal">(v2)</span></CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-lg">Nowe zlecenie — Krok {step}/4</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         {/* Krok 1: Import dokumentu WZ (refactor 13.05.2026) */}
         {step === 1 && (
