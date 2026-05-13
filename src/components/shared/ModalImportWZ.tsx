@@ -30,9 +30,12 @@ export interface WZImportData {
   uwagi: string | null;
   typ_dokumentu: string | null;
   ma_adres_dostawy: boolean;
+  /** Pozycje z tabeli towarów (opcjonalne — niektóre źródła nie wypełniają).
+   *  Używane do auto-wyliczenia objętości m³ na podstawie wymiarów w opisie. */
+  pozycje?: Pozycja[];
 }
 
-interface Pozycja {
+export interface Pozycja {
   lp: number;
   kod_towaru: string;
   kod_producenta: string;
@@ -1832,9 +1835,13 @@ export function parseWZText(rawText: string): WZImportData {
   const odbiorcaFinal = odbiorca ? fixPolishOCROdbiorca(odbiorca) : odbiorca;
 
   // DEBUG: zaloguj wynik parsowania (F12 Console) — pomocne do diagnozy bug-ow OCR
+  // Pozycje z tabeli towarów — używane do auto-wyliczenia objętości m³
+  // (np. wełna z "wym 600x1000" + grubością w nazwie "150").
+  const pozycje = extractPozycje(lines);
+
   if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
     console.groupCollapsed("[parseWZText] result");
-    console.log({ numer_wz, nr_zamowienia, odbiorca: odbiorcaFinal, odbiorcaPrzedKorektaOCR: odbiorca, adres: adresFinal, adresPrzedKorektaOCR: adres, odbiornikAdres, tel, masa_kg });
+    console.log({ numer_wz, nr_zamowienia, odbiorca: odbiorcaFinal, odbiorcaPrzedKorektaOCR: odbiorca, adres: adresFinal, adresPrzedKorektaOCR: adres, odbiornikAdres, tel, masa_kg, pozycje });
     console.groupEnd();
   }
 
@@ -1851,7 +1858,132 @@ export function parseWZText(rawText: string): WZImportData {
     uwagi,
     typ_dokumentu: "WZ" as string | null,
     ma_adres_dostawy: false,
+    pozycje,
   };
+}
+
+/**
+ * Wyciąga pozycje z tabeli towarów WZ. Działa na typowy format Ekonom (Proman):
+ *
+ *   Lp. JM Ilość Kod towaru
+ *   Kod producenta
+ *   Kod
+ *   EAN
+ *   Il. po
+ *   korekt.
+ *   403714
+ *   101563022 (ISOVER)
+ *   5901644654510
+ *   1. ISOVER WEŁNA FASADOWA FASOTERM 150
+ *   ^=0,035 wym 600x1000 opak=1,2m2 / płyta wełna mineralna skalna
+ *   p=32opak
+ *   OPA 166 166
+ *   ...
+ *   Waga netto razem: / RAZEM:
+ *
+ * Sesja 13.05.2026.
+ */
+function extractPozycje(lines: string[]): Pozycja[] {
+  // Granice tabeli pozycji:
+  //   START: linia "Lp. JM Ilość Kod towaru" (lub samo "Lp." na początku)
+  //   END:   linia "Waga netto razem" / "RAZEM:" / "Os. upoważnione"
+  let startIdx = -1;
+  let endIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (startIdx < 0 && /^Lp\.\s+JM\s+Ilość/i.test(lines[i])) startIdx = i;
+    if (startIdx >= 0 && i > startIdx && /^(Waga\s+netto\s+razem|RAZEM\s*:|Os\.\s+upoważnione)/i.test(lines[i])) {
+      endIdx = i;
+      break;
+    }
+  }
+  if (startIdx < 0) return [];
+  if (endIdx < 0) endIdx = lines.length;
+
+  // Wewnątrz tabeli — szukaj linii zaczynających się od "N." (gdzie N to numer pozycji).
+  // Każda pozycja składa się z:
+  //   - linii "N. NAZWA TOWARU" (Lp + nazwa)
+  //   - linii opisu (nazwa dodatkowa) — do następnego "N." lub linii z JM
+  //   - linii "JM ILOSC ILOSC_PO_KOREKCIE" (OPA/SZT/KG/...)  -- czasem w tej samej linii co nazwa
+  const pozycje: Pozycja[] = [];
+  const JM_REGEX = /^(OPA|SZT|KG|MB|M2|M3|KPL|PCS|L|T|R|KART|PAR)\s+([\d,.]+)\s+([\d,.]+)\s*$/i;
+  const NAZWA_Z_JM = /^(\d+)\.\s+(.+?)\s+(OPA|SZT|KG|MB|M2|M3|KPL|PCS|L|T|R|KART|PAR)\s+([\d,.]+)\s+([\d,.]+)\s*$/i;
+  const NAZWA_BEZ_JM = /^(\d+)\.\s+(.+)$/;
+
+  // Bufor kodów (kod_towaru / kod_producenta / EAN) — zbierane PRZED pozycją.
+  let kodBuffer: string[] = [];
+
+  for (let i = startIdx + 1; i < endIdx; i++) {
+    const l = lines[i].trim();
+    if (!l) continue;
+    // Skip nagłówki tabeli ("Kod producenta", "Kod", "EAN", "Il. po", "korekt.")
+    if (/^(Nazwa\s+(?:towaru|dodatkowa)|Kod(?:\s+producenta)?|EAN|Il\.\s+po|korekt\.)$/i.test(l)) continue;
+
+    // Linia z JM w tej samej linii co nazwa: "2. USŁUGA TRANSPORTOWA SZT 1 1"
+    const inline = l.match(NAZWA_Z_JM);
+    if (inline) {
+      pozycje.push({
+        lp: parseInt(inline[1], 10),
+        kod_towaru: kodBuffer[0] || "",
+        kod_producenta: kodBuffer[1] || "",
+        kod_ean: kodBuffer[2] || "",
+        nazwa_towaru: inline[2].trim(),
+        nazwa_dodatkowa: "",
+        jm: inline[3].toUpperCase(),
+        ilosc: parseFloat((inline[5] || inline[4]).replace(",", ".")),
+      });
+      kodBuffer = [];
+      continue;
+    }
+
+    // Linia "N. nazwa" — nowa pozycja (bez JM tu, JM przyjdzie w kolejnych liniach)
+    const start = l.match(NAZWA_BEZ_JM);
+    if (start) {
+      // Zbierz opis i JM z kolejnych linii
+      const lp = parseInt(start[1], 10);
+      const nazwa = start[2].trim();
+      const opisLines: string[] = [];
+      let jm = "";
+      let ilosc = 0;
+      for (let j = i + 1; j < endIdx; j++) {
+        const ll = lines[j].trim();
+        if (!ll) continue;
+        // Skip nagłówki tabeli
+        if (/^(Nazwa\s+(?:towaru|dodatkowa)|Kod(?:\s+producenta)?|EAN|Il\.\s+po|korekt\.)$/i.test(ll)) continue;
+        // Nowa pozycja zaczyna się — kończymy zbieranie
+        if (NAZWA_BEZ_JM.test(ll) || NAZWA_Z_JM.test(ll)) break;
+        // JM + ilość: "OPA 166 166"
+        const jmM = ll.match(JM_REGEX);
+        if (jmM) {
+          jm = jmM[1].toUpperCase();
+          // Bierzemy ilość PO KOREKCIE (drugą liczbę) jeśli jest, inaczej pierwszą
+          ilosc = parseFloat((jmM[3] || jmM[2]).replace(",", "."));
+          i = j; // przeskocz do linii z JM
+          break;
+        }
+        // To opis — dołącz
+        opisLines.push(ll);
+      }
+      pozycje.push({
+        lp,
+        kod_towaru: kodBuffer[0] || "",
+        kod_producenta: kodBuffer[1] || "",
+        kod_ean: kodBuffer[2] || "",
+        nazwa_towaru: nazwa,
+        nazwa_dodatkowa: opisLines.join(" "),
+        jm,
+        ilosc,
+      });
+      kodBuffer = [];
+      continue;
+    }
+
+    // Jeśli to nie nagłówek, nie pozycja, nie JM — buforuj jako kod (max 3 linie: kod_towaru, kod_producenta, EAN)
+    if (kodBuffer.length < 3) {
+      kodBuffer.push(l);
+    }
+  }
+
+  return pozycje;
 }
 
 /* ─── Paste Tab ─── */

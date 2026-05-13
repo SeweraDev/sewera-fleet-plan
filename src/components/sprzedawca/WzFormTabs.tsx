@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong } from '@/lib/klasyfikacje';
 import { SnipLiveOverlay } from '@/components/shared/SnipLiveOverlay';
+import { wyliczObjetoscZPozycji } from '@/lib/wzAutoFill';
 
 interface WzFormTabsProps {
   wzList: WzInput[];
@@ -347,6 +348,20 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       setDocType(type === 'unknown' ? 'wz' : type);
       setDocAutoDetected(autoDetected);
 
+      // Auto-wyliczenie m³ z pozycji towarów (gdy parser zwrócił 0 a są pozycje
+      // z wymiarami w opisie typu "wym 600x1000" + grubością w nazwie). Sesja 13.05.2026.
+      let finalObjetosc = mapped.objetosc_m3 || 0;
+      if (finalObjetosc === 0 && mapped.pozycje && mapped.pozycje.length > 0) {
+        const calc = wyliczObjetoscZPozycji(mapped.pozycje);
+        if (calc.rozpoznane > 0) {
+          finalObjetosc = Math.round(calc.m3Total * 100) / 100;
+          const detail = calc.nierozpoznane > 0
+            ? ` (${calc.rozpoznane}/${calc.rozpoznane + calc.nierozpoznane} pozycji)`
+            : '';
+          toast.info(`Wyliczono ${finalObjetosc} m³ z pozycji towarów${detail}`, { duration: 6000 });
+        }
+      }
+
       setPreview({
         numer_wz: mapped.numer_wz || '',
         nr_zamowienia: mapped.nr_zamowienia || '',
@@ -354,7 +369,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         adres: mapped.adres || '',
         tel: combineKontaktTel(mapped.osoba_kontaktowa, mapped.tel),
         masa_kg: mapped.masa_kg || 0,
-        objetosc_m3: mapped.objetosc_m3 || 0,
+        objetosc_m3: finalObjetosc,
         ilosc_palet: mapped.ilosc_palet || 0,
         bez_palet: false,
         luzne_karton: false,
@@ -373,6 +388,11 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     const { data: mapped } = await parseDocument(rawTextRef.current, { forceType: newType });
     setDocType(newType);
     setDocAutoDetected(false);
+    let finalObjetosc = mapped.objetosc_m3 || 0;
+    if (finalObjetosc === 0 && mapped.pozycje && mapped.pozycje.length > 0) {
+      const calc = wyliczObjetoscZPozycji(mapped.pozycje);
+      if (calc.rozpoznane > 0) finalObjetosc = Math.round(calc.m3Total * 100) / 100;
+    }
     setPreview({
       numer_wz: mapped.numer_wz || '',
       nr_zamowienia: mapped.nr_zamowienia || '',
@@ -380,7 +400,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       adres: mapped.adres || '',
       tel: combineKontaktTel(mapped.osoba_kontaktowa, mapped.tel),
       masa_kg: mapped.masa_kg || 0,
-      objetosc_m3: mapped.objetosc_m3 || 0,
+      objetosc_m3: finalObjetosc,
       ilosc_palet: mapped.ilosc_palet || 0,
       bez_palet: false,
       luzne_karton: false,
