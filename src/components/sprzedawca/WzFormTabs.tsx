@@ -1781,7 +1781,9 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 }
 
 export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSubmit, typPojazdu, onBulkSubmit, bulkSubmitting, onWzImported }: WzFormTabsProps) {
-  const [activeTab, setActiveTab] = useState<string>('reczne');
+  // Default tab: PDF — najczęstszy use case (po refactorze 13.05 ten widok jest
+  // Krokiem 1, czyli pierwszą rzeczą którą user widzi przy nowym zleceniu).
+  const [activeTab, setActiveTab] = useState<string>('pdf');
 
   // Auto-klasyfikacja z typu pojazdu — gdy user wybrał konkretny typ (nie 'bez_preferencji'),
   // klasyfikacja jest jednoznacznie wyprowadzana i nie trzeba jej wpisywać ręcznie.
