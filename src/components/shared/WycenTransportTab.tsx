@@ -695,9 +695,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
       // ensureGeocoded zamiast geocodeAddressDetailed — najpierw sprawdza geocode_cache
       // w DB (cache miedzy wszystkimi userami), potem Photon. Zapisuje TYLKO gdy
       // nameMatch=true, zeby nie zaśmiecać bazy niepoprawnymi mapowaniami.
-      console.log('[v13.5c handleWylicz] geocoding:', adres);
       const detailed = await ensureGeocoded(adres);
-      console.log('[v13.5c handleWylicz] result:', detailed);
       if (!detailed) {
         setError('Nie udało się znaleźć adresu. Spróbuj wpisać dokładny adres: nazwa firmy + miasto, lub ulica + numer (np. "Hadex Tychy" lub "ul. Kościuszki 326, Katowice").');
         // Statystyki: log nieudane wyszukiwanie (zeby admin widzial jakie frazy nie sa znajdowane)
@@ -789,7 +787,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">💰 Wyceń transport <span className="text-xs text-amber-600 ml-2">(v13.5c)</span></CardTitle>
+        <CardTitle className="text-lg">💰 Wyceń transport</CardTitle>
         <p className="text-sm text-muted-foreground">
           Wylicz koszt dostawy z oddziału do adresu budowy. Cennik od 1.04.2026.
         </p>
