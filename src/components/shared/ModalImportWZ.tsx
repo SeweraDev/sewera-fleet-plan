@@ -788,13 +788,10 @@ export function parseWZText(rawText: string): WZImportData {
   // poleceniem: copy(window.__lastWZ.lines.join('\n'))
   if (typeof window !== "undefined" && (window as any).__DEBUG_WZ !== false) {
     (window as any).__lastWZ = { rawText, text, lines };
-    try { (window.top as any).__lastWZ = { rawText, text, lines }; } catch {}
     console.groupCollapsed("[parseWZText] raw input");
     console.log("Lines:", lines);
     console.log("→ aby skopiować raw text, wpisz w konsoli: copy(window.__lastWZ.lines.join('\\n'))");
     console.groupEnd();
-    // Dodatkowy log z pełnym tekstem do łatwego kopiowania (dump między ===)
-    console.log("=== parseWZText RAW DUMP START ===\n" + lines.join("\n") + "\n=== parseWZText RAW DUMP END ===");
   }
 
   // 1. nr_wz — match WZ, WZS, or PZ prefixed document numbers
