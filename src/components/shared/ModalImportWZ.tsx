@@ -1654,6 +1654,8 @@ export function parseWZText(rawText: string): WZImportData {
       if (/Nr\s+zam(?:ówienia)?\s*\(systemowy\)/i.test(l)) continue;
       if (/Nr\s+oferty/i.test(l)) continue;
       if (nr_zamowienia && l.trim() === nr_zamowienia) continue;
+      // Stopka Ekonoma (Proman): "Strona X z Y Wydruk z programu Ekonom © Proman Sp. z o.o.; ..."
+      if (/Strona\s+\d+\s+z\s+\d+|Wydruk\s+z\s+programu|Proman\s+Sp\.\s*z\s*o\.?\s*o/i.test(l)) continue;
       afterLines.push(l);
     }
     uwagi = afterLines.join("\n").trim() || null;
