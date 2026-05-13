@@ -7,6 +7,7 @@ import { ProtectedRoute } from "@/components/shared/ProtectedRoute";
 import LoginPage from "@/pages/LoginPage";
 import UnauthorizedPage from "@/pages/UnauthorizedPage";
 import AdminUzytkownicy from "@/pages/admin/Uzytkownicy";
+import StatystykiWyceny from "@/pages/admin/StatystykiWyceny";
 import ZarzadDashboard from "@/pages/zarzad/Dashboard";
 import DyspozytorDashboard from "@/pages/dyspozytor/Dashboard";
 import SprzedawcaDashboard from "@/pages/sprzedawca/Dashboard";
@@ -36,6 +37,13 @@ const App = () => (
           <Route path="/admin" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <AdminUzytkownicy />
+            </ProtectedRoute>
+          } />
+
+          {/* Statystyki wyceny — tylko admin (Grzegorz) */}
+          <Route path="/admin/statystyki-wyceny" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <StatystykiWyceny />
             </ProtectedRoute>
           } />
 
