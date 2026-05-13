@@ -9,7 +9,6 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   ODDZIAL_COORDS,
   NAZWA_TO_KOD,
-  geocodeAddressDetailed,
   getRouteAlternatives,
   getRouteGeometry,
   parseCoordsFromQuery,
@@ -693,7 +692,10 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
       hasHouseNumber = !!selectedCoords.hasHouseNumber;
       displayName = selectedCoords.displayName || adres;
     } else {
-      const detailed = await geocodeAddressDetailed(adres);
+      // ensureGeocoded zamiast geocodeAddressDetailed — najpierw sprawdza geocode_cache
+      // w DB (cache miedzy wszystkimi userami), potem Photon. Zapisuje TYLKO gdy
+      // nameMatch=true, zeby nie zaśmiecać bazy niepoprawnymi mapowaniami.
+      const detailed = await ensureGeocoded(adres);
       if (!detailed) {
         setError('Nie udało się znaleźć adresu. Spróbuj wpisać dokładny adres: nazwa firmy + miasto, lub ulica + numer (np. "Hadex Tychy" lub "ul. Kościuszki 326, Katowice").');
         // Statystyki: log nieudane wyszukiwanie (zeby admin widzial jakie frazy nie sa znajdowane)

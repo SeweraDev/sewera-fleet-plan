@@ -91,20 +91,30 @@ export async function searchKlienciCache(query: string): Promise<KlientCacheResu
 }
 
 /**
- * Geocode'uje adres jesli nie ma w cache. Po sukcesie zapisuje w geocode_cache.
+ * Geocode'uje adres jesli nie ma w cache. Po sukcesie zapisuje w geocode_cache —
+ * ALE TYLKO gdy nameMatch=true (nazwa znalezionego obiektu pasuje do query).
+ *
+ * Dlaczego nie zapisujemy gdy nameMatch=false:
+ *   Gdyby zapisac "romibud czerwionka" → {lat, lng Urzedu Gminy}, NASTEPNY user
+ *   wpisujac to samo dostalby z cache te same zle wspolrzedne BEZ ostrzezenia
+ *   (bo cache=zaufane). Truje to baze niepoprawnymi mapowaniami i propaguje blad.
+ *   Cache MUSI trzymac tylko potwierdzone mapowania.
+ *
  * Idempotentne — drugi raz wywolane dla tego samego adresu zwroci z cache.
  *
- * Zwraca {lat, lng, hasHouseNumber, displayName} lub null gdy Photon nic nie znalazl.
+ * Zwraca {lat, lng, hasHouseNumber, nameMatch, displayName} lub null gdy Photon nic nie znalazl.
  */
 export async function ensureGeocoded(adres: string): Promise<{
   lat: number;
   lng: number;
   hasHouseNumber: boolean;
+  nameMatch: boolean;
   displayName: string;
 } | null> {
   const norm = normalizeAdres(adres);
 
-  // 1. Sprobuj z cache DB
+  // 1. Sprobuj z cache DB. Wszystko w cache jest "potwierdzone" (nameMatch=true bylo
+  //    przy zapisie), wiec mozemy zwrocic nameMatch=true bezwarunkowo.
   const { data: cached } = await supabase
     .from('geocode_cache' as any)
     .select('lat, lng, has_house_number, display_name')
@@ -113,7 +123,7 @@ export async function ensureGeocoded(adres: string): Promise<{
 
   if (cached) {
     const row = cached as any;
-    // Aktualizuj last_used_at + uses_count (best-effort, nie blokujemy na bledzie)
+    // Aktualizuj last_used_at (best-effort, nie blokujemy na bledzie)
     supabase
       .from('geocode_cache' as any)
       .update({ last_used_at: new Date().toISOString() })
@@ -123,6 +133,7 @@ export async function ensureGeocoded(adres: string): Promise<{
       lat: row.lat,
       lng: row.lng,
       hasHouseNumber: row.has_house_number,
+      nameMatch: true,
       displayName: row.display_name || adres,
     };
   }
@@ -131,23 +142,29 @@ export async function ensureGeocoded(adres: string): Promise<{
   const detailed = await geocodeAddressDetailed(adres);
   if (!detailed) return null;
 
-  // 3. Zapisz w cache DB (best-effort — jak sie nie uda, nic strasznego, zostanie cache w memory)
-  supabase
-    .from('geocode_cache' as any)
-    .insert({
-      adres_norm: norm,
-      adres_oryginalny: adres,
-      lat: detailed.lat,
-      lng: detailed.lng,
-      has_house_number: detailed.hasHouseNumber,
-      display_name: detailed.displayName,
-    })
-    .then(() => {}, () => {});
+  // 3. Zapisz w cache DB — TYLKO gdy nameMatch=true (zob. wyjasnienie na gorze funkcji).
+  //    Bez tego sprawdzenia trulibysmy baze "Romibud → Urzad Gminy" i propagowali blad.
+  if (detailed.nameMatch) {
+    supabase
+      .from('geocode_cache' as any)
+      .insert({
+        adres_norm: norm,
+        adres_oryginalny: adres,
+        lat: detailed.lat,
+        lng: detailed.lng,
+        has_house_number: detailed.hasHouseNumber,
+        display_name: detailed.displayName,
+      })
+      .then(() => {}, () => {});
+  } else {
+    console.log(`[geocode-cache] SKIP zapisu (nameMatch=false): "${adres}" → "${detailed.displayName}"`);
+  }
 
   return {
     lat: detailed.lat,
     lng: detailed.lng,
     hasHouseNumber: detailed.hasHouseNumber,
+    nameMatch: detailed.nameMatch,
     displayName: detailed.displayName,
   };
 }
