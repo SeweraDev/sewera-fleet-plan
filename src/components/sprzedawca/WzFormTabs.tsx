@@ -350,19 +350,23 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       setDocType(type === 'unknown' ? 'wz' : type);
       setDocAutoDetected(autoDetected);
 
-      // Auto-wyliczenie m³ z pozycji towarów (gdy parser zwrócił 0 a są pozycje
-      // z wymiarami w opisie typu "wym 600x1000" + grubością w nazwie). Sesja 13.05.2026.
-      let finalObjetosc = mapped.objetosc_m3 || 0;
-      if (finalObjetosc === 0 && mapped.pozycje && mapped.pozycje.length > 0) {
+      // Auto-wyliczenie m³ ZAWSZE z pozycji towarów (wymiary opakowań fizycznych).
+      // Wartość z podsumowania PDF (objetosc_m3 z Ekonoma) jest fallbackiem tylko gdy
+      // żadnej pozycji nie da się wyliczyć (np. WZ z luźnym towarem).
+      // Decyzja 14.05.2026: do planowania transportu liczy się fizyczna objętość auta,
+      // nie wartość księgowa z magazynu Sewery.
+      let finalObjetosc = 0;
+      if (mapped.pozycje && mapped.pozycje.length > 0) {
         const calc = wyliczObjetoscZPozycji(mapped.pozycje);
         if (calc.rozpoznane > 0) {
           finalObjetosc = Math.round(calc.m3Total * 100) / 100;
           const detail = calc.nierozpoznane > 0
             ? ` (${calc.rozpoznane}/${calc.rozpoznane + calc.nierozpoznane} pozycji)`
             : '';
-          toast.info(`Wyliczono ${finalObjetosc} m³ z pozycji towarów${detail}`, { duration: 6000 });
+          toast.info(`Wyliczono ${finalObjetosc} m³ z wymiarów opakowań${detail}`, { duration: 6000 });
         }
       }
+      if (finalObjetosc === 0) finalObjetosc = mapped.objetosc_m3 || 0;
 
       setPreview({
         numer_wz: mapped.numer_wz || '',
@@ -390,11 +394,12 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
     const { data: mapped } = await parseDocument(rawTextRef.current, { forceType: newType });
     setDocType(newType);
     setDocAutoDetected(false);
-    let finalObjetosc = mapped.objetosc_m3 || 0;
-    if (finalObjetosc === 0 && mapped.pozycje && mapped.pozycje.length > 0) {
+    let finalObjetosc = 0;
+    if (mapped.pozycje && mapped.pozycje.length > 0) {
       const calc = wyliczObjetoscZPozycji(mapped.pozycje);
       if (calc.rozpoznane > 0) finalObjetosc = Math.round(calc.m3Total * 100) / 100;
     }
+    if (finalObjetosc === 0) finalObjetosc = mapped.objetosc_m3 || 0;
     setPreview({
       numer_wz: mapped.numer_wz || '',
       nr_zamowienia: mapped.nr_zamowienia || '',
