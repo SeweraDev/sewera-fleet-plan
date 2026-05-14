@@ -133,6 +133,17 @@ export function domyslnyDzienDostawy(): string {
  *
  * @returns objętość w m³ lub null gdy nie udało się wyliczyć
  */
+/** Frakcja palety dla pozycji — z opisu "p=Xszt" lub "p=Xopak". 0 gdy brak. */
+export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
+  if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return 0;
+  const opis = p.nazwa_dodatkowa || '';
+  const pM = opis.match(/\bp\s*=\s*(\d+)\s*(?:szt|opak|m2|m3)?\b/i);
+  if (!pM) return 0;
+  const perPaleta = parseInt(pM[1], 10);
+  if (perPaleta <= 0) return 0;
+  return p.ilosc / perPaleta;
+}
+
 export function wyliczObjetoscPozycji(p: Pozycja): number | null {
   // 1. Pomijaj usługi
   if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return null;
@@ -189,16 +200,23 @@ export function wyliczObjetoscPozycji(p: Pozycja): number | null {
  * Suma m³ wszystkich pozycji z WZ. Zwraca też ile pozycji rozpoznano
  * vs nierozpoznano (dla komunikatu typu "Wyliczono z 2/3 pozycji").
  */
+/** Średnia objętość 1 palety w m³ (zakres typowo 1,0-1,2 — decyzja 14.05: bierzemy 1,1). */
+export const M3_PER_PALETA = 1.1;
+
 export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
   m3Total: number;
+  /** Liczba palet — ceil(suma frakcji palet z pozycji z p=Xszt w opisie).
+   *  Pozycje BEZ p= są pomijane (decyzja 14.05). */
+  palet: number;
   rozpoznane: number;
   nierozpoznane: number;
   pominiete: number; // usługi
 } {
   if (!pozycje || pozycje.length === 0) {
-    return { m3Total: 0, rozpoznane: 0, nierozpoznane: 0, pominiete: 0 };
+    return { m3Total: 0, palet: 0, rozpoznane: 0, nierozpoznane: 0, pominiete: 0 };
   }
   let m3Total = 0;
+  let paletFrac = 0;
   let rozpoznane = 0;
   let nierozpoznane = 0;
   let pominiete = 0;
@@ -207,13 +225,25 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
       pominiete += 1;
       continue;
     }
-    const m3 = wyliczObjetoscPozycji(p);
-    if (m3 != null && m3 > 0) {
+    const m3FromWym = wyliczObjetoscPozycji(p);
+    const paletyForThis = wyliczPaletyFrakcjaPozycji(p);
+    paletFrac += paletyForThis;
+
+    // m³: priorytet wymiarów (precyzyjne). Jeśli brak → szacunek z palet × 1,1
+    // (typowa paleta ma ~1-1,2 m³). Pozycje bez wymiarów i bez p= → null/pominięte.
+    let m3 = m3FromWym ?? 0;
+    if (m3 === 0 && paletyForThis > 0) {
+      m3 = paletyForThis * M3_PER_PALETA;
+    }
+    if (m3 > 0) {
       m3Total += m3;
       rozpoznane += 1;
     } else {
       nierozpoznane += 1;
     }
   }
-  return { m3Total, rozpoznane, nierozpoznane, pominiete };
+  // Ceil sumy frakcji palet — np. 0,5+0,3 = 0,8 → 1 paleta. Składanka z różnych
+  // produktów sumuje się w 1 fizyczną paletę gdy łącznie nie przekracza pojemności.
+  const palet = Math.ceil(paletFrac);
+  return { m3Total, palet, rozpoznane, nierozpoznane, pominiete };
 }
