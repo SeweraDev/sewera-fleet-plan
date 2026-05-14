@@ -11,7 +11,7 @@ import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { toast } from 'sonner';
 import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
-import { wyciagnijDateZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
+import { wyciagnijDateZUwag, wyciagnijGodzineZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
 import { detektujTypKlienta } from '@/lib/detekcjaTypuKlienta';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
 import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
@@ -91,15 +91,17 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [typPojazdu, setTypPojazdu] = useState('');
   const [typKlienta, setTypKlienta] = useState('');
   const [dzien, setDzienRaw] = useState(domyslnyDzienDostawy());
-  const [godzina, setGodzina] = useState('dowolna');
+  const [godzina, setGodzinaRaw] = useState('dowolna');
   // Flagi Smart Prefill — pomarańczowa ramka w UI gdy wartość pochodzi z auto-importu
   // (zniknie po ręcznej zmianie przez sprzedawcę = potwierdzenie weryfikacji).
   const [oddzialAutoSet, setOddzialAutoSet] = useState(false);
   const [dzienAutoSet, setDzienAutoSet] = useState(false);
+  const [godzinaAutoSet, setGodzinaAutoSet] = useState(false);
   const [typKlientaAutoSet, setTypKlientaAutoSet] = useState(false);
   // Wrappery które resetują flagę gdy user manualnie zmieni wartość
   const setOddzialId = useCallback((v: number | null) => { setOddzialIdRaw(v); setOddzialAutoSet(false); }, []);
   const setDzien = useCallback((v: string) => { setDzienRaw(v); setDzienAutoSet(false); }, []);
+  const setGodzina = useCallback((v: string) => { setGodzinaRaw(v); setGodzinaAutoSet(false); }, []);
   const setTypKlientaWrap = useCallback((v: string) => { setTypKlienta(v); setTypKlientaAutoSet(false); }, []);
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
@@ -208,6 +210,13 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       setDzienAutoSet(true);
       toast.info(`📅 Data dostawy: ${dataZUwag} (z uwag WZ — sprawdź)`, { duration: 5000 });
     }
+    // 2b. Godzina z uwag — AUTO-SET z pomarańczową flagą
+    const godzinaZUwag = wyciagnijGodzineZUwag(wz.uwagi);
+    if (godzinaZUwag && godzinaZUwag !== godzina) {
+      setGodzinaRaw(godzinaZUwag);
+      setGodzinaAutoSet(true);
+      toast.info(`🕗 Godzina: ${godzinaZUwag} (z uwag WZ — sprawdź)`, { duration: 5000 });
+    }
     // 3. Typ klienta — AUTO-DETEKCJA z kodu klienta (R), uwag (B2C), nazwy (D), fallback W.
     // Async bo R wymaga query do tabeli klienci_redystrybucja.
     detektujTypKlienta({
@@ -228,7 +237,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
         toast.info(`👤 Typ klienta: ${labelMap[typ] || typ} (${why[typ] || 'auto'} — sprawdź)`, { duration: 5000 });
       }
     }).catch((err) => console.warn('[Dashboard] detektujTypKlienta failed:', err));
-  }, [oddzialId, oddzialy, dzien, typKlienta]);
+  }, [oddzialId, oddzialy, dzien, godzina, typKlienta]);
 
   return (
     <Card>
@@ -273,6 +282,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             onBack={() => setStep(2)}
             onNext={() => setStep(4)}
             dzienAutoSet={dzienAutoSet}
+            godzinaAutoSet={godzinaAutoSet}
           />
         )}
         {/* Krok 4: Sprawdzenie dostępności + banner kosztów + złóż zlecenie */}

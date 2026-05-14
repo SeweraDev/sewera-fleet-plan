@@ -96,6 +96,44 @@ export function wyciagnijDateZUwag(uwagi: string | null | undefined): string | n
 }
 
 /**
+ * Wyciąga sugerowaną godzinę dostawy z pola Uwagi i mapuje na slot z TIME_OPTIONS.
+ *
+ * Obsługiwane formaty:
+ *   - "godz. 8:00" / "godzina 8" / "g. 8:00"
+ *   - "o godz. 8:00" / "po godz. 8" / "przed 14:00"
+ *   - "transport ... godz. 8:00"
+ *
+ * Mapowanie A (literalne, decyzja 15.05.2026): X → najmniejszy slot taki że slot >= X.
+ *   - 0-8   → "do 8:00"
+ *   - 9-10  → "do 10:00"
+ *   - 11-12 → "do 12:00"
+ *   - 13-14 → "do 14:00"
+ *   - 15-16 → "do 16:00"
+ *   - 17+   → "Dowolna"
+ *
+ * Zwraca string ze slotem (np. "do 8:00") lub null gdy brak godziny w uwagach.
+ */
+export function wyciagnijGodzineZUwag(uwagi: string | null | undefined): string | null {
+  if (!uwagi) return null;
+  // Pattern: opcjonalne "o/po/przed" + opcjonalne "godz./godzina/g." + liczba + opcjonalne ":MM"
+  // Akceptujemy 1-2 cyfry (24h), separator ":" lub "." (np. "8.00")
+  const re = /(?:^|\s)(?:o\s+|po\s+|przed\s+)?(?:godz?(?:ina)?\.?\s*)?(\d{1,2})(?:[:.](\d{2}))?\b/i;
+  // Szukamy w fragmencie zawierającym słowo "godz" — żeby nie złapać "p=48szt" czy daty "8.00"
+  const godzCtx = uwagi.match(/(?:godz?\.?|godzina)\s*\d/i);
+  if (!godzCtx) return null;
+  const m = uwagi.slice(godzCtx.index ?? 0).match(re);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  if (h < 0 || h > 23) return null;
+  if (h <= 8) return 'do 8:00';
+  if (h <= 10) return 'do 10:00';
+  if (h <= 12) return 'do 12:00';
+  if (h <= 14) return 'do 14:00';
+  if (h <= 16) return 'do 16:00';
+  return 'Dowolna';
+}
+
+/**
  * Domyślna sugerowana data dostawy gdy brak w uwagach:
  *   - przed 14:00 → jutro
  *   - po 14:00   → pojutrze (bo dyspozytorzy zwykle nie zdążą zaplanować na jutro)

@@ -27,6 +27,8 @@ interface CzasDostawyStepProps {
   /** Smart Prefill — true gdy data wzięta z uwag WZ ("transport DD.MM.YYYY").
    *  Pomarańczowa ramka informuje sprzedawcę żeby zweryfikował. */
   dzienAutoSet?: boolean;
+  /** Smart Prefill — true gdy godzina wzięta z uwag WZ ("godz. 8:00"). */
+  godzinaAutoSet?: boolean;
 }
 
 function formatDayPL(iso: string): string {
@@ -41,6 +43,7 @@ export function CzasDostawyStep({
   oddzialId, typPojazdu,
   onBack, onNext,
   dzienAutoSet,
+  godzinaAutoSet,
 }: CzasDostawyStepProps) {
   // Pomijamy quick check gdy user nie wybrał konkretnego typu (bez_preferencji / pusty)
   const isAnyType = !typPojazdu || typPojazdu === 'bez_preferencji';
@@ -104,23 +107,29 @@ export function CzasDostawyStep({
       </div>
 
       <div>
-        <Label>Preferowana godzina</Label>
+        <Label>Preferowana godzina{godzinaAutoSet && <span className="ml-2 text-[11px] text-orange-700 dark:text-orange-400 font-normal">🟠 auto z uwag WZ — sprawdź</span>}</Label>
         <div className="flex flex-col gap-2 mt-2">
-          {TIME_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setGodzina(opt)}
-              className={cn(
-                'w-full h-12 rounded-lg border-2 text-sm font-medium transition-colors text-left px-4',
-                godzina === opt
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border hover:border-muted-foreground/50'
-              )}
-            >
-              {opt}
-            </button>
-          ))}
+          {TIME_OPTIONS.map(opt => {
+            const isSelected = godzina === opt;
+            const highlightAuto = godzinaAutoSet && isSelected;
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setGodzina(opt)}
+                className={cn(
+                  'w-full h-12 rounded-lg border-2 text-sm font-medium transition-colors text-left px-4',
+                  highlightAuto
+                    ? 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-300'
+                    : isSelected
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border hover:border-muted-foreground/50'
+                )}
+              >
+                {opt}
+              </button>
+            );
+          })}
         </div>
         <p className="text-xs text-muted-foreground mt-2">Godzina jest wskazówką dla dyspozytora</p>
       </div>

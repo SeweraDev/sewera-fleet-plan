@@ -24,7 +24,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { wyciagnijOddzialZNumeru } from '@/lib/oddzialy-geo';
-import { wyciagnijDateZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
+import { wyciagnijDateZUwag, wyciagnijGodzineZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
 import { detektujTypKlienta } from '@/lib/detekcjaTypuKlienta';
 import { useKursyDnia } from '@/hooks/useKursyDnia';
 import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
@@ -1119,15 +1119,17 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
   const [typPojazdu, setTypPojazdu] = useState('');
   const [typKlienta, setTypKlientaRaw] = useState('');
   const [dzien, setDzienRaw] = useState(domyslnyDzienDostawy());
-  const [godzina, setGodzina] = useState('dowolna');
+  const [godzina, setGodzinaRaw] = useState('dowolna');
   // Flagi Smart Prefill — pomarańczowa ramka w UI gdy wartość pochodzi z auto-importu
   // (zniknie po ręcznej zmianie przez dyspozytora = potwierdzenie weryfikacji).
   const [oddzialAutoSet, setOddzialAutoSet] = useState(false);
   const [dzienAutoSet, setDzienAutoSet] = useState(false);
+  const [godzinaAutoSet, setGodzinaAutoSet] = useState(false);
   const [typKlientaAutoSet, setTypKlientaAutoSet] = useState(false);
   // Wrappery które resetują flagę gdy user manualnie zmieni wartość
   const setOddzialId = useCallback((v: number | null) => { setOddzialIdRaw(v); setOddzialAutoSet(false); }, []);
   const setDzien = useCallback((v: string) => { setDzienRaw(v); setDzienAutoSet(false); }, []);
+  const setGodzina = useCallback((v: string) => { setGodzinaRaw(v); setGodzinaAutoSet(false); }, []);
   const setTypKlienta = useCallback((v: string) => { setTypKlientaRaw(v); setTypKlientaAutoSet(false); }, []);
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
@@ -1212,6 +1214,12 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
       setDzienAutoSet(true);
       toast.info(`📅 Data dostawy: ${dataZUwag} (z uwag WZ — sprawdź)`, { duration: 5000 });
     }
+    const godzinaZUwag = wyciagnijGodzineZUwag(wz.uwagi);
+    if (godzinaZUwag && godzinaZUwag !== godzina) {
+      setGodzinaRaw(godzinaZUwag);
+      setGodzinaAutoSet(true);
+      toast.info(`🕗 Godzina: ${godzinaZUwag} (z uwag WZ — sprawdź)`, { duration: 5000 });
+    }
     detektujTypKlienta({
       kodKlienta: wz._kod_klienta,
       odbiorca: wz.odbiorca,
@@ -1230,7 +1238,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
         toast.info(`👤 Typ klienta: ${labelMap[typ] || typ} (${why[typ] || 'auto'} — sprawdź)`, { duration: 5000 });
       }
     }).catch((err) => console.warn('[Dashboard] detektujTypKlienta failed:', err));
-  }, [oddzialId, oddzialy, dzien, typKlienta]);
+  }, [oddzialId, oddzialy, dzien, godzina, typKlienta]);
 
   return (
     <Card>
@@ -1250,7 +1258,7 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
             typKlientaAutoSet={typKlientaAutoSet} />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag lub default) */}
-        {step === 3 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(2)} onNext={() => setStep(4)} dzienAutoSet={dzienAutoSet} />}
+        {step === 3 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(2)} onNext={() => setStep(4)} dzienAutoSet={dzienAutoSet} godzinaAutoSet={godzinaAutoSet} />}
         {/* Krok 4: Sprawdzenie dostępności + banner kosztów + złóż */}
         {step === 4 && oddzialId && (
           <DostepnoscStep oddzialId={oddzialId}
