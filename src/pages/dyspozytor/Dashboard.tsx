@@ -25,6 +25,7 @@ import { useOddzialy } from '@/hooks/useOddzialy';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { wyciagnijOddzialZNumeru } from '@/lib/oddzialy-geo';
 import { wyciagnijDateZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
+import { detektujTypKlienta } from '@/lib/detekcjaTypuKlienta';
 import { useKursyDnia } from '@/hooks/useKursyDnia';
 import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';
 import { useZleceniaBezKursu } from '@/hooks/useZleceniaBezKursu';
@@ -1114,11 +1115,20 @@ function NowyKursModal({
 /* ─── Nowe Zlecenie (formularz identyczny jak u sprzedawcy) ─── */
 function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
   const [step, setStep] = useState(1);
-  const [oddzialId, setOddzialId] = useState<number | null>(null);
+  const [oddzialId, setOddzialIdRaw] = useState<number | null>(null);
   const [typPojazdu, setTypPojazdu] = useState('');
-  const [typKlienta, setTypKlienta] = useState('');
-  const [dzien, setDzien] = useState(domyslnyDzienDostawy());
+  const [typKlienta, setTypKlientaRaw] = useState('');
+  const [dzien, setDzienRaw] = useState(domyslnyDzienDostawy());
   const [godzina, setGodzina] = useState('dowolna');
+  // Flagi Smart Prefill — pomarańczowa ramka w UI gdy wartość pochodzi z auto-importu
+  // (zniknie po ręcznej zmianie przez dyspozytora = potwierdzenie weryfikacji).
+  const [oddzialAutoSet, setOddzialAutoSet] = useState(false);
+  const [dzienAutoSet, setDzienAutoSet] = useState(false);
+  const [typKlientaAutoSet, setTypKlientaAutoSet] = useState(false);
+  // Wrappery które resetują flagę gdy user manualnie zmieni wartość
+  const setOddzialId = useCallback((v: number | null) => { setOddzialIdRaw(v); setOddzialAutoSet(false); }, []);
+  const setDzien = useCallback((v: string) => { setDzienRaw(v); setDzienAutoSet(false); }, []);
+  const setTypKlienta = useCallback((v: string) => { setTypKlientaRaw(v); setTypKlientaAutoSet(false); }, []);
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
   }]);
@@ -1181,36 +1191,46 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
     create({ oddzial_id: oddzialId, typ_pojazdu: typPojazdu === 'bez_preferencji' ? '' : typPojazdu, typ_klienta: typKlienta, dzien, preferowana_godzina: godzina, wz_list: wzList, pominieta_oszczednosc_pln: pominietaOszczednosc ?? null }, forceVerify);
   };
 
-  // Po imporcie WZ z PDF/OCR/Paste — smart prefill (sesja 13.05.2026):
-  //  1. Wykryj oddział z prefiksu numeru WZ/zamówienia, toast z akcją zmiany
-  //  2. Wyciągnij datę dostawy z uwag ("transport DD.MM.YYYY") → setDzien
+  // Po imporcie WZ z PDF/OCR/Paste — smart prefill (sesja 14.05.2026):
+  //  1. Wykryj oddział z prefiksu numeru WZ/zamówienia → AUTO-SET + pomarańczowa flaga
+  //  2. Wyciągnij datę dostawy z uwag ("transport DD.MM.YYYY") → setDzien + flaga
+  //  3. Auto-detekcja typu klienta (R z kodu, B z uwag, D z imię+nazwisko, fallback W)
+  //  Używamy raw setterów żeby NIE wyzerować flagi która jest ustawiana zaraz potem.
   const handleWzImported = useCallback((wz: WzInput) => {
     const detectedKod = wyciagnijOddzialZNumeru(wz.numer_wz, wz.nr_zamowienia);
     if (detectedKod) {
-      const currentOddzial = oddzialy.find(o => o.id === oddzialId);
-      const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
-      if (currentKod !== detectedKod) {
-        const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
-        if (detectedOddzial) {
-          toast.warning(
-            `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
-            {
-              action: {
-                label: `Zmień na ${detectedOddzial.nazwa}`,
-                onClick: () => setOddzialId(detectedOddzial.id),
-              },
-              duration: 10000,
-            },
-          );
-        }
+      const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
+      if (detectedOddzial && detectedOddzial.id !== oddzialId) {
+        setOddzialIdRaw(detectedOddzial.id);
+        setOddzialAutoSet(true);
+        toast.info(`📍 Oddział: ${detectedOddzial.nazwa} (z numeru WZ — sprawdź)`, { duration: 5000 });
       }
     }
     const dataZUwag = wyciagnijDateZUwag(wz.uwagi);
     if (dataZUwag && dataZUwag !== dzien) {
-      setDzien(dataZUwag);
-      toast.info(`Data dostawy: ${dataZUwag} (wykryto z uwag)`, { duration: 5000 });
+      setDzienRaw(dataZUwag);
+      setDzienAutoSet(true);
+      toast.info(`📅 Data dostawy: ${dataZUwag} (z uwag WZ — sprawdź)`, { duration: 5000 });
     }
-  }, [oddzialId, oddzialy, dzien]);
+    detektujTypKlienta({
+      kodKlienta: wz._kod_klienta,
+      odbiorca: wz.odbiorca,
+      uwagi: wz.uwagi,
+    }).then((typ) => {
+      if (typ && typ !== typKlienta) {
+        setTypKlientaRaw(typ);
+        setTypKlientaAutoSet(true);
+        const labelMap: Record<string, string> = { R: 'Redystrybucyjny', B: 'B2C', D: 'Detaliczny', W: 'Wykonawca' };
+        const why: Record<string, string> = {
+          R: 'kod klienta w bazie redystrybucji',
+          B: 'B2C w uwagach',
+          D: 'osoba fizyczna (imię + nazwisko)',
+          W: 'default (brak innego dopasowania)',
+        };
+        toast.info(`👤 Typ klienta: ${labelMap[typ] || typ} (${why[typ] || 'auto'} — sprawdź)`, { duration: 5000 });
+      }
+    }).catch((err) => console.warn('[Dashboard] detektujTypKlienta failed:', err));
+  }, [oddzialId, oddzialy, dzien, typKlienta]);
 
   return (
     <Card>
@@ -1225,10 +1245,12 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
           <TypPojazduStep oddzialId={oddzialId} setOddzialId={setOddzialId} typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
             typKlienta={typKlienta} setTypKlienta={setTypKlienta}
             oddzialy={oddzialy} loadingOddzialy={loadingOddzialy} flota={flotaList} loadingFlota={loadingFlota}
-            onBack={() => setStep(1)} onNext={() => setStep(3)} />
+            onBack={() => setStep(1)} onNext={() => setStep(3)}
+            oddzialAutoSet={oddzialAutoSet}
+            typKlientaAutoSet={typKlientaAutoSet} />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag lub default) */}
-        {step === 3 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(2)} onNext={() => setStep(4)} />}
+        {step === 3 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(2)} onNext={() => setStep(4)} dzienAutoSet={dzienAutoSet} />}
         {/* Krok 4: Sprawdzenie dostępności + banner kosztów + złóż */}
         {step === 4 && oddzialId && (
           <DostepnoscStep oddzialId={oddzialId}
