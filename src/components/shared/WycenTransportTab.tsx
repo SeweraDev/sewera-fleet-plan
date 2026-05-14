@@ -418,11 +418,15 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
 
   // Wykonuje calosc obliczenia kosztow dla podanych coords. Wydzielone z
   // handleWylicz, zeby selectAlternative mogl od razu liczyc dla wybranej karty.
+  // userPicked=true gdy adres pochodzi z explicite wybranej podpowiedzi
+  // (dropdown / banner alternatyw / GPS) — wtedy NIE pokazujemy bannera o braku
+  // numeru, bo user widzial i swiadomie potwierdzil ten punkt.
   const runCalculation = useCallback(async (
     coords: { lat: number; lng: number },
     hasHouseNumber: boolean,
     displayName: string,
     queryAdres: string,
+    userPicked: boolean = false,
   ) => {
     setLoading(true);
     setError('');
@@ -433,9 +437,10 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
     setSelectedOddzialKod(null);
     routeCacheRef.current.clear();
 
-    // Ostrzezenie + alternatywy gdy pin spadl bez numeru — user moze szybko
-    // wybrac konkretny adres (auto-recalc po kliknieciu).
-    if (!hasHouseNumber) {
+    // Ostrzezenie + alternatywy gdy pin spadl bez numeru — TYLKO gdy user
+    // nie wybral swiadomie z listy. Kiedy klika podpowiedz w dropdownie,
+    // widzi co wybiera, wiec nie zasypujemy go bannerem.
+    if (!hasHouseNumber && !userPicked) {
       setGeocodeWarning(`Adres został zlokalizowany niedokładnie (bez numeru domu): "${displayName}". Sprawdź czerwony pin na mapie. Wybierz właściwy adres z listy poniżej lub wpisz adres z numerem domu.`);
       // Pokaz WSZYSTKIE alternatywy Photon (top 5) — w OSM czesto nie ma numerow
       // na ulicy, ale Photon zwraca rozne dzielnice/centroidy, user wybiera
@@ -747,7 +752,9 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
         return;
       }
     }
-    await runCalculation(coords, hasHouseNumber, displayName, adres);
+    // userPicked = true gdy adres pochodzi z autocomplete (selectedCoords ustawione)
+    // lub GPS — user swiadomie wybral punkt, nie pokazujemy bannera o braku numeru.
+    await runCalculation(coords, hasHouseNumber, displayName, adres, !!selectedCoords);
   }, [typPojazdu, adres, selectedCoords, runCalculation, mojKod, zrodlo, zalogowany]);
 
   // User potwierdzil "Tak, wylicz mimo to" w bannerze nameMatch — kontynuujemy wycene
@@ -765,7 +772,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
     setPendingConfirm(null);
     setSuggestions([]);
     setShowSuggestions(false);
-    await runCalculation({ lat: s.lat, lng: s.lng }, !!s.hasHouseNumber, s.name, s.name);
+    await runCalculation({ lat: s.lat, lng: s.lng }, !!s.hasHouseNumber, s.name, s.name, true);
   }, [runCalculation]);
 
   // Wybor alternatywy z banera "bez numeru" — od razu przelicz dla wybranego punktu
@@ -774,7 +781,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
     setSelectedCoords({ lat: s.lat, lng: s.lng, hasHouseNumber: s.hasHouseNumber, displayName: s.name });
     setSuggestions([]);
     setShowSuggestions(false);
-    await runCalculation({ lat: s.lat, lng: s.lng }, !!s.hasHouseNumber, s.name, s.name);
+    await runCalculation({ lat: s.lat, lng: s.lng }, !!s.hasHouseNumber, s.name, s.name, true);
   }, [runCalculation]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
