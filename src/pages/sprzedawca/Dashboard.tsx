@@ -86,11 +86,18 @@ function PodgladZlecenWrapper() {
 
 function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   const [step, setStep] = useState(1);
-  const [oddzialId, setOddzialId] = useState<number | null>(null);
+  const [oddzialId, setOddzialIdRaw] = useState<number | null>(null);
   const [typPojazdu, setTypPojazdu] = useState('');
   const [typKlienta, setTypKlienta] = useState('');
-  const [dzien, setDzien] = useState(domyslnyDzienDostawy());
+  const [dzien, setDzienRaw] = useState(domyslnyDzienDostawy());
   const [godzina, setGodzina] = useState('dowolna');
+  // Flagi Smart Prefill — pomarańczowa ramka w UI gdy wartość pochodzi z auto-importu
+  // (zniknie po ręcznej zmianie przez sprzedawcę = potwierdzenie weryfikacji).
+  const [oddzialAutoSet, setOddzialAutoSet] = useState(false);
+  const [dzienAutoSet, setDzienAutoSet] = useState(false);
+  // Wrappery które resetują flagę gdy user manualnie zmieni wartość
+  const setOddzialId = useCallback((v: number | null) => { setOddzialIdRaw(v); setOddzialAutoSet(false); }, []);
+  const setDzien = useCallback((v: string) => { setDzienRaw(v); setDzienAutoSet(false); }, []);
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
   }]);
@@ -179,42 +186,24 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   //  2. Wyciągnij datę dostawy z uwag ("transport DD.MM.YYYY") → setDzien.
   //  Nieznany prefix → user uzupełnia ręcznie (decyzja 3.C).
   const handleWzImported = useCallback((wz: WzInput) => {
-    console.log('[smart-prefill] handleWzImported called with wz:', { numer_wz: wz.numer_wz, nr_zamowienia: wz.nr_zamowienia });
-    console.log('[smart-prefill] oddzialy.length:', oddzialy.length, 'oddzialId:', oddzialId);
-    // 1. Detekcja oddziału
+    // 1. Detekcja oddziału — AUTO-SET z pomarańczową flagą (do weryfikacji).
+    // Używamy raw setterów (setOddzialIdRaw/setDzienRaw) żeby NIE wyzerować flagi
+    // która jest ustawiana zaraz potem przez setOddzialAutoSet(true).
     const detectedKod = wyciagnijOddzialZNumeru(wz.numer_wz, wz.nr_zamowienia);
-    console.log('[smart-prefill] detectedKod:', detectedKod);
     if (detectedKod) {
-      const currentOddzial = oddzialy.find(o => o.id === oddzialId);
-      const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
-      console.log('[smart-prefill] currentKod:', currentKod, 'currentOddzial:', currentOddzial?.nazwa);
-      if (currentKod !== detectedKod) {
-        const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
-        console.log('[smart-prefill] detectedOddzial:', detectedOddzial?.nazwa, 'all oddzialy:', oddzialy.map(o => o.nazwa));
-        if (detectedOddzial) {
-          toast.warning(
-            `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
-            {
-              action: {
-                label: `Zmień na ${detectedOddzial.nazwa}`,
-                onClick: () => setOddzialId(detectedOddzial.id),
-              },
-              duration: 10000,
-            },
-          );
-          console.log('[smart-prefill] toast.warning called!');
-        } else {
-          console.log('[smart-prefill] NO matching oddzial found for detectedKod:', detectedKod);
-        }
-      } else {
-        console.log('[smart-prefill] currentKod === detectedKod, no toast needed');
+      const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
+      if (detectedOddzial && detectedOddzial.id !== oddzialId) {
+        setOddzialIdRaw(detectedOddzial.id);
+        setOddzialAutoSet(true);
+        toast.info(`📍 Oddział: ${detectedOddzial.nazwa} (z numeru WZ — sprawdź)`, { duration: 5000 });
       }
     }
-    // 2. Data dostawy z uwag
+    // 2. Data dostawy z uwag — AUTO-SET z pomarańczową flagą
     const dataZUwag = wyciagnijDateZUwag(wz.uwagi);
     if (dataZUwag && dataZUwag !== dzien) {
-      setDzien(dataZUwag);
-      toast.info(`Data dostawy: ${dataZUwag} (wykryto z uwag)`, { duration: 5000 });
+      setDzienRaw(dataZUwag);
+      setDzienAutoSet(true);
+      toast.info(`📅 Data dostawy: ${dataZUwag} (z uwag WZ — sprawdź)`, { duration: 5000 });
     }
   }, [oddzialId, oddzialy, dzien]);
 
@@ -247,6 +236,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             flota={flota} loadingFlota={loadingFlota}
             onBack={() => setStep(1)}
             onNext={() => setStep(3)}
+            oddzialAutoSet={oddzialAutoSet}
           />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag WZ lub default) */}
@@ -258,6 +248,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             typPojazdu={typPojazdu}
             onBack={() => setStep(2)}
             onNext={() => setStep(4)}
+            dzienAutoSet={dzienAutoSet}
           />
         )}
         {/* Krok 4: Sprawdzenie dostępności + banner kosztów + złóż zlecenie */}

@@ -34,6 +34,9 @@ interface TypPojazduStepProps {
   /** Opcjonalny callback wstecz — używany gdy ten krok nie jest pierwszy
    *  (po refactorze 13.05 ten krok jest Krokiem 2 — po imporcie WZ). */
   onBack?: () => void;
+  /** Smart Prefill — true gdy oddział został auto-ustawiony z numeru WZ.
+   *  Pomarańczowa ramka informuje sprzedawcę żeby zweryfikował. */
+  oddzialAutoSet?: boolean;
 }
 
 export function TypPojazduStep({
@@ -44,6 +47,7 @@ export function TypPojazduStep({
   flota, loadingFlota,
   onNext,
   onBack,
+  oddzialAutoSet,
 }: TypPojazduStepProps) {
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
   const [tab, setTab] = useState('pojazd');
@@ -66,9 +70,11 @@ export function TypPojazduStep({
   return (
     <div className="space-y-4">
       <div>
-        <Label>Oddział</Label>
+        <Label>Oddział{oddzialAutoSet && <span className="ml-2 text-[11px] text-orange-700 dark:text-orange-400 font-normal">🟠 auto z numeru WZ — sprawdź</span>}</Label>
         <Select onValueChange={v => setOddzialId(Number(v))} value={oddzialId?.toString() || ''}>
-          <SelectTrigger><SelectValue placeholder={loadingOddzialy ? 'Ładowanie...' : 'Wybierz oddział'} /></SelectTrigger>
+          <SelectTrigger className={cn(oddzialAutoSet && 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus:ring-orange-400')}>
+            <SelectValue placeholder={loadingOddzialy ? 'Ładowanie...' : 'Wybierz oddział'} />
+          </SelectTrigger>
           <SelectContent>
             {oddzialy.map(o => <SelectItem key={o.id} value={o.id.toString()}>{o.nazwa}</SelectItem>)}
           </SelectContent>

@@ -24,6 +24,9 @@ interface CzasDostawyStepProps {
   typPojazdu: string;
   onBack: () => void;
   onNext: () => void;
+  /** Smart Prefill — true gdy data wzięta z uwag WZ ("transport DD.MM.YYYY").
+   *  Pomarańczowa ramka informuje sprzedawcę żeby zweryfikował. */
+  dzienAutoSet?: boolean;
 }
 
 function formatDayPL(iso: string): string {
@@ -37,6 +40,7 @@ export function CzasDostawyStep({
   godzina, setGodzina,
   oddzialId, typPojazdu,
   onBack, onNext,
+  dzienAutoSet,
 }: CzasDostawyStepProps) {
   // Pomijamy quick check gdy user nie wybrał konkretnego typu (bez_preferencji / pusty)
   const isAnyType = !typPojazdu || typPojazdu === 'bez_preferencji';
@@ -48,8 +52,8 @@ export function CzasDostawyStep({
   return (
     <div className="space-y-4">
       <div>
-        <Label>Dzień dostawy</Label>
-        <Input type="date" value={dzien} onChange={e => setDzien(e.target.value)} />
+        <Label>Dzień dostawy{dzienAutoSet && <span className="ml-2 text-[11px] text-orange-700 dark:text-orange-400 font-normal">🟠 auto z uwag WZ — sprawdź</span>}</Label>
+        <Input type="date" value={dzien} onChange={e => setDzien(e.target.value)} className={cn(dzienAutoSet && 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus-visible:ring-orange-400')} />
 
         {/* Wskaźnik dostępności pod polem dnia — tylko gdy typ konkretny i dzień wybrany */}
         {!isAnyType && dzien && !avail.loading && avail.totalCount > 0 && (

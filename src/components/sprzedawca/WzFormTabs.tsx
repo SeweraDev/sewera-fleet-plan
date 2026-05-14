@@ -11,6 +11,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong, sugerujKlasyfikacjeWg } from '@/lib/klasyfikacje';
+import { cn } from '@/lib/utils';
 import { SnipLiveOverlay } from '@/components/shared/SnipLiveOverlay';
 import { wyliczObjetoscZPozycji } from '@/lib/wzAutoFill';
 
@@ -75,10 +76,28 @@ const EMPTY_WZ: WzInput = {
 function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput[]; setWzList: (wz: WzInput[]) => void; autoKlasyfikacja?: string | null }) {
   const addWz = () => setWzList([...wzList, { ...EMPTY_WZ }]);
 
+  // Pola dotknięte przez user'a (per WZ) — pomarańczowa ramka znika po edycji.
+  // Klucz: `${idx}:${field}` (np. "0:odbiorca"). Jeśli pole jest zawarte → user dotknął.
+  // Pola w wzList które są NIE-puste i NIE-dotknięte = pre-fill z importu → pomarańczowa ramka.
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const markTouched = (idx: number, field: string) => {
+    const key = `${idx}:${field}`;
+    setTouched(prev => prev.has(key) ? prev : new Set(prev).add(key));
+  };
+  // Sprawdź czy formularz wyświetla dane "z importu" (heurystyka: pierwszy WZ ma odbiorcę = pewnie po imporcie)
+  const isPreFilled = wzList.length > 0 && !!wzList[0].odbiorca;
+
   const updateWz = (idx: number, field: keyof WzInput, value: string | number | boolean) => {
     const copy = [...wzList];
     (copy[idx] as any)[field] = value;
     setWzList(copy);
+    markTouched(idx, field);
+  };
+
+  // Pomocnik: zwraca klasę CSS dla pola — pomarańczowy jeśli pre-fill i nie-dotknięty
+  const fieldClass = (idx: number, field: string, hasValue: boolean): string => {
+    if (!isPreFilled || !hasValue || touched.has(`${idx}:${field}`)) return '';
+    return 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus-visible:ring-orange-400';
   };
 
   const removeWz = (idx: number) => {
@@ -88,6 +107,11 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
 
   return (
     <div className="space-y-3">
+      {isPreFilled && (
+        <div className="rounded-md border border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 px-3 py-2 text-xs text-orange-900 dark:text-orange-100">
+          🟠 Dane wstępnie wypełnione z importu — <strong>zweryfikuj każde pole</strong> przed zatwierdzeniem. Pomarańczowa ramka znika po edycji.
+        </div>
+      )}
       {wzList.map((wz, idx) => (
         <Card key={idx} className="p-3 space-y-2 bg-muted/50">
           <div className="flex items-center justify-between">
@@ -97,15 +121,15 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label className="text-xs">Nr WZ</Label><Input className="h-8 text-sm" value={wz.numer_wz || ''} onChange={e => updateWz(idx, 'numer_wz', e.target.value)} /></div>
-            <div><Label className="text-xs">Nr zamówienia</Label><Input className="h-8 text-sm" value={wz.nr_zamowienia || ''} onChange={e => updateWz(idx, 'nr_zamowienia', e.target.value)} /></div>
-            <div><Label className="text-xs">Odbiorca *</Label><Input className="h-8 text-sm" value={wz.odbiorca} onChange={e => updateWz(idx, 'odbiorca', e.target.value)} /></div>
-            <div><Label className="text-xs">Adres *</Label><Input className="h-8 text-sm" value={wz.adres} onChange={e => updateWz(idx, 'adres', e.target.value)} /></div>
-            <div><Label className="text-xs">Telefon</Label><Input className="h-8 text-sm" value={wz.tel || ''} onChange={e => updateWz(idx, 'tel', e.target.value)} /></div>
-            <div><Label className="text-xs">Masa (kg) *</Label><Input className="h-8 text-sm" type="number" value={wz.masa_kg || ''} onChange={e => updateWz(idx, 'masa_kg', Number(e.target.value))} /></div>
+            <div><Label className="text-xs">Nr WZ</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'numer_wz', !!wz.numer_wz))} value={wz.numer_wz || ''} onChange={e => updateWz(idx, 'numer_wz', e.target.value)} /></div>
+            <div><Label className="text-xs">Nr zamówienia</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'nr_zamowienia', !!wz.nr_zamowienia))} value={wz.nr_zamowienia || ''} onChange={e => updateWz(idx, 'nr_zamowienia', e.target.value)} /></div>
+            <div><Label className="text-xs">Odbiorca *</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'odbiorca', !!wz.odbiorca))} value={wz.odbiorca} onChange={e => updateWz(idx, 'odbiorca', e.target.value)} /></div>
+            <div><Label className="text-xs">Adres *</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'adres', !!wz.adres))} value={wz.adres} onChange={e => updateWz(idx, 'adres', e.target.value)} /></div>
+            <div><Label className="text-xs">Telefon</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'tel', !!wz.tel))} value={wz.tel || ''} onChange={e => updateWz(idx, 'tel', e.target.value)} /></div>
+            <div><Label className="text-xs">Masa (kg) *</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'masa_kg', !!wz.masa_kg))} type="number" value={wz.masa_kg || ''} onChange={e => updateWz(idx, 'masa_kg', Number(e.target.value))} /></div>
             <div>
               <Label className="text-xs">Objętość (m³) {!wz.luzne_karton && '*'}</Label>
-              <Input className="h-8 text-sm" type="number" value={wz.luzne_karton ? 0 : (wz.objetosc_m3 || '')} disabled={wz.luzne_karton} onChange={e => updateWz(idx, 'objetosc_m3', Number(e.target.value))} />
+              <Input className={cn('h-8 text-sm', fieldClass(idx, 'objetosc_m3', !!wz.objetosc_m3))} type="number" value={wz.luzne_karton ? 0 : (wz.objetosc_m3 || '')} disabled={wz.luzne_karton} onChange={e => updateWz(idx, 'objetosc_m3', Number(e.target.value))} />
               <label className="flex items-center gap-1.5 mt-1 cursor-pointer">
                 <Checkbox checked={wz.luzne_karton || false} onCheckedChange={(checked) => { updateWz(idx, 'luzne_karton', !!checked); if (checked) updateWz(idx, 'objetosc_m3', 0); }} />
                 <span className="text-[11px] text-muted-foreground">Luźne/karton</span>
@@ -113,7 +137,7 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
             </div>
             <div>
               <Label className="text-xs">Palety (szt) {!wz.bez_palet && '*'}</Label>
-              <Input className="h-8 text-sm" type="number" min={0} placeholder="0" value={wz.bez_palet ? 0 : (wz.ilosc_palet || '')} disabled={wz.bez_palet} onChange={e => updateWz(idx, 'ilosc_palet', Number(e.target.value))} />
+              <Input className={cn('h-8 text-sm', fieldClass(idx, 'ilosc_palet', !!wz.ilosc_palet))} type="number" min={0} placeholder="0" value={wz.bez_palet ? 0 : (wz.ilosc_palet || '')} disabled={wz.bez_palet} onChange={e => updateWz(idx, 'ilosc_palet', Number(e.target.value))} />
               <label className="flex items-center gap-1.5 mt-1 cursor-pointer">
                 <Checkbox checked={wz.bez_palet || false} onCheckedChange={(checked) => { updateWz(idx, 'bez_palet', !!checked); if (checked) updateWz(idx, 'ilosc_palet', 0); }} />
                 <span className="text-[11px] text-muted-foreground">Bez palet</span>
@@ -121,7 +145,7 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
             </div>
             <div>
               <Label className="text-xs">Wartość netto (zł)</Label>
-              <Input className="h-8 text-sm" type="number" step="0.01" min={0} placeholder="opcjonalnie"
+              <Input className={cn('h-8 text-sm', fieldClass(idx, 'wartosc_netto', wz.wartosc_netto != null))} type="number" step="0.01" min={0} placeholder="opcjonalnie"
                 value={wz.wartosc_netto ?? ''}
                 onChange={e => updateWz(idx, 'wartosc_netto' as keyof WzInput, e.target.value === '' ? (null as any) : Number(e.target.value))} />
             </div>
@@ -149,7 +173,7 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
                 </>
               )}
             </div>
-            <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className="h-8 text-sm" value={wz.uwagi || ''} onChange={e => updateWz(idx, 'uwagi', e.target.value)} /></div>
+            <div className="col-span-2"><Label className="text-xs">Uwagi</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'uwagi', !!wz.uwagi))} value={wz.uwagi || ''} onChange={e => updateWz(idx, 'uwagi', e.target.value)} /></div>
           </div>
         </Card>
       ))}
