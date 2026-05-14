@@ -92,10 +92,6 @@ interface KosztWewOferta {
   /** True dla typu wybranego przez usera; false dla fallback z rodziny */
   isOriginal: boolean;
   direction: 'down' | 'up' | null;
-  /** True gdy oddzial NIE MA tego typu pojazdu — pokazujemy cene z cennika
-   *  (jakby mial), zeby sprzedawca mogl odpowiedziec klientowi.
-   *  UI oznacza taka pozycje szaro + ikonka ostrzezenia. */
-  brakPojazdu?: boolean;
 }
 
 interface WynikOddzialu {
@@ -556,26 +552,10 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
         // KAT z HDS 9,0t i HDS 12,0t pokaze obie ceny przy wyborze HDS 9,0t.
         const dostepneTypy = findAllAvailableTypes(typPojazdu, wlasneTypy);
         const kosztyWew: KosztWewOferta[] = [];
-        // Jesli oddzial NIE MA wybranego typu, dodajemy cene "teoretyczna" z cennika
-        // z flaga brakPojazdu=true. Dzieki temu sprzedawca w DG (brak 1,2t) widzi
-        // ile by kosztowal 1,2t i moze odpowiedziec klientowi lub zlecic innemu
-        // oddzialowi (cross-branch). UI oznaczy taka pozycje szaro + ostrzezenie.
-        const maWybranyTyp = dostepneTypy.some(d => d.isOriginal);
-        if (!maWybranyTyp) {
-          // Cena teoretyczna dla wybranego typu — wybrany typ, najkrotsza km
-          const kmTeo = pickKmFromAlternatives(alternatives, typPojazdu, true);
-          const kosztTeo = obliczKosztWew(kmTeo, typPojazdu);
-          if (kosztTeo) {
-            kosztyWew.push({
-              typCennikowy: typPojazdu,
-              netto: kosztTeo.netto,
-              brutto: kosztTeo.brutto,
-              isOriginal: true,
-              direction: null,
-              brakPojazdu: true,
-            });
-          }
-        }
+        // Pokazujemy ceny TYLKO dla pojazdow ktore oddzial ma na stanie. Wczesniej
+        // dodawalismy cene "teoretyczna" (jakby mial) z flaga brakPojazdu+szary kolor,
+        // ale w praktyce uzytkownicy nie zauwazali ostrzezenia i cytowali stawke
+        // klientowi mimo ze pojazdu nie ma — wycofane (decyzja usera 14.05.2026).
         for (const dt of dostepneTypy) {
           // Wybrany typ (isOriginal=true) → najkrotsza. Fallback → strategia per typ
           // (mediana dla 1,8t, mediana×1,05 dla 6t/MAX/HDS). Pozwala pokazac realny
@@ -652,9 +632,14 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
         return;
       }
 
-      const mojOddzial = resultsZKm.find(r => r.jestMojOddzial);
-      const inneNajblizsze = resultsZKm
-        .filter(r => !r.jestMojOddzial && (r.kosztyWew.length > 0 || r.kosztyZew.length > 0))
+      // Filtr: pokazujemy tylko oddzialy ktore maja przynajmniej jedna oferte
+      // (wew Sewery LUB zew z ktorymi wspolpracuja). Dotyczy zarowno "mojego oddzialu"
+      // jak i innych — wycofalismy cene teoretyczna, wiec puste oddzialy nie maja sensu.
+      const resultsZOferta = resultsZKm.filter(r => r.kosztyWew.length > 0 || r.kosztyZew.length > 0);
+
+      const mojOddzial = resultsZOferta.find(r => r.jestMojOddzial);
+      const inneNajblizsze = resultsZOferta
+        .filter(r => !r.jestMojOddzial)
         .sort((a, b) => a.km - b.km)
         .slice(0, 2); // top 2 najbliższych (plus mój = max 3 wiersze)
 
@@ -664,6 +649,14 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
 
       // Końcowe sortowanie po km — najbliższy pierwszy
       finalResults.sort((a, b) => a.km - b.km);
+
+      // Edge case: zaden oddzial nie ma wybranego typu pojazdu (ani wew ani zew).
+      // Wczesniej tabela byla pusta — teraz pokazujemy jasny komunikat.
+      if (finalResults.length === 0) {
+        setError(`Żaden oddział Sewery ani współpracujący przewoźnik zewn. nie ma pojazdu typu "${typPojazdu}" dla tej trasy. Wybierz inny typ pojazdu z listy.`);
+        setLoading(false);
+        return;
+      }
 
       const jestZew = finalResults.some(r => r.kosztyZew.length > 0);
       setPokazZew(jestZew);
@@ -1117,19 +1110,13 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
                               {w.kosztyWew.map((k, i) => (
                                 <div
                                   key={i}
-                                  className={`${i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''} ${k.brakPojazdu ? 'opacity-60' : ''}`}
-                                  title={k.brakPojazdu ? 'Brak takiego pojazdu w tym oddziale — cena teoretyczna z cennika' : undefined}
+                                  className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}
                                 >
                                   <span>{formatPLN(k.netto)}</span>
                                   <span className="ml-1.5 text-[10px] font-medium text-muted-foreground">({k.typCennikowy})</span>
                                   {!k.isOriginal && k.direction && (
                                     <span className="ml-1 text-[10px] text-orange-600 dark:text-orange-400">
                                       {k.direction === 'up' ? '↑' : '↓'}
-                                    </span>
-                                  )}
-                                  {k.brakPojazdu && (
-                                    <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400" title="Oddział nie ma tego pojazdu — cena z cennika">
-                                      ⚠️ brak pojazdu
                                     </span>
                                   )}
                                 </div>
@@ -1143,7 +1130,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
                               {w.kosztyWew.map((k, i) => (
                                 <div
                                   key={i}
-                                  className={`${i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''} ${k.brakPojazdu ? 'opacity-60' : ''}`}
+                                  className={i > 0 ? 'pt-1.5 border-t border-dashed border-muted-foreground/30' : ''}
                                 >
                                   {formatPLN(k.brutto)}
                                 </div>
