@@ -179,13 +179,18 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   //  2. Wyciągnij datę dostawy z uwag ("transport DD.MM.YYYY") → setDzien.
   //  Nieznany prefix → user uzupełnia ręcznie (decyzja 3.C).
   const handleWzImported = useCallback((wz: WzInput) => {
+    console.log('[smart-prefill] handleWzImported called with wz:', { numer_wz: wz.numer_wz, nr_zamowienia: wz.nr_zamowienia });
+    console.log('[smart-prefill] oddzialy.length:', oddzialy.length, 'oddzialId:', oddzialId);
     // 1. Detekcja oddziału
     const detectedKod = wyciagnijOddzialZNumeru(wz.numer_wz, wz.nr_zamowienia);
+    console.log('[smart-prefill] detectedKod:', detectedKod);
     if (detectedKod) {
       const currentOddzial = oddzialy.find(o => o.id === oddzialId);
       const currentKod = currentOddzial ? NAZWA_TO_KOD[currentOddzial.nazwa] : null;
+      console.log('[smart-prefill] currentKod:', currentKod, 'currentOddzial:', currentOddzial?.nazwa);
       if (currentKod !== detectedKod) {
         const detectedOddzial = oddzialy.find(o => NAZWA_TO_KOD[o.nazwa] === detectedKod);
+        console.log('[smart-prefill] detectedOddzial:', detectedOddzial?.nazwa, 'all oddzialy:', oddzialy.map(o => o.nazwa));
         if (detectedOddzial) {
           toast.warning(
             `Wykryto WZ z oddziału ${detectedOddzial.nazwa}${currentOddzial ? ` (aktualny: ${currentOddzial.nazwa})` : ''}`,
@@ -197,7 +202,12 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
               duration: 10000,
             },
           );
+          console.log('[smart-prefill] toast.warning called!');
+        } else {
+          console.log('[smart-prefill] NO matching oddzial found for detectedKod:', detectedKod);
         }
+      } else {
+        console.log('[smart-prefill] currentKod === detectedKod, no toast needed');
       }
     }
     // 2. Data dostawy z uwag
