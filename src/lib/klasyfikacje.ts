@@ -34,6 +34,39 @@ export function isValidKlasyfikacja(kod: string | null | undefined): boolean {
 }
 
 /**
+ * Sugeruj klasyfikację (B/C/D/E) na podstawie wagi/objętości/palet — najmniejszy
+ * typ pojazdu który pomieści ładunek. Używane po imporcie WZ gdy user nie wybrał
+ * jeszcze typu pojazdu (Krok 2 nieukończony), ale chcemy wstępnie zasugerować.
+ *
+ * Pojemności (TYP_CAPACITY z suggestRoutes.ts):
+ *   B - Dostawczy 1,2t:    1200 kg / 18,5 m³ / 7 palet
+ *   C - Winda 1,8t:        1800 kg / 18 m³ / 7 palet
+ *   D - Winda 6,3t:        6300 kg / 32 m³ / 13 palet
+ *   E - Winda MAX 15,8t:   15800 kg / 60 m³ / 22 palet
+ *
+ * UWAGA: Sugeruje TYLKO B/C/D/E (kryte vany). HDS (F/H) wymaga decyzji user'a,
+ * bo to inny typ pojazdu (platforma + dźwig) — wybierany ręcznie gdy klient potrzebuje.
+ * B = bez windy (default najtańszy). Klient potrzebuje windy → user zmieni na C.
+ *
+ * @returns kod klasyfikacji (B/C/D/E) lub null gdy żaden pojazd nie pomieści
+ */
+export function sugerujKlasyfikacjeWg(masa_kg: number, m3: number, palet: number): string | null {
+  // (max_kg, max_m3, max_pal, kod) — posortowane od najmniejszego
+  const POJAZDY: [number, number, number, string][] = [
+    [1200, 18.5, 7, 'B'],
+    [1800, 18, 7, 'C'],
+    [6300, 32, 13, 'D'],
+    [15800, 60, 22, 'E'],
+  ];
+  for (const [maxKg, maxM3, maxPal, kod] of POJAZDY) {
+    if (masa_kg <= maxKg && m3 <= maxM3 && palet <= maxPal) {
+      return kod;
+    }
+  }
+  return null; // przekracza wszystkie — user musi ręcznie wybrać F/H (HDS) lub podzielić
+}
+
+/**
  * Mapuj typ pojazdu (z TypPojazduStep, może być systemowy lub z prefiksem 'zew:')
  * na kod klasyfikacji. Zwraca null dla 'bez_preferencji', 'zewnetrzny' i pustych.
  *

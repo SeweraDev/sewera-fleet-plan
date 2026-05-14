@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
-import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong } from '@/lib/klasyfikacje';
+import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong, sugerujKlasyfikacjeWg } from '@/lib/klasyfikacje';
 import { SnipLiveOverlay } from '@/components/shared/SnipLiveOverlay';
 import { wyliczObjetoscZPozycji } from '@/lib/wzAutoFill';
 
@@ -1845,11 +1845,17 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
   // Plus notyfikacja parent (Dashboard) o numerach dokumentu — żeby mógł
   // wykryć oddział wystawiający i zaproponować zmianę gdy różny od wybranego.
   const setWzListFromImport = useCallback((next: WzInput[]) => {
-    // Jeśli mamy auto-klasyfikację, nadpisz ją na każdym importowanym WZ (parser
-    // mógł wstawić własną, ale user explicit wskazał typ pojazdu — jego intencja
-    // wygrywa). Wagę / m³ / palety pozostawiamy bez auto-check — gdy parser
-    // zwraca 0 to nie zawsze znaczy "nie ma" (może być błąd parsera).
-    const final = autoKlas ? next.map(w => ({ ...w, klasyfikacja: autoKlas })) : next;
+    // Klasyfikacja transportu — kolejność priorytetów:
+    //  1. autoKlas (z typu pojazdu wybranego w Kroku 2) — najsilniejszy, user explicit wskazał
+    //  2. Wartość z parsera/usera już ustawiona na WZ
+    //  3. Sugestia na bazie wagi/m³/palet (najmniejszy pojazd który zmiesci ladunek)
+    //     — używane gdy Krok 2 jeszcze nie odbyl sie a chcemy zasugerowac wstepnie.
+    const final = next.map(w => {
+      if (autoKlas) return { ...w, klasyfikacja: autoKlas };
+      if (w.klasyfikacja) return w;
+      const sugerowana = sugerujKlasyfikacjeWg(w.masa_kg || 0, w.objetosc_m3 || 0, w.ilosc_palet || 0);
+      return sugerowana ? { ...w, klasyfikacja: sugerowana } : w;
+    });
     setWzList(final);
     setActiveTab('reczne');
     toast.success('✅ WZ dodane do listy — sprawdź w zakładce Ręcznie');
