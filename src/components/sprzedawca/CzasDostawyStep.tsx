@@ -53,7 +53,7 @@ export function CzasDostawyStep({
     <div className="space-y-4">
       <div>
         <Label>Dzień dostawy{dzienAutoSet && <span className="ml-2 text-[11px] text-orange-700 dark:text-orange-400 font-normal">🟠 auto z uwag WZ — sprawdź</span>}</Label>
-        <Input type="date" value={dzien} onChange={e => setDzien(e.target.value)} className={cn(dzienAutoSet && 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus-visible:ring-orange-400')} />
+        <Input type="date" value={dzien} onChange={e => setDzien(e.target.value)} className={cn('w-56', dzienAutoSet && 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus-visible:ring-orange-400')} />
 
         {/* Wskaźnik dostępności pod polem dnia — tylko gdy typ konkretny i dzień wybrany */}
         {!isAnyType && dzien && !avail.loading && avail.totalCount > 0 && (
