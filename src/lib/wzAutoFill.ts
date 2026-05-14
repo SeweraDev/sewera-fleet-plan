@@ -153,12 +153,16 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
   let rozpoznane = 0;
   let nierozpoznane = 0;
   let pominiete = 0;
+  console.log('[m3-debug] === wyliczObjetoscZPozycji ===');
+  console.log(`[m3-debug] Liczba pozycji: ${pozycje.length}`);
   for (const p of pozycje) {
     if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) {
+      console.log(`[m3-debug] [POMINIETO usluga] lp=${p.lp} "${p.nazwa_towaru}"`);
       pominiete += 1;
       continue;
     }
     const m3 = wyliczObjetoscPozycji(p);
+    console.log(`[m3-debug] lp=${p.lp} JM=${p.jm} ilosc=${p.ilosc} | nazwa="${p.nazwa_towaru}" | opis="${p.nazwa_dodatkowa}" => m3=${m3}`);
     if (m3 != null && m3 > 0) {
       m3Total += m3;
       rozpoznane += 1;
@@ -166,5 +170,6 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
       nierozpoznane += 1;
     }
   }
+  console.log(`[m3-debug] SUMA: m3Total=${m3Total.toFixed(3)} rozpoznane=${rozpoznane} nierozpoznane=${nierozpoznane} pominiete=${pominiete}`);
   return { m3Total, rozpoznane, nierozpoznane, pominiete };
 }
