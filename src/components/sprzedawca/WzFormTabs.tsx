@@ -355,9 +355,17 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       // żadnej pozycji nie da się wyliczyć (np. WZ z luźnym towarem).
       // Decyzja 14.05.2026: do planowania transportu liczy się fizyczna objętość auta,
       // nie wartość księgowa z magazynu Sewery.
+      console.log('[m3-flow] === PDF tab parseDocument result ===');
+      console.log('[m3-flow] type:', type, 'autoDetected:', autoDetected);
+      console.log('[m3-flow] mapped.objetosc_m3 (z PDF):', mapped.objetosc_m3);
+      console.log('[m3-flow] mapped.pozycje.length:', mapped.pozycje?.length || 0);
+      if (mapped.pozycje && mapped.pozycje.length > 0) {
+        console.log('[m3-flow] PIERWSZE 3 POZYCJE:', JSON.stringify(mapped.pozycje.slice(0, 3), null, 2));
+      }
       let finalObjetosc = 0;
       if (mapped.pozycje && mapped.pozycje.length > 0) {
         const calc = wyliczObjetoscZPozycji(mapped.pozycje);
+        console.log('[m3-flow] calc:', calc);
         if (calc.rozpoznane > 0) {
           finalObjetosc = Math.round(calc.m3Total * 100) / 100;
           const detail = calc.nierozpoznane > 0
@@ -367,6 +375,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         }
       }
       if (finalObjetosc === 0) finalObjetosc = mapped.objetosc_m3 || 0;
+      console.log('[m3-flow] FINAL objetosc_m3:', finalObjetosc);
 
       setPreview({
         numer_wz: mapped.numer_wz || '',
