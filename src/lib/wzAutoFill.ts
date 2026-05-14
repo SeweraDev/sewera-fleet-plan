@@ -106,6 +106,20 @@ export function wyliczObjetoscPozycji(p: Pozycja): number | null {
 
   const opis = p.nazwa_dodatkowa || '';
 
+  // 1b. PRIORYTET: jeśli opis podaje wprost objętość paczki "X,Ym3" (typowo dla
+  // styropianu — np. "paczka 2m2 / 0,3m3"), bierzemy to wprost.
+  // Sanity: 0,001 - 5 m³ per opak/paczka (filtr przeciwko np. "100m3" jako artefakt).
+  // Tylko dla OPA — bo dla SZT nie wiemy co liczba m³ znaczy bez kontekstu.
+  if (p.jm.toUpperCase().startsWith('OPA')) {
+    const m3Direct = opis.match(/([\d]+[,.]?\d*)\s*m3\b/i);
+    if (m3Direct) {
+      const m3PerOpak = parseFloat(m3Direct[1].replace(',', '.'));
+      if (m3PerOpak >= 0.001 && m3PerOpak <= 5) {
+        return m3PerOpak * p.ilosc;
+      }
+    }
+  }
+
   // 2. Wymiary płyty z opisu: "wym 600x1000" (mm) → m
   const wymM = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
   if (!wymM) return null;
