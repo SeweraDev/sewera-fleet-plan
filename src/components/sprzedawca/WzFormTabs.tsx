@@ -1598,6 +1598,10 @@ function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPrev
   type AdresStatus = 'idle' | 'checking' | 'ok' | 'approximate' | 'fail';
   const [adresStatus, setAdresStatus] = useState<AdresStatus>('idle');
 
+  // Pola dotknięte przez usera — pomarańczowa ramka znika po pierwszej edycji
+  // (potwierdzenie że user świadomie zweryfikował wartość auto-uzupełnioną z PDF/OCR).
+  const [touchedFields, setTouchedFields] = useState<Set<string>>(new Set());
+
   const sprawdzAdres = useCallback(async (adres: string) => {
     if (!adres || adres.trim().length < 5) {
       setAdresStatus('idle');
@@ -1620,6 +1624,9 @@ function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPrev
 
   return (
     <div className="space-y-2">
+      <div className="rounded-md border border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 px-3 py-2 text-xs text-orange-900 dark:text-orange-100">
+        🟠 Dane wstępnie wypełnione z dokumentu — <strong>zweryfikuj każde pole</strong> przed zatwierdzeniem. Pomarańczowa ramka znika po edycji (potwierdzenie weryfikacji).
+      </div>
       {PREVIEW_FIELDS.map(f => {
         const val = preview[f.key];
         const isM3 = f.key === 'objetosc_m3';
@@ -1630,6 +1637,10 @@ function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPrev
         // Adres ma wlasna walidacje przez geocoding — nadpisuje found
         const adresFail = isAdres && adresStatus === 'fail';
         const adresApprox = isAdres && adresStatus === 'approximate';
+        // Pomarańczowa ramka dla pól auto-uzupełnionych z importu — sygnał "sprawdź".
+        // Znika gdy: user edytował pole (touched), pole jest puste (warning ⚠️ wystarczy),
+        // pole jest disabled (luzne_karton / bez_palet), lub adres ma już swoją ramkę (red/yellow).
+        const needsReview = !touchedFields.has(f.key) && found && !disabled && !adresFail && !adresApprox;
         return (
           <div key={f.key}>
             <div className="flex items-center gap-2">
@@ -1644,7 +1655,7 @@ function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPrev
               </span>
               <Label className="text-xs w-32 shrink-0">{f.label}{isM3 && !preview.luzne_karton ? ' *' : ''}{isPal && !preview.bez_palet ? ' *' : ''}</Label>
               <Input
-                className={`h-8 text-sm flex-1 ${adresFail ? 'border-red-500 focus-visible:ring-red-500' : adresApprox ? 'border-yellow-500 focus-visible:ring-yellow-500' : ''}`}
+                className={`h-8 text-sm flex-1 ${adresFail ? 'border-red-500 focus-visible:ring-red-500' : adresApprox ? 'border-yellow-500 focus-visible:ring-yellow-500' : needsReview ? 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus-visible:ring-orange-400' : ''}`}
                 type={f.type || 'text'}
                 disabled={disabled}
                 value={disabled ? '0' : (val?.toString() ?? '')}
@@ -1652,6 +1663,12 @@ function PreviewFields({ preview, setPreview }: { preview: ParsePreview; setPrev
                   const raw = e.target.value;
                   setPreview(prev => prev ? { ...prev, [f.key]: f.type === 'number' ? (Number(raw) || 0) : raw } : prev);
                   if (isAdres && adresStatus !== 'idle') setAdresStatus('idle');
+                  setTouchedFields(prev => {
+                    if (prev.has(f.key)) return prev;
+                    const next = new Set(prev);
+                    next.add(f.key);
+                    return next;
+                  });
                 }}
                 onBlur={isAdres ? () => sprawdzAdres(val?.toString() || '') : undefined}
               />
