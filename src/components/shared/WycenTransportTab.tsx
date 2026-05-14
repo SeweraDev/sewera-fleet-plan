@@ -52,6 +52,22 @@ function sortByCapacityKg(typy: string[]): string[] {
   });
 }
 
+// Filtruje wyniki Photon do unikalnych lokalizacji (grid ~5 km po lat/lng).
+// Uzywane do wykrycia ambiguity: gdy user wpisze "Hadex" i Photon zwroci 4 punkty
+// w roznych miastach Slaska, pokazujemy je wszystkie w bannerze do wyboru.
+function uniqueLocations<T extends { lat: number; lng: number }>(results: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const r of results) {
+    const key = `${r.lat.toFixed(2)},${r.lng.toFixed(2)}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(r);
+    }
+  }
+  return out;
+}
+
 interface WycenTransportTabProps {
   /** Nazwa oddziału zalogowanego usera, np. "Gliwice" */
   oddzialNazwa: string;
@@ -146,16 +162,19 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  // "Czy to ten adres?" — pokazywane gdy geocoder znalazl COS INNEGO niz user wpisal
-  // (np. user: "romibud czerwionka", Photon: "Urzad Gminy Czerwionka"). Wymaga
-  // potwierdzenia zanim kalkulator wyliczy koszt — fundamentalna ochrona przed
-  // falszywa wycena (Photon czesto trafia w urzad/poczte gdy POI klienta nie ma w OSM).
+  // Banner potwierdzajacy lokalizacje — dwa scenariusze:
+  //  - 'nameMismatch': geocoder trafil w cos INNEGO niz user wpisal
+  //    (np. "romibud czerwionka" → "Urzad Gminy Czerwionka")
+  //  - 'ambiguity': fraza pasuje do >=2 roznych lokalizacji
+  //    (np. "hadex" → Hadex Katowice / Bieruń / Jastrzębie / Ochaby)
+  // W obu przypadkach blokujemy auto-wyliczenie i prosimy o wybor z alternatyw.
   const [pendingConfirm, setPendingConfirm] = useState<{
     coords: { lat: number; lng: number };
     hasHouseNumber: boolean;
     displayName: string;
     queryAdres: string;
     alternatives: SearchResult[];
+    reason: 'nameMismatch' | 'ambiguity';
   } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -733,6 +752,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
           displayName,
           queryAdres: adres,
           alternatives: alternatives.slice(0, 5),
+          reason: 'nameMismatch',
         });
         setWyniki(null);
         // Statystyki: log "name mismatch" — system znalazl ale nazwa nie pasuje.
@@ -749,6 +769,24 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
           wynikKm: null,
           wynikKosztNetto: null,
         });
+        return;
+      }
+
+      // Ambiguity guard — gdy fraza pasuje do >=2 roznych lokalizacji (np. "hadex"
+      // → 4 oddzialy w Slasku), nie zgaduj. Pokaz banner z lista i niech user wybierze.
+      // Sprawdzamy tylko gdy user nie wybral z dropdownu — wtedy nie ma pewnosci co dokladnie chcial.
+      const allMatches = await searchAddress(adres);
+      const distinct = uniqueLocations(allMatches);
+      if (distinct.length >= 2) {
+        setPendingConfirm({
+          coords,
+          hasHouseNumber,
+          displayName,
+          queryAdres: adres,
+          alternatives: distinct.slice(0, 6),
+          reason: 'ambiguity',
+        });
+        setWyniki(null);
         return;
       }
     }
@@ -892,31 +930,35 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
           </div>
         )}
 
-        {/* Banner "Czy to ten adres?" — ochrona przed falszywa wycena.
-            Photon trafil w inny obiekt z tym samym miastem (np. "Romibud Czerwionka"
-            → "Urzad Gminy Czerwionka"). User musi potwierdzic lub wybrac alternatywe. */}
+        {/* Banner potwierdzenia lokalizacji — 2 scenariusze:
+            - nameMismatch: Photon trafil w INNY obiekt niz nazwa wpisana (Romibud → Urzad Gminy)
+            - ambiguity: fraza pasuje do >=2 roznych lokalizacji (Hadex → 4 sklepy w Slasku) */}
         {pendingConfirm && (
           <div className="bg-red-50 dark:bg-red-950/30 border-2 border-red-400 dark:border-red-700 rounded-md p-4 space-y-3">
             <div className="flex items-start gap-2">
               <span className="text-xl">⚠️</span>
               <div className="flex-1 space-y-2">
                 <div className="font-semibold text-red-900 dark:text-red-100">
-                  Czy to na pewno ten adres?
+                  {pendingConfirm.reason === 'ambiguity'
+                    ? `Znaleziono kilka lokalizacji "${pendingConfirm.queryAdres}" — wybierz właściwą`
+                    : 'Czy to na pewno ten adres?'}
                 </div>
-                <div className="text-sm space-y-1">
-                  <div>
-                    <span className="text-muted-foreground">Wpisałeś:</span>{' '}
-                    <strong>{pendingConfirm.queryAdres}</strong>
+                {pendingConfirm.reason === 'nameMismatch' && (
+                  <div className="text-sm space-y-1">
+                    <div>
+                      <span className="text-muted-foreground">Wpisałeś:</span>{' '}
+                      <strong>{pendingConfirm.queryAdres}</strong>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">System znalazł:</span>{' '}
+                      <strong className="text-red-900 dark:text-red-100">{pendingConfirm.displayName}</strong>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">System znalazł:</span>{' '}
-                    <strong className="text-red-900 dark:text-red-100">{pendingConfirm.displayName}</strong>
-                  </div>
-                </div>
+                )}
                 <div className="text-xs text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/40 p-2 rounded">
-                  💡 Znaleziona lokalizacja może nie być tym czego szukasz. System
-                  szuka po mapie OpenStreetMap, w której nie wszystkie firmy są oznaczone.
-                  Zalecamy wpisać <strong>dokładny adres</strong> (ulica + numer + miasto) lub wybrać z alternatyw poniżej.
+                  {pendingConfirm.reason === 'ambiguity'
+                    ? '💡 Fraza pasuje do kilku miejsc na mapie. Kliknij właściwą poniżej, żeby wyliczyć koszt dla tej lokalizacji.'
+                    : '💡 Znaleziona lokalizacja może nie być tym czego szukasz. System szuka po mapie OpenStreetMap, w której nie wszystkie firmy są oznaczone. Zalecamy wpisać dokładny adres (ulica + numer + miasto) lub wybrać z alternatyw poniżej.'}
                 </div>
               </div>
             </div>
@@ -924,7 +966,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
             {pendingConfirm.alternatives.length > 0 && (
               <div className="space-y-1.5">
                 <div className="text-xs font-semibold text-red-900 dark:text-red-100">
-                  Inne propozycje z mapy:
+                  {pendingConfirm.reason === 'ambiguity' ? 'Lokalizacje:' : 'Inne propozycje z mapy:'}
                 </div>
                 <div className="flex flex-col gap-1">
                   {pendingConfirm.alternatives.map((s, i) => (
@@ -956,15 +998,17 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
               >
                 ✏️ Popraw adres
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={confirmAndCalculate}
-                disabled={loading}
-                className="text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/40"
-              >
-                Wylicz mimo to (ryzyko niepoprawnej wyceny) →
-              </Button>
+              {pendingConfirm.reason === 'nameMismatch' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={confirmAndCalculate}
+                  disabled={loading}
+                  className="text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/40"
+                >
+                  Wylicz mimo to (ryzyko niepoprawnej wyceny) →
+                </Button>
+              )}
             </div>
           </div>
         )}
