@@ -30,6 +30,21 @@ export function wyciagnijDateZUwag(uwagi: string | null | undefined): string | n
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // PRIORYTET: data z keyword'em "transport/dostawa/termin/data dostawy" — bierz ZAWSZE
+  // niezaleznie czy jest >= dzis. WZ moga przyjsc retrospektywnie (z opoznieniem),
+  // a user widzac pomaranczowa flage zweryfikuje wartosc.
+  const reKeyword = /(?:transport|dostawa|termin|data\s+dostawy)\s*[:.]?\s*(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/i;
+  const keywordMatch = uwagi.match(reKeyword);
+  if (keywordMatch) {
+    const dd = parseInt(keywordMatch[1], 10);
+    const mm = parseInt(keywordMatch[2], 10);
+    const yyyy = parseInt(keywordMatch[3], 10);
+    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yyyy >= 2020 && yyyy <= 2099) {
+      return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    }
+  }
+
+  // FALLBACK: dowolna data w uwagach, ale tylko >= dzis (zeby nie wziac daty wystawienia)
   const candidates: string[] = [];
 
   // Format DD.MM.YYYY / DD-MM-YYYY / DD/MM/YYYY
