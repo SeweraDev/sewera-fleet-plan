@@ -733,25 +733,44 @@ function fixPolishOCROdbiorca(name: string): string {
  */
 function extractDeliveryAddressFromUwagi(uwagi: string | null): string | null {
   if (!uwagi) return null;
+
+  const cleanUlica = (raw: string): string =>
+    raw
+      .replace(/\s+tel[\.:].*$/i, '')
+      .replace(/\s+kont(akt)?.*$/i, '')
+      .replace(/[,;].*$/, '')
+      .replace(/\s+\(.*$/, '')
+      .trim()
+      .replace(/[^A-Za-z0-9ĄĆĘŁŃÓŚŹŻąćęłńóśźż]+$/, '')
+      .trim();
+
+  // Wariant A: "MIASTO ul.X 6" — miasto przed ulicą.
   // Pattern bez flagi 'i' — wymagamy DUŻEJ litery na początku miasta, żeby nie
   // łapać przypadkiem fragmentów typu "do ul. ..." (gdy "do" pełni rolę przyimka).
-  const m = uwagi.match(/([A-ZŁŚŻŹĆ][a-ząęółśżźćń]{2,})\s+(ul|al|os|pl)\.\s+([^\n]+)/);
-  if (!m) return null;
-  const miasto = m[1];
-  const prefix = m[2].toLowerCase();
-  let ulica = m[3];
-  // Usuń ogon: "tel...", "kont...", przecinek, średnik, nawias
-  ulica = ulica
-    .replace(/\s+tel[\.:].*$/i, '')
-    .replace(/\s+kont(akt)?.*$/i, '')
-    .replace(/[,;].*$/, '')
-    .replace(/\s+\(.*$/, '')
-    .trim()
-    // ucięcie końcowych nie-alfanumerycznych znaków
-    .replace(/[^A-Za-z0-9ĄĆĘŁŃÓŚŹŻąćęłńóśźż]+$/, '')
-    .trim();
-  if (!ulica || ulica.length < 2) return null;
-  return `${miasto}, ${prefix}. ${ulica}`;
+  const mA = uwagi.match(/([A-ZŁŚŻŹĆ][a-ząęółśżźćń]{2,})\s+(ul|al|os|pl)\.\s+([^\n]+)/);
+  if (mA) {
+    const miasto = mA[1];
+    const prefix = mA[2].toLowerCase();
+    const ulica = cleanUlica(mA[3]);
+    if (ulica.length >= 2) return `${miasto}, ${prefix}. ${ulica}`;
+  }
+
+  // Wariant B (sesja 15.05.2026): "ul.Jankego 116 Katowice" — ulica przed miastem.
+  // Linia po linii, żeby nie wciągać tel/transport z kolejnych linii uwag.
+  // Wymaga: prefix.NAZWA numer MIASTO (kapitalizowane).
+  const linie = uwagi.split(/\n/);
+  for (const linia of linie) {
+    const mB = linia.match(/^\s*(ul|al|os|pl)\.\s*([A-ZŁŚŻŹĆa-ząęółśźćń][a-ząęółśźćń\.\-]+)\s+(\d+[a-zA-Z]?(?:[\/\-]\d+[a-zA-Z]?)?)\s+([A-ZŁŚŻŹĆ][a-ząęółśżźćń]{2,})/);
+    if (mB) {
+      const prefix = mB[1].toLowerCase();
+      const ulica = mB[2];
+      const nr = mB[3];
+      const miasto = mB[4];
+      return `${miasto}, ${prefix}. ${ulica} ${nr}`;
+    }
+  }
+
+  return null;
 }
 
 function cleanText(text: string): string {
@@ -1915,8 +1934,10 @@ function extractPozycje(lines: string[]): Pozycja[] {
   //   - linii opisu (nazwa dodatkowa) — do następnego "N." lub linii z JM
   //   - linii "JM ILOSC ILOSC_PO_KOREKCIE" (OPA/SZT/KG/...)  -- czasem w tej samej linii co nazwa
   const pozycje: Pozycja[] = [];
-  const JM_REGEX = /^(OPA|SZT|KG|MB|M2|M3|KPL|PCS|L|T|R|KART|PAR)\s+([\d,.]+)\s+([\d,.]+)\s*$/i;
-  const NAZWA_Z_JM = /^(\d+)\.\s+(.+?)\s+(OPA|SZT|KG|MB|M2|M3|KPL|PCS|L|T|R|KART|PAR)\s+([\d,.]+)\s+([\d,.]+)\s*$/i;
+  // Druga liczba (ilość po korekcie) jest opcjonalna — niektóre WZ Ekonom mają tylko
+  // ilość bez korekty, np. "SZT 48" zamiast "SZT 48 48" (sesja 15.05.2026).
+  const JM_REGEX = /^(OPA|SZT|KG|MB|M2|M3|KPL|PCS|L|T|R|KART|PAR)\s+([\d,.]+)(?:\s+([\d,.]+))?\s*$/i;
+  const NAZWA_Z_JM = /^(\d+)\.\s+(.+?)\s+(OPA|SZT|KG|MB|M2|M3|KPL|PCS|L|T|R|KART|PAR)\s+([\d,.]+)(?:\s+([\d,.]+))?\s*$/i;
   const NAZWA_BEZ_JM = /^(\d+)\.\s+(.+)$/;
 
   // Bufor kodów (kod_towaru / kod_producenta / EAN) — zbierane PRZED pozycją.
