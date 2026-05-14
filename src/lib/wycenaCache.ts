@@ -55,12 +55,40 @@ export async function searchKlienciCache(query: string): Promise<KlientCacheResu
     .select('odbiorca, adres, liczba_dostaw, ostatnia_dostawa')
     .or(orClause)
     .order('liczba_dostaw', { ascending: false })
-    .limit(10);
+    .limit(20);
 
   if (error || !rows || rows.length === 0) return [];
 
+  // Dedup po znormalizowanym adresie — ten sam adres moze byc wystawiony na
+  // rozne warianty nazwy odbiorcy (np. "NARMAL SZYMONEK 7:00" vs "NARMAL
+  // W.SZYMONEK I Z.SZYMONEK SPÓŁKA JAWNA" na ŻYTNIA 9A). Bierzemy odbiorce
+  // o najwiekszej liczbie dostaw (tiebreak: najdluzsza nazwa = pelniejsza forma).
+  const grouped = new Map<string, { odbiorca: string; adres: string; liczba_dostaw: number; ostatnia_dostawa: string }>();
+  for (const r of rows as any[]) {
+    const norm = normalizeAdres(r.adres);
+    const existing = grouped.get(norm);
+    if (!existing) {
+      grouped.set(norm, {
+        odbiorca: r.odbiorca,
+        adres: r.adres,
+        liczba_dostaw: r.liczba_dostaw,
+        ostatnia_dostawa: r.ostatnia_dostawa,
+      });
+    } else {
+      existing.liczba_dostaw += r.liczba_dostaw;
+      if (r.ostatnia_dostawa > existing.ostatnia_dostawa) existing.ostatnia_dostawa = r.ostatnia_dostawa;
+      // Wybor odbiorcy: wiekszy liczba_dostaw albo dluzsza nazwa
+      if (
+        r.liczba_dostaw > existing.liczba_dostaw - r.liczba_dostaw ||
+        (r.odbiorca && r.odbiorca.length > (existing.odbiorca || '').length)
+      ) {
+        existing.odbiorca = r.odbiorca;
+      }
+    }
+  }
+
   // Spradz ktore adresy mamy juz w geocode_cache (lat/lng od reki).
-  const adresyNorm = (rows as any[]).map(r => normalizeAdres(r.adres));
+  const adresyNorm = Array.from(grouped.keys());
   const { data: geoRows } = await supabase
     .from('geocode_cache' as any)
     .select('adres_norm, lat, lng, has_house_number, display_name')
@@ -71,23 +99,23 @@ export async function searchKlienciCache(query: string): Promise<KlientCacheResu
     geoMap.set(g.adres_norm, g);
   });
 
-  return (rows as any[]).map(r => {
-    const norm = normalizeAdres(r.adres);
-    const geo = geoMap.get(norm);
-    const odbiorcaCzysty = (r.odbiorca || '').replace(/sp\.?\s*z?\s*o\.?\s*o\.?/i, '').trim();
-    return {
-      name: `${odbiorcaCzysty} — ${r.adres}`,
-      lat: geo?.lat ?? 0,
-      lng: geo?.lng ?? 0,
-      hasHouseNumber: geo?.has_house_number ?? false,
-      subtitle: `${r.liczba_dostaw} ${r.liczba_dostaw === 1 ? 'dostawa' : 'dostaw'} · ostatnia ${formatRelDate(r.ostatnia_dostawa)}`,
-      source: 'cache' as const,
-      liczbaDostaw: r.liczba_dostaw,
-      ostatniaDostawa: r.ostatnia_dostawa,
-      odbiorca: r.odbiorca,
-      needsGeocode: !geo,
-    } as KlientCacheResult;
-  });
+  return Array.from(grouped.entries())
+    .sort((a, b) => b[1].liczba_dostaw - a[1].liczba_dostaw)
+    .map(([norm, r]) => {
+      const geo = geoMap.get(norm);
+      const odbiorcaCzysty = (r.odbiorca || '').replace(/sp\.?\s*z?\s*o\.?\s*o\.?/i, '').trim();
+      return {
+        name: `${odbiorcaCzysty} — ${r.adres}`,
+        lat: geo?.lat ?? 0,
+        lng: geo?.lng ?? 0,
+        hasHouseNumber: geo?.has_house_number ?? false,
+        source: 'cache' as const,
+        liczbaDostaw: r.liczba_dostaw,
+        ostatniaDostawa: r.ostatnia_dostawa,
+        odbiorca: r.odbiorca,
+        needsGeocode: !geo,
+      } as KlientCacheResult;
+    });
 }
 
 /**
@@ -208,17 +236,3 @@ export function logSearch(params: LogSearchParams): void {
     });
 }
 
-/** Format daty wzgledem dzisiaj (np. "wczoraj", "3 dni temu", "2 mies. temu"). */
-function formatRelDate(iso: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / (24 * 3600 * 1000));
-  if (diffDays === 0) return 'dziś';
-  if (diffDays === 1) return 'wczoraj';
-  if (diffDays < 7) return `${diffDays} dni temu`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} tyg. temu`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)} mies. temu`;
-  return `${Math.floor(diffDays / 365)} lat temu`;
-}
