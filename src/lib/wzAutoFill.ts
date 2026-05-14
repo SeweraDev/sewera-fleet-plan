@@ -122,10 +122,12 @@ export function wyliczObjetoscPozycji(p: Pozycja): number | null {
   const m3PerPlyta = dl * sz * gr;
   const pwPlyty = dl * sz; // m² powierzchni jednej płyty
 
-  // 4. Liczba sztuk per JM (OPA): "opak=1,2m2" / powierzchnia_płyty = sztuk
+  // 4. Liczba sztuk per JM (OPA): "opak=1,2m2" / powierzchnia_płyty = sztuk.
+  // Sewera używa "opak", "paczka", "paleta" wymiennie (różni producenci) — wszystkie
+  // znaczą "powierzchnia opakowania w m²" z której wyciągamy ile płyt mieści się w 1 JM.
   let sztukPerJm = 1;
   if (p.jm.toUpperCase().startsWith('OPA')) {
-    const opakM = opis.match(/opak\s*[=:]?\s*([\d,.]+)\s*m2/i);
+    const opakM = opis.match(/(?:opak|paczka|paleta)\s*[=:]?\s*([\d,.]+)\s*m2/i);
     if (opakM && pwPlyty > 0) {
       const opakM2 = parseFloat(opakM[1].replace(',', '.'));
       sztukPerJm = Math.max(1, Math.round(opakM2 / pwPlyty));
