@@ -201,11 +201,10 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
           .order('imie_nazwisko');
         // Sprawdz blokady na ten dzien
         const { data: blokady } = await supabase
-          .from('blokady')
+          .from('dostepnosc_blokady')
           .select('zasob_id, typ')
           .eq('typ', 'kierowca')
-          .lte('od', dzien)
-          .gte('do', dzien);
+          .eq('dzien', dzien);
         const zablokowani = new Set((blokady || []).map((b) => b.zasob_id));
         // Pre-fill OFF tylko dla zablokowanych (urlopów). Kierowcy juz w innych
         // kursach dnia mogą wziąć kolejny kurs jeśli starczy budżetu czasowego
@@ -343,11 +342,10 @@ export function AutoPlanModal({ open, onClose, oddzialId, oddzialNazwa, dzien, o
 
       // Sprawdz blokady pojazdow
       const { data: blokadyPoj } = await supabase
-        .from('blokady')
+        .from('dostepnosc_blokady')
         .select('zasob_id, typ')
         .eq('typ', 'pojazd')
-        .lte('od', dzien)
-        .gte('do', dzien);
+        .eq('dzien', dzien);
       const zablokowanePojazdy = new Set((blokadyPoj || []).map((b) => b.zasob_id));
 
       // Pobierz istniejace kursy dnia + ich liczbe przystankow (do szacowania czasu).

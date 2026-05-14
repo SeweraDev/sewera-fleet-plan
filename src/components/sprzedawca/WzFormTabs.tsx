@@ -633,8 +633,8 @@ function WzPdfBulkTab({
 
   const parseOne = useCallback(async (file: File): Promise<{ preview: ParsePreview | null; error: string | null; docType: 'wz' | 'zamowienie' | null }> => {
     try {
-      if (!file.name.toLowerCase().endsWith('.pdf')) return { preview: null, error: 'Nie PDF' };
-      if (file.size > 10 * 1024 * 1024) return { preview: null, error: 'Plik za duzy (>10 MB)' };
+      if (!file.name.toLowerCase().endsWith('.pdf')) return { preview: null, error: 'Nie PDF', docType: null };
+      if (file.size > 10 * 1024 * 1024) return { preview: null, error: 'Plik za duzy (>10 MB)', docType: null };
 
       const pdfjs = await import('pdfjs-dist');
       pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
@@ -1451,7 +1451,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
             onChange={e => setOcrText(e.target.value)}
           />
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleParse}>Parsuj dane</Button>
+            <Button size="sm" onClick={() => handleParse()}>Parsuj dane</Button>
             <Button size="sm" variant="outline" onClick={() => { setStep('upload'); setOcrText(""); setImageBlob(null); setPages([]); }}>Nowe zdjęcie</Button>
           </div>
         </div>
