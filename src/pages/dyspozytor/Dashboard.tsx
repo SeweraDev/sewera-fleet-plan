@@ -23,7 +23,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
-import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
+import { wyciagnijOddzialZNumeru } from '@/lib/oddzialy-geo';
 import { wyciagnijDateZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
 import { useKursyDnia } from '@/hooks/useKursyDnia';
 import { useKierowcyOddzialu } from '@/hooks/useKierowcyOddzialu';

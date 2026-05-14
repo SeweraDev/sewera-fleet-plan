@@ -150,6 +150,42 @@ export type Database = {
           },
         ]
       }
+      geocode_cache: {
+        Row: {
+          adres_norm: string
+          adres_oryginalny: string
+          created_at: string
+          display_name: string | null
+          has_house_number: boolean
+          last_used_at: string
+          lat: number
+          lng: number
+          uses_count: number
+        }
+        Insert: {
+          adres_norm: string
+          adres_oryginalny: string
+          created_at?: string
+          display_name?: string | null
+          has_house_number?: boolean
+          last_used_at?: string
+          lat: number
+          lng: number
+          uses_count?: number
+        }
+        Update: {
+          adres_norm?: string
+          adres_oryginalny?: string
+          created_at?: string
+          display_name?: string | null
+          has_house_number?: boolean
+          last_used_at?: string
+          lat?: number
+          lng?: number
+          uses_count?: number
+        }
+        Relationships: []
+      }
       kierowcy: {
         Row: {
           aktywny: boolean
@@ -187,6 +223,38 @@ export type Database = {
             columns: ["oddzial_id"]
             isOneToOne: false
             referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kurs_odcinki_techniczne: {
+        Row: {
+          created_at: string | null
+          id: string
+          km: number
+          kurs_id: string
+          opis: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          km: number
+          kurs_id: string
+          opis: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          km?: number
+          kurs_id?: string
+          opis?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kurs_odcinki_techniczne_kurs_id_fkey"
+            columns: ["kurs_id"]
+            isOneToOne: false
+            referencedRelation: "kursy"
             referencedColumns: ["id"]
           },
         ]
@@ -229,38 +297,6 @@ export type Database = {
             columns: ["zlecenie_id"]
             isOneToOne: false
             referencedRelation: "zlecenia"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      kurs_odcinki_techniczne: {
-        Row: {
-          id: string
-          kurs_id: string
-          opis: string
-          km: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          kurs_id: string
-          opis: string
-          km: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          kurs_id?: string
-          opis?: string
-          km?: number
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "kurs_odcinki_techniczne_kurs_id_fkey"
-            columns: ["kurs_id"]
-            isOneToOne: false
-            referencedRelation: "kursy"
             referencedColumns: ["id"]
           },
         ]
@@ -320,6 +356,13 @@ export type Database = {
             columns: ["flota_id"]
             isOneToOne: false
             referencedRelation: "flota"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kursy_flota_id_fkey"
+            columns: ["flota_id"]
+            isOneToOne: false
+            referencedRelation: "publiczna_flota_typy"
             referencedColumns: ["id"]
           },
           {
@@ -429,6 +472,54 @@ export type Database = {
         }
         Relationships: []
       }
+      wyszukiwania_log: {
+        Row: {
+          created_at: string
+          has_house_number: boolean | null
+          id: number
+          name_match: boolean | null
+          oddzial_kod: string | null
+          query: string
+          typ_pojazdu: string | null
+          uzyto_cache_klientow: boolean | null
+          wynik_km: number | null
+          wynik_koszt_netto: number | null
+          zalogowany: boolean
+          znaleziono_adres: string | null
+          zrodlo: string
+        }
+        Insert: {
+          created_at?: string
+          has_house_number?: boolean | null
+          id?: number
+          name_match?: boolean | null
+          oddzial_kod?: string | null
+          query: string
+          typ_pojazdu?: string | null
+          uzyto_cache_klientow?: boolean | null
+          wynik_km?: number | null
+          wynik_koszt_netto?: number | null
+          zalogowany?: boolean
+          znaleziono_adres?: string | null
+          zrodlo?: string
+        }
+        Update: {
+          created_at?: string
+          has_house_number?: boolean | null
+          id?: number
+          name_match?: boolean | null
+          oddzial_kod?: string | null
+          query?: string
+          typ_pojazdu?: string | null
+          uzyto_cache_klientow?: boolean | null
+          wynik_km?: number | null
+          wynik_koszt_netto?: number | null
+          zalogowany?: boolean
+          znaleziono_adres?: string | null
+          zrodlo?: string
+        }
+        Relationships: []
+      }
       zlecenia: {
         Row: {
           created_at: string
@@ -441,8 +532,10 @@ export type Database = {
           nadawca_id: string | null
           numer: string
           oddzial_id: number | null
+          pominieta_oszczednosc_pln: number | null
           preferowana_godzina: string | null
           status: string
+          typ_klienta: string | null
           typ_pojazdu: string | null
         }
         Insert: {
@@ -456,8 +549,10 @@ export type Database = {
           nadawca_id?: string | null
           numer: string
           oddzial_id?: number | null
+          pominieta_oszczednosc_pln?: number | null
           preferowana_godzina?: string | null
           status?: string
+          typ_klienta?: string | null
           typ_pojazdu?: string | null
         }
         Update: {
@@ -471,8 +566,10 @@ export type Database = {
           nadawca_id?: string | null
           numer?: string
           oddzial_id?: number | null
+          pominieta_oszczednosc_pln?: number | null
           preferowana_godzina?: string | null
           status?: string
+          typ_klienta?: string | null
           typ_pojazdu?: string | null
         }
         Relationships: [
@@ -493,6 +590,7 @@ export type Database = {
           id: string
           ilosc_palet: number | null
           klasyfikacja: string | null
+          km_prosta_override: number | null
           masa_kg: number
           nr_zamowienia: string | null
           numer_wz: string | null
@@ -501,7 +599,6 @@ export type Database = {
           tel: string | null
           uwagi: string | null
           wartosc_netto: number | null
-          km_prosta_override: number | null
           zlecenie_id: string
         }
         Insert: {
@@ -511,6 +608,7 @@ export type Database = {
           id?: string
           ilosc_palet?: number | null
           klasyfikacja?: string | null
+          km_prosta_override?: number | null
           masa_kg?: number
           nr_zamowienia?: string | null
           numer_wz?: string | null
@@ -519,7 +617,6 @@ export type Database = {
           tel?: string | null
           uwagi?: string | null
           wartosc_netto?: number | null
-          km_prosta_override?: number | null
           zlecenie_id: string
         }
         Update: {
@@ -529,6 +626,7 @@ export type Database = {
           id?: string
           ilosc_palet?: number | null
           klasyfikacja?: string | null
+          km_prosta_override?: number | null
           masa_kg?: number
           nr_zamowienia?: string | null
           numer_wz?: string | null
@@ -537,7 +635,6 @@ export type Database = {
           tel?: string | null
           uwagi?: string | null
           wartosc_netto?: number | null
-          km_prosta_override?: number | null
           zlecenie_id?: string
         }
         Relationships: [
@@ -552,7 +649,76 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      publiczna_flota_typy: {
+        Row: {
+          aktywny: boolean | null
+          id: string | null
+          jest_zewnetrzny: boolean | null
+          oddzial_id: number | null
+          typ: string | null
+        }
+        Insert: {
+          aktywny?: boolean | null
+          id?: string | null
+          jest_zewnetrzny?: boolean | null
+          oddzial_id?: number | null
+          typ?: string | null
+        }
+        Update: {
+          aktywny?: boolean | null
+          id?: string | null
+          jest_zewnetrzny?: boolean | null
+          oddzial_id?: number | null
+          typ?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flota_oddzial_id_fkey"
+            columns: ["oddzial_id"]
+            isOneToOne: false
+            referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publiczna_flota_zew_typy: {
+        Row: {
+          aktywny: boolean | null
+          id: string | null
+          oddzial_id: number | null
+          typ: string | null
+        }
+        Insert: {
+          aktywny?: boolean | null
+          id?: string | null
+          oddzial_id?: number | null
+          typ?: string | null
+        }
+        Update: {
+          aktywny?: boolean | null
+          id?: string | null
+          oddzial_id?: number | null
+          typ?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flota_zewnetrzna_oddzial_id_fkey"
+            columns: ["oddzial_id"]
+            isOneToOne: false
+            referencedRelation: "oddzialy"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publiczny_cache_klientow: {
+        Row: {
+          adres: string | null
+          liczba_dostaw: number | null
+          odbiorca: string | null
+          ostatnia_dostawa: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
