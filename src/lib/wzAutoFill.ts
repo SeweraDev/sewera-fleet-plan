@@ -155,10 +155,12 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
   let pominiete = 0;
   for (const p of pozycje) {
     if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) {
+      console.log(`[m3-pos] [USLUGA-skip] lp=${p.lp} "${p.nazwa_towaru}"`);
       pominiete += 1;
       continue;
     }
     const m3 = wyliczObjetoscPozycji(p);
+    console.log(`[m3-pos] lp=${p.lp} JM=${p.jm} il=${p.ilosc} nazwa="${p.nazwa_towaru}" opis="${p.nazwa_dodatkowa}" => m3=${m3}`);
     if (m3 != null && m3 > 0) {
       m3Total += m3;
       rozpoznane += 1;
