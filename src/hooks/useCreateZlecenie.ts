@@ -26,6 +26,9 @@ export interface WzInput {
   _pdfFile?: File | null;
   /** Obraz źródłowy z OCR/wklejenia (transient — alternatywa dla _pdfFile) */
   _imageBlob?: File | Blob | null;
+  /** Kod klienta (Nr ewid.) z PDF — transient, używany do auto-detekcji typu klienta (R).
+   *  Nie idzie do DB; parser przekazuje go z WZImportData przez ParsePreview do Dashboard. */
+  _kod_klienta?: string | null;
 }
 
 export interface ZlecenieInput {

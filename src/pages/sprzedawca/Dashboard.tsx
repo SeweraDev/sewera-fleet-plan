@@ -12,6 +12,7 @@ import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { toast } from 'sonner';
 import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
 import { wyciagnijDateZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
+import { detektujTypKlienta } from '@/lib/detekcjaTypuKlienta';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
 import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
 import { WzFormTabs } from '@/components/sprzedawca/WzFormTabs';
@@ -95,9 +96,11 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   // (zniknie po ręcznej zmianie przez sprzedawcę = potwierdzenie weryfikacji).
   const [oddzialAutoSet, setOddzialAutoSet] = useState(false);
   const [dzienAutoSet, setDzienAutoSet] = useState(false);
+  const [typKlientaAutoSet, setTypKlientaAutoSet] = useState(false);
   // Wrappery które resetują flagę gdy user manualnie zmieni wartość
   const setOddzialId = useCallback((v: number | null) => { setOddzialIdRaw(v); setOddzialAutoSet(false); }, []);
   const setDzien = useCallback((v: string) => { setDzienRaw(v); setDzienAutoSet(false); }, []);
+  const setTypKlientaWrap = useCallback((v: string) => { setTypKlienta(v); setTypKlientaAutoSet(false); }, []);
   const [wzList, setWzList] = useState<WzInput[]>([{
     numer_wz: '', nr_zamowienia: '', odbiorca: '', adres: '', tel: '', masa_kg: 0, objetosc_m3: 0, ilosc_palet: 0, bez_palet: false, luzne_karton: false, uwagi: '', klasyfikacja: '', wartosc_netto: null,
   }]);
@@ -205,7 +208,27 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
       setDzienAutoSet(true);
       toast.info(`📅 Data dostawy: ${dataZUwag} (z uwag WZ — sprawdź)`, { duration: 5000 });
     }
-  }, [oddzialId, oddzialy, dzien]);
+    // 3. Typ klienta — AUTO-DETEKCJA z kodu klienta (R), uwag (B2C), nazwy (D), fallback W.
+    // Async bo R wymaga query do tabeli klienci_redystrybucja.
+    detektujTypKlienta({
+      kodKlienta: wz._kod_klienta,
+      odbiorca: wz.odbiorca,
+      uwagi: wz.uwagi,
+    }).then((typ) => {
+      if (typ && typ !== typKlienta) {
+        setTypKlienta(typ);
+        setTypKlientaAutoSet(true);
+        const labelMap: Record<string, string> = { R: 'Redystrybucyjny', B: 'B2C', D: 'Detaliczny', W: 'Wykonawca' };
+        const why: Record<string, string> = {
+          R: 'kod klienta w bazie redystrybucji',
+          B: 'B2C w uwagach',
+          D: 'osoba fizyczna (imię + nazwisko)',
+          W: 'default (brak innego dopasowania)',
+        };
+        toast.info(`👤 Typ klienta: ${labelMap[typ] || typ} (${why[typ] || 'auto'} — sprawdź)`, { duration: 5000 });
+      }
+    }).catch((err) => console.warn('[Dashboard] detektujTypKlienta failed:', err));
+  }, [oddzialId, oddzialy, dzien, typKlienta]);
 
   return (
     <Card>
@@ -231,12 +254,13 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
           <TypPojazduStep
             oddzialId={oddzialId} setOddzialId={setOddzialId}
             typPojazdu={typPojazdu} setTypPojazdu={setTypPojazdu}
-            typKlienta={typKlienta} setTypKlienta={setTypKlienta}
+            typKlienta={typKlienta} setTypKlienta={setTypKlientaWrap}
             oddzialy={oddzialy} loadingOddzialy={loadingOddzialy}
             flota={flota} loadingFlota={loadingFlota}
             onBack={() => setStep(1)}
             onNext={() => setStep(3)}
             oddzialAutoSet={oddzialAutoSet}
+            typKlientaAutoSet={typKlientaAutoSet}
           />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag WZ lub default) */}

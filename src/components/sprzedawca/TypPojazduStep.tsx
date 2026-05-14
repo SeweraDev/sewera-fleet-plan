@@ -37,6 +37,9 @@ interface TypPojazduStepProps {
   /** Smart Prefill — true gdy oddział został auto-ustawiony z numeru WZ.
    *  Pomarańczowa ramka informuje sprzedawcę żeby zweryfikował. */
   oddzialAutoSet?: boolean;
+  /** Smart Prefill — true gdy typ klienta został auto-wykryty (R z bazy / B2C z uwag / D z nazwy).
+   *  Pomarańczowa ramka informuje sprzedawcę żeby zweryfikował. */
+  typKlientaAutoSet?: boolean;
 }
 
 export function TypPojazduStep({
@@ -48,6 +51,7 @@ export function TypPojazduStep({
   onNext,
   onBack,
   oddzialAutoSet,
+  typKlientaAutoSet,
 }: TypPojazduStepProps) {
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
   const [tab, setTab] = useState('pojazd');
@@ -82,9 +86,11 @@ export function TypPojazduStep({
       </div>
 
       <div>
-        <Label>Typ klienta *</Label>
+        <Label>Typ klienta *{typKlientaAutoSet && <span className="ml-2 text-[11px] text-orange-700 dark:text-orange-400 font-normal">🟠 auto z WZ — sprawdź</span>}</Label>
         <Select onValueChange={setTypKlienta} value={typKlienta}>
-          <SelectTrigger><SelectValue placeholder="Wybierz typ klienta" /></SelectTrigger>
+          <SelectTrigger className={cn(typKlientaAutoSet && 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus:ring-orange-400')}>
+            <SelectValue placeholder="Wybierz typ klienta" />
+          </SelectTrigger>
           <SelectContent>
             {TYPY_KLIENTOW.map(t => (
               <SelectItem key={t.kod} value={t.kod}>

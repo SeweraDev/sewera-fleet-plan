@@ -30,6 +30,9 @@ export interface WZImportData {
   uwagi: string | null;
   typ_dokumentu: string | null;
   ma_adres_dostawy: boolean;
+  /** Kod klienta z sekcji Odbiorca ("Nr ewid.: 11000452"). Używany do auto-detekcji
+   *  typu klienta (R z tabeli klienci_redystrybucja). Sesja 14.05.2026. */
+  kod_klienta?: string | null;
   /** Pozycje z tabeli towarów (opcjonalne — niektóre źródła nie wypełniają).
    *  Używane do auto-wyliczenia objętości m³ na podstawie wymiarów w opisie. */
   pozycje?: Pozycja[];
@@ -1845,6 +1848,12 @@ export function parseWZText(rawText: string): WZImportData {
     console.groupEnd();
   }
 
+  // Kod klienta — "Nr ewid.: 11000452" w sekcji Odbiorca dokumentu Ekonom.
+  // Używany do auto-detekcji typu klienta (R z tabeli klienci_redystrybucja).
+  let kod_klienta: string | null = null;
+  const kodM = text.match(/Nr\s*ewid\.?\s*:?\s*(\d{4,12})/i);
+  if (kodM) kod_klienta = kodM[1];
+
   return {
     numer_wz,
     nr_zamowienia,
@@ -1858,6 +1867,7 @@ export function parseWZText(rawText: string): WZImportData {
     uwagi,
     typ_dokumentu: "WZ" as string | null,
     ma_adres_dostawy: false,
+    kod_klienta,
     pozycje,
   };
 }

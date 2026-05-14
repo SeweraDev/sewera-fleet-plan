@@ -404,6 +404,8 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         bez_palet: false,
         luzne_karton: false,
         uwagi: mapped.uwagi || '',
+      kod_klienta: mapped.kod_klienta || null,
+        kod_klienta: mapped.kod_klienta || null,
       });
     } catch (err) {
       setError('Błąd odczytu PDF: ' + (err as Error).message);
@@ -436,13 +438,14 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       bez_palet: false,
       luzne_karton: false,
       uwagi: mapped.uwagi || '',
+      kod_klienta: mapped.kod_klienta || null,
     });
   }, []);
 
   const handleConfirm = () => {
     if (!preview) return;
     // _pdfFile = oryginalny PDF do archiwum (transient, useCreateZlecenie zarchiwizuje go po INSERT WZ)
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _pdfFile: pdfFile };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _pdfFile: pdfFile, _kod_klienta: preview.kod_klienta };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -730,6 +733,8 @@ function WzPdfBulkTab({
           bez_palet: false,
           luzne_karton: false,
           uwagi: mapped.uwagi || '',
+      kod_klienta: mapped.kod_klienta || null,
+        kod_klienta: mapped.kod_klienta || null,
         },
         error: null,
         docType,
@@ -1356,6 +1361,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       bez_palet: false,
       luzne_karton: false,
       uwagi: mapped.uwagi || '',
+      kod_klienta: mapped.kod_klienta || null,
     });
     setStep('preview');
   };
@@ -1363,7 +1369,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const handleConfirm = () => {
     if (!preview) return;
     // _imageBlob = oryginalny obraz do archiwum (transient, useCreateZlecenie po INSERT zarchiwizuje)
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _imageBlob: imageBlob };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _imageBlob: imageBlob, _kod_klienta: preview.kod_klienta };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -1576,6 +1582,8 @@ type ParsePreview = {
   bez_palet: boolean;
   luzne_karton: boolean;
   uwagi: string;
+  /** Kod klienta z PDF (Nr ewid.) - do auto-detekcji typu klienta R. Transient. */
+  kod_klienta?: string | null;
 };
 
 const PREVIEW_FIELDS: { key: keyof ParsePreview; label: string; type?: string }[] = [
@@ -1772,13 +1780,14 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
       bez_palet: false,
       luzne_karton: false,
       uwagi: mapped.uwagi || '',
+      kod_klienta: mapped.kod_klienta || null,
     });
     setParsing(false);
   };
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _kod_klienta: preview.kod_klienta };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
