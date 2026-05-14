@@ -161,7 +161,7 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
                 <>
                   <Label className="text-xs">Klasyfikacja transportu</Label>
                   <Select value={wz.klasyfikacja || ''} onValueChange={(v) => updateWz(idx, 'klasyfikacja', v)}>
-                    <SelectTrigger className="h-8 text-sm">
+                    <SelectTrigger className={cn('h-8 text-sm', fieldClass(idx, 'klasyfikacja', !!wz.klasyfikacja))}>
                       <SelectValue placeholder="Wybierz klasyfikację…" />
                     </SelectTrigger>
                     <SelectContent>
