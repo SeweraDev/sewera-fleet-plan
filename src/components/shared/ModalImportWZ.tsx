@@ -1929,7 +1929,7 @@ function extractPozycje(lines: string[]): Pozycja[] {
         nazwa_towaru: inline[2].trim(),
         nazwa_dodatkowa: "",
         jm: inline[3].toUpperCase(),
-        ilosc: parseFloat((inline[5] || inline[4]).replace(",", ".")),
+        ilosc: parseFloat(inline[4].replace(",", ".")),
       });
       kodBuffer = [];
       continue;
@@ -1955,8 +1955,10 @@ function extractPozycje(lines: string[]): Pozycja[] {
         const jmM = ll.match(JM_REGEX);
         if (jmM) {
           jm = jmM[1].toUpperCase();
-          // Bierzemy ilość PO KOREKCIE (drugą liczbę) jeśli jest, inaczej pierwszą
-          ilosc = parseFloat((jmM[3] || jmM[2]).replace(",", "."));
+          // Bierzemy zwykła ilość (pierwsza liczba), NIE "Ilość po korekcie".
+          // Po korekcie to wartość po częściowej realizacji — do wyliczeń transportu
+          // (m³/masa/palety) używamy oryginalnej zamówionej ilości.
+          ilosc = parseFloat(jmM[2].replace(",", "."));
           i = j; // przeskocz do linii z JM
           break;
         }
