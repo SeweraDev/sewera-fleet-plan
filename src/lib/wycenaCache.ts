@@ -31,8 +31,19 @@ interface GeocodeCacheRow {
   display_name: string | null;
 }
 
+// Normalizacja agresywna — uzywana zarowno do dedupu autocomplete (NARMAL
+// pojawia sie jako "ŻYTNIA 9 A, SOSNOWIEC" i "ul. ŻYTNIA 9 A, 41-205 SOSNOWIEC"
+// dla roznych odbiorcow przy tym samym adresie), jak i do klucza geocode_cache
+// (zeby ten sam fizyczny adres trafial w jeden wpis cache, niezaleznie od
+// drobnych roznic w zapisie typu prefiksu "ul." czy kodu pocztowego).
 function normalizeAdres(adres: string): string {
-  return adres.trim().toLowerCase().replace(/\s+/g, ' ');
+  return (adres || '')
+    .toLowerCase()
+    .replace(/\bul\.\s*|\bulica\s+|\bal\.\s*|\baleja\s+/g, '')
+    .replace(/\b\d{2}-\d{3}\b/g, '')
+    .replace(/[,;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
