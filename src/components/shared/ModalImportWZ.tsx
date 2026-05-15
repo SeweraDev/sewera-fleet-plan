@@ -687,7 +687,9 @@ function fixPolishOCRAddress(addr: string): string {
     .replace(/\b([Kk])rakow\b/g, (_, k) => k + 'raków')
     // Powszechne nazwy ulic które Tesseract psuje:
     // "Lódz/Lódzka" → "Łódź/Łódzka"
-    .replace(/\b([Ll])(ó|o)dzk/g, (_, l, o) => (l === 'L' ? 'Ł' : 'ł') + 'ódzk');
+    .replace(/\b([Ll])(ó|o)dzk/g, (_, l, o) => (l === 'L' ? 'Ł' : 'ł') + 'ódzk')
+    // Literówka klienta w uwagach: "Katowcie" → "Katowice" (typowy szybki opis)
+    .replace(/\b([Kk])atowcie\b/g, (_, k) => k + 'atowice');
 }
 
 /**
@@ -767,6 +769,18 @@ function extractDeliveryAddressFromUwagi(uwagi: string | null): string | null {
       const nr = mB[3];
       const miasto = mB[4];
       return `${miasto}, ${prefix}. ${ulica} ${nr}`;
+    }
+  }
+
+  // Wariant C (sesja 15.05.2026 noc): "Katowcie Rolna 43" — bez prefixu "ul." (skrót klienta).
+  // Format: MIASTO NAZWA_ULICY NUMER. Dodajemy "ul." automatycznie.
+  for (const linia of linie) {
+    const mC = linia.match(/^\s*([A-ZŁŚŻŹĆ][a-ząęółśżźćń]{2,})\s+([A-ZŁŚŻŹĆ][a-ząęółśźćń]+)\s+(\d+[a-zA-Z]?(?:[\/\-]\d+[a-zA-Z]?)?)\s*$/);
+    if (mC) {
+      const miasto = mC[1];
+      const ulica = mC[2];
+      const nr = mC[3];
+      return `${miasto}, ul. ${ulica} ${nr}`;
     }
   }
 

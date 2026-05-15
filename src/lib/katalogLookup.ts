@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
-import { isPaletaJakoTowar, wyliczPaletyFrakcjaPozycji, M3_PER_PALETA } from './wzAutoFill';
+import { isPaletaJakoTowar, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, M3_PER_PALETA } from './wzAutoFill';
 
 /**
  * Lookup pozycji WZ w bazie katalog_towarow.
@@ -157,8 +157,20 @@ export function agregujZKatalogu(
     if (isPaletaJakoTowar(p)) {
       continue;
     }
+    const paletyZOpisu = wyliczPaletyFrakcjaPozycji(p);
     const m = matches.get(p.lp);
     if (!m) {
+      // Pozycja nie ma matchu w katalog_towarow — bierzemy palety/m3 z opisu (regex).
+      // Bez tego pozycje od mniej popularnych producentow (np. WIENERBERGER bez Nr ewid.)
+      // sa pomijane w sumie, mimo ze opis ma "paleta=Xszt" + "wym XxY".
+      const m3FromWym = wyliczObjetoscPozycji(p);
+      if (paletyZOpisu > 0) {
+        paletFrac += paletyZOpisu;
+        m3Total += m3FromWym ?? (paletyZOpisu * M3_PER_PALETA);
+      } else if (m3FromWym && m3FromWym > 0) {
+        m3Total += m3FromWym;
+        paletFrac += m3FromWym / M3_PER_PALETA;
+      }
       bezBaza++;
       continue;
     }
@@ -174,7 +186,6 @@ export function agregujZKatalogu(
     // m3 zostaje z bazy (dokladniejsze niz palety × 1,1).
     // Przyklad WZ KK/112/26/05/0012668: POROTHERM 500/100=5 + TERMOBET 224/112=2 = 7 palet
     // (zamiast 9 z wzoru m3/1,1).
-    const paletyZOpisu = wyliczPaletyFrakcjaPozycji(p);
     if (paletyZOpisu > 0) {
       paletFrac += paletyZOpisu;
       if (m.m3_per_szt != null && !m.m3_podejrzany) {

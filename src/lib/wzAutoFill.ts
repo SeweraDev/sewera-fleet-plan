@@ -196,7 +196,20 @@ export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   if (!pM) return 0;
   const perPaleta = parseInt(pM[1], 10);
   if (perPaleta <= 0) return 0;
-  return p.ilosc / perPaleta;
+  const paletyProducenta = p.ilosc / perPaleta;
+
+  // Dlugie towary (plyty gipsowe 1200x2600, dachowki, etc.) — wymiary > 2000mm.
+  // Pakowane na specjalnej palecie producenta (np. 1200x2600), ktora na aucie
+  // zajmuje 2 standardowe miejsca paletowe (1200x800). Decyzja 15.05.2026.
+  const wym = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
+  if (wym) {
+    const max = Math.max(parseInt(wym[1], 10), parseInt(wym[2], 10));
+    if (max > 2000) {
+      // ceil palet producenta * 2 (zaokraglamy bo dlugi towar nie jest dzielony na frakcje)
+      return Math.max(1, Math.ceil(paletyProducenta)) * 2;
+    }
+  }
+  return paletyProducenta;
 }
 
 export function wyliczObjetoscPozycji(p: Pozycja): number | null {
@@ -228,10 +241,19 @@ export function wyliczObjetoscPozycji(p: Pozycja): number | null {
   const sz = parseInt(wymM[2], 10) / 1000;
   if (dl < 0.05 || sz < 0.05) return null; // sanity check
 
-  // 3. Grubość z końca nazwy: "FASOTERM 150" → 150 mm → 0,15 m
+  // 3. Grubość z nazwy:
+  //    Wariant A: "FASOTERM 150" — liczba na samym koncu nazwy (mm domyslnie)
+  //    Wariant B: "RIGIPS PLYTA GKF 12,5mm" — liczba + 'mm' (z dziesietnym)
+  const grubMmm = p.nazwa_towaru.match(/(\d+(?:[,.]\d+)?)\s*mm\b/i);
   const grubM = p.nazwa_towaru.match(/\b(\d{2,4})\s*$/);
-  if (!grubM) return null;
-  const gr = parseInt(grubM[1], 10) / 1000;
+  let gr: number;
+  if (grubMmm) {
+    gr = parseFloat(grubMmm[1].replace(',', '.')) / 1000;
+  } else if (grubM) {
+    gr = parseInt(grubM[1], 10) / 1000;
+  } else {
+    return null;
+  }
   if (gr < 0.001 || gr > 1.0) return null; // sanity: grubość 1-1000 mm
 
   const m3PerPlyta = dl * sz * gr;
@@ -416,13 +438,16 @@ export async function klasyfikujWZAsync(
       const { wzbogacZKatalogu, agregujZKatalogu } = await import('@/lib/katalogLookup');
       const matches = await wzbogacZKatalogu(pozycje);
       const agr = agregujZKatalogu(pozycje, matches);
-      if (agr.pozycji_z_baza > 0) {
+      // Bierzemy agregat gdy mamy choc jeden wynik: pozycja w katalogu, palety lub m3.
+      // Agregat liczy palety/m3 takze dla pozycji BEZ katalogu (regex z opisu),
+      // wiec moze byc uzyteczny nawet gdy pozycji_z_baza=0.
+      if (agr.pozycji_z_baza > 0 || agr.palet_total > 0 || agr.m3_total > 0) {
         katalog = {
           m3_total: agr.m3_total,
           palet_total: agr.palet_total,
           wymaga_hds: agr.wymaga_hds,
           dzialy_hds: agr.dzialy_hds,
-          pozycji_z_baza: agr.pozycji_z_baza,
+          pozycji_z_baza: Math.max(agr.pozycji_z_baza, 1), // >=1 zeby klasyfikujLadunek wzial wynik z bazy
         };
       }
     } catch (e) {
