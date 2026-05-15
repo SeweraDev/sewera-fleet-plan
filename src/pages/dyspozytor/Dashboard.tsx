@@ -1255,7 +1255,10 @@ function NoweZlecenieFormDyspozytor({ onSuccess }: { onSuccess: () => void }) {
             oddzialy={oddzialy} loadingOddzialy={loadingOddzialy} flota={flotaList} loadingFlota={loadingFlota}
             onBack={() => setStep(1)} onNext={() => setStep(3)}
             oddzialAutoSet={oddzialAutoSet}
-            typKlientaAutoSet={typKlientaAutoSet} />
+            typKlientaAutoSet={typKlientaAutoSet}
+            wymagaHds={wzList.some((w: any) => w._wymaga_hds)}
+            dzialyHds={[...new Set(wzList.flatMap((w: any) => w._dzialy_hds || []))]}
+            sumaPalet={wzList.reduce((s: number, w: any) => s + (w.ilosc_palet || 0), 0)} />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag lub default) */}
         {step === 3 && <CzasDostawyStep dzien={dzien} setDzien={setDzien} godzina={godzina} setGodzina={setGodzina} oddzialId={oddzialId} typPojazdu={typPojazdu} onBack={() => setStep(2)} onNext={() => setStep(4)} dzienAutoSet={dzienAutoSet} godzinaAutoSet={godzinaAutoSet} />}

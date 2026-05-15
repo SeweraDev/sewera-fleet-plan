@@ -29,6 +29,11 @@ export interface WzInput {
   /** Kod klienta (Nr ewid.) z PDF — transient, używany do auto-detekcji typu klienta (R).
    *  Nie idzie do DB; parser przekazuje go z WZImportData przez ParsePreview do Dashboard. */
   _kod_klienta?: string | null;
+  /** Flaga: ≥1 pozycja WZ ma w bazie katalog_towarow wymaga_hds=true.
+   *  Transient — uzywana w Kroku 2 do bannera "Sugerowany HDS zamiast windy". */
+  _wymaga_hds?: boolean;
+  /** Lista dzialow ciezkich z bazy (do wyswietlenia w bannerze, np. "DACHÓWKI, KOSTKA"). */
+  _dzialy_hds?: string[];
 }
 
 export interface ZlecenieInput {

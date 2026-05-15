@@ -40,6 +40,12 @@ interface TypPojazduStepProps {
   /** Smart Prefill — true gdy typ klienta został auto-wykryty (R z bazy / B2C z uwag / D z nazwy).
    *  Pomarańczowa ramka informuje sprzedawcę żeby zweryfikował. */
   typKlientaAutoSet?: boolean;
+  /** ≥1 pozycja w wzList ma w bazie katalog_towarow wymaga_hds=true. Decyduje o bannerze HDS. */
+  wymagaHds?: boolean;
+  /** Lista dzialow ciezkich z bazy (np. ["DACHÓWKI CERAMICZNE", "KOSTKA BRUKOWA"]) — do bannera. */
+  dzialyHds?: string[];
+  /** Suma palet ze wszystkich WZ na zleceniu — banner aktywny tylko gdy >=2. */
+  sumaPalet?: number;
 }
 
 export function TypPojazduStep({
@@ -52,7 +58,16 @@ export function TypPojazduStep({
   onBack,
   oddzialAutoSet,
   typKlientaAutoSet,
+  wymagaHds,
+  dzialyHds,
+  sumaPalet,
 }: TypPojazduStepProps) {
+  // Banner HDS: ≥1 pozycja z katalogu wymaga HDS + suma palet >= 2 + klient nie-R.
+  // Decyzja 15.05.2026: materialy konstrukcyjne (cegly, dachowki, kostka) nie powinny
+  // jechac winda — dluzszy czas i wieksze koszty kierowcy, choc klient placi mniej.
+  const pokazBannerHds = !!wymagaHds && (sumaPalet ?? 0) >= 2 && typKlienta !== 'R';
+  // Wybrany typ to winda? (B/C/D/E = pojazdy z winda, F/G/H/I = HDS)
+  const wybranoWinde = /winda/i.test(typPojazdu) || typPojazdu === 'Dostawczy 1,2t';
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
   const [tab, setTab] = useState('pojazd');
 
@@ -73,6 +88,33 @@ export function TypPojazduStep({
 
   return (
     <div className="space-y-4">
+      {pokazBannerHds && (
+        <div className={cn(
+          'rounded-lg border-2 p-3 text-sm',
+          wybranoWinde
+            ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
+            : 'border-green-500 bg-green-50 dark:bg-green-950/30'
+        )}>
+          <div className="flex items-start gap-2">
+            <span className="text-xl shrink-0">{wybranoWinde ? '⚠️' : '🚛'}</span>
+            <div className="space-y-1">
+              <div className="font-semibold text-foreground">
+                {wybranoWinde ? 'Wykryto materiały konstrukcyjne — sugerowany HDS' : 'Materiały konstrukcyjne — HDS to dobry wybór'}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Ładunek <strong>{sumaPalet ?? '?'} palet</strong>
+                {dzialyHds && dzialyHds.length > 0 && (
+                  <> z działu <strong>{dzialyHds.slice(0, 2).map(d => d.split('\\').pop()?.trim()).filter(Boolean).join(', ')}</strong></>
+                )}.
+                {wybranoWinde && (
+                  <> Winda na takim ładunku to dłuższy czas kierowcy (~45 min vs 10 min HDS) i wyższe koszty operacyjne — choć cena dla klienta niższa. <strong>Rozważ HDS poniżej.</strong></>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <Label>Oddział{oddzialAutoSet && <span className="ml-2 text-[11px] text-orange-700 dark:text-orange-400 font-normal">🟠 auto z numeru WZ — sprawdź</span>}</Label>
         <Select onValueChange={v => setOddzialId(Number(v))} value={oddzialId?.toString() || ''}>

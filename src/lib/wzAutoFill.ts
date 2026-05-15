@@ -311,6 +311,22 @@ export interface KlasyfikacjaLadunku {
   ilosc_palet: number;
   luzne_karton: boolean;
   bez_palet: boolean;
+  /** True gdy ≥1 pozycja WZ wykryta w bazie katalog_towarow ma wymaga_hds=true. */
+  wymaga_hds: boolean;
+  /** Lista unikalnych dzialow ciezkich z bazy (do wyswietlenia w bannerze). */
+  dzialy_hds: string[];
+}
+
+/**
+ * Wynik agregacji z bazy katalog_towarow (zwracany przez agregujZKatalogu).
+ * Podajemy opcjonalnie do klasyfikujLadunek — baza ma priorytet nad parserem opisu.
+ */
+export interface KatalogAgregatInput {
+  m3_total: number;
+  palet_total: number;
+  wymaga_hds: boolean;
+  dzialy_hds: string[];
+  pozycji_z_baza: number;
 }
 
 export function klasyfikujLadunek(
@@ -318,26 +334,72 @@ export function klasyfikujLadunek(
   masaKg: number,
   fallbackM3: number = 0,
   fallbackPalet: number = 0,
+  katalog?: KatalogAgregatInput,
 ): KlasyfikacjaLadunku {
   let m3 = 0;
   let palet = 0;
   let rozpoznane = 0;
+  const wymaga_hds = katalog?.wymaga_hds ?? false;
+  const dzialy_hds = katalog?.dzialy_hds ?? [];
 
-  if (pozycje && pozycje.length > 0) {
+  // Priorytet 1: baza katalog_towarow (gdy mamy dla wszystkich/wiekszosci pozycji)
+  // Decyzja 15.05: baza ma najwyzszy priorytet, bo dane sa precyzyjne i autorytatywne.
+  // Parser opisu (regex wym/X,Ym3/p=Xszt) tylko gdy baza nie pokrywa danej pozycji.
+  if (katalog && katalog.pozycji_z_baza > 0 && katalog.m3_total > 0) {
+    m3 = katalog.m3_total;
+    palet = katalog.palet_total;
+    rozpoznane = katalog.pozycji_z_baza;
+  }
+
+  // Priorytet 2: parser opisu (gdy baza nic nie zwrocila)
+  if (m3 === 0 && pozycje && pozycje.length > 0) {
     const calc = wyliczObjetoscZPozycji(pozycje);
     rozpoznane = calc.rozpoznane;
     if (calc.rozpoznane > 0) m3 = Math.round(calc.m3Total * 100) / 100;
     palet = calc.palet;
   }
 
-  // Fallback do wartosci z PDF/zamowienia gdy parser nic nie wyliczyl z pozycji
+  // Priorytet 3: fallback do wartosci z PDF/zamowienia
   if (m3 === 0) m3 = fallbackM3;
   if (palet === 0) palet = fallbackPalet;
 
-  // Auto-drobnica: zero z parsera + zero z fallback + masa <= 100 kg → luzne karton
+  // Auto-drobnica: zero ze wszystkich zrodel + masa <= 100 kg → luzne karton
   if (rozpoznane === 0 && m3 === 0 && palet === 0 && masaKg > 0 && masaKg <= MASA_PROG_DROBNICA_KG) {
-    return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true };
+    return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true, wymaga_hds, dzialy_hds };
   }
 
-  return { objetosc_m3: m3, ilosc_palet: palet, luzne_karton: false, bez_palet: false };
+  return { objetosc_m3: m3, ilosc_palet: palet, luzne_karton: false, bez_palet: false, wymaga_hds, dzialy_hds };
+}
+
+/**
+ * Wersja async — pobiera dane z bazy katalog_towarow (Supabase) i potem
+ * wywoluje klasyfikujLadunek z agregatem. Dynamic import lookupu zeby
+ * nie ladowac modulu Supabase w komponentach gdzie go nie potrzeba.
+ */
+export async function klasyfikujWZAsync(
+  pozycje: Pozycja[] | undefined | null,
+  masaKg: number,
+  fallbackM3: number = 0,
+  fallbackPalet: number = 0,
+): Promise<KlasyfikacjaLadunku> {
+  let katalog: KatalogAgregatInput | undefined;
+  if (pozycje && pozycje.length > 0) {
+    try {
+      const { wzbogacZKatalogu, agregujZKatalogu } = await import('@/lib/katalogLookup');
+      const matches = await wzbogacZKatalogu(pozycje);
+      const agr = agregujZKatalogu(pozycje, matches);
+      if (agr.pozycji_z_baza > 0) {
+        katalog = {
+          m3_total: agr.m3_total,
+          palet_total: agr.palet_total,
+          wymaga_hds: agr.wymaga_hds,
+          dzialy_hds: agr.dzialy_hds,
+          pozycji_z_baza: agr.pozycji_z_baza,
+        };
+      }
+    } catch (e) {
+      console.warn('[klasyfikujWZAsync] Lookup w bazie katalog_towarow nie powiodl sie:', e);
+    }
+  }
+  return klasyfikujLadunek(pozycje, masaKg, fallbackM3, fallbackPalet, katalog);
 }
