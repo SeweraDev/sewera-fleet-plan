@@ -147,6 +147,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
   // przechodzimy do Kroku 2 (TypPojazduStep). Klasyfikacja zostaje opcjonalna —
   // jeśli typ pojazdu zostanie wybrany w Kroku 2, klasyfikacja auto-uzupełni się.
   const handleZatwierdzWZ = () => {
+    console.log('[handleZatwierdzWZ] wzList=', JSON.stringify(wzList, null, 2));
     const invalid = wzList.find(w => {
       if (!w.odbiorca || !w.masa_kg) return true;
       if (!w.adres || w.adres.trim().length < 5) return true;
