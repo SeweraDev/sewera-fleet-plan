@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Topbar } from '@/components/shared/Topbar';
+import { AppLayout } from '@/components/shared/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -95,27 +95,21 @@ export default function StatystykiWyceny() {
 
   if (loading) {
     return (
-      <>
-        <Topbar />
-        <main className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        </main>
-      </>
+      <AppLayout>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
     );
   }
 
   if (error) {
     return (
-      <>
-        <Topbar />
-        <main className="max-w-7xl mx-auto px-6 py-6">
-          <Card>
-            <CardContent className="py-8 text-center text-destructive">{error}</CardContent>
-          </Card>
-        </main>
-      </>
+      <AppLayout>
+        <Card>
+          <CardContent className="py-8 text-center text-destructive">{error}</CardContent>
+        </Card>
+      </AppLayout>
     );
   }
 
@@ -209,9 +203,8 @@ export default function StatystykiWyceny() {
     .sort((a, b) => b.liczba - a.liczba);
 
   return (
-    <>
-      <Topbar />
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+    <AppLayout>
+      <div className="max-w-7xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Activity className="h-6 w-6" />
@@ -370,8 +363,8 @@ export default function StatystykiWyceny() {
             )}
           </CardContent>
         </Card>
-      </main>
-    </>
+      </div>
+    </AppLayout>
   );
 }
 

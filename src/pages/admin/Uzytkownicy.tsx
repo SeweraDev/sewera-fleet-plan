@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Topbar } from '@/components/shared/Topbar';
+import { AppLayout } from '@/components/shared/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -213,9 +213,8 @@ export default function AdminUzytkownicy() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <Topbar />
-      <main className="flex-1 p-6 space-y-6">
+    <AppLayout>
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">Użytkownicy</h1>
@@ -383,7 +382,7 @@ export default function AdminUzytkownicy() {
           destructive
           onConfirm={handleDelete}
         />
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
