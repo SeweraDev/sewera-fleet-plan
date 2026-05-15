@@ -5,6 +5,12 @@ import type { UserProfile, AppRole } from '@/types/auth';
 import { ROLE_ROUTES } from '@/types/auth';
 import type { User, Session } from '@supabase/supabase-js';
 
+// Multi-role: priorytet wyboru "primary" roli przy redirect (admin > zarzad > ...).
+const ROLE_PRIORITY: AppRole[] = ['admin', 'zarzad', 'dyspozytor', 'sprzedawca', 'kierowca'];
+function pickPrimaryRole(roles: AppRole[]): AppRole | null {
+  return ROLE_PRIORITY.find((r) => roles.includes(r)) ?? null;
+}
+
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -87,7 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (authUser) {
       const p = await fetchProfile(authUser.id);
       if (p && p.roles.length > 0) {
-        navigate(ROLE_ROUTES[p.roles[0]]);
+        const target = pickPrimaryRole(p.roles);
+        if (target) navigate(ROLE_ROUTES[target]);
       }
     }
   }, [navigate]);

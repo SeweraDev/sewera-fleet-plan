@@ -12,6 +12,9 @@ const ROLE_BADGE_COLORS: Record<UserRole, string> = {
   admin: 'bg-[hsl(var(--role-admin))]',
 };
 
+// Priorytet do wyboru roli "wiodacej" w badge gdy user ma wiele rol.
+const ROLE_PRIORITY: UserRole[] = ['admin', 'zarzad', 'dyspozytor', 'sprzedawca', 'kierowca'];
+
 interface TopbarProps {
   extra?: React.ReactNode;
 }
@@ -19,7 +22,8 @@ interface TopbarProps {
 export function Topbar({ extra }: TopbarProps) {
   const { profile, signOut } = useAuth();
 
-  const role = profile?.roles[0];
+  // Multi-role: pokaz badge najwyzszej posiadanej roli wg ROLE_PRIORITY
+  const role = profile ? ROLE_PRIORITY.find((r) => profile.roles.includes(r)) : undefined;
 
   return (
     <header className="h-[52px] flex items-center bg-primary px-5 shrink-0">

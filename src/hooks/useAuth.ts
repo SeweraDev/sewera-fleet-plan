@@ -5,6 +5,14 @@ import type { UserProfile, UserRole } from '@/types';
 import { ROLE_ROUTES } from '@/types';
 import type { User } from '@supabase/supabase-js';
 
+// Multi-role: priorytet wyboru "primaryRole" gdy user ma wiele rol.
+// Wyzsza pozycja = wyzszy priorytet (admin wygrywa nad zarzad itd).
+const ROLE_PRIORITY: UserRole[] = ['admin', 'zarzad', 'dyspozytor', 'sprzedawca', 'kierowca'];
+
+function pickPrimaryRole(roles: UserRole[]): UserRole | '' {
+  return ROLE_PRIORITY.find((r) => roles.includes(r)) ?? '';
+}
+
 async function fetchProfile(userId: string): Promise<UserProfile | null> {
   const { data: profileData, error } = await supabase
     .from('profiles')
@@ -77,7 +85,8 @@ export function useAuth() {
         await supabase.auth.signOut();
         throw new Error('NO_ROLES');
       }
-      navigate(ROLE_ROUTES[p.roles[0]]);
+      const target = pickPrimaryRole(p.roles);
+      navigate(target ? ROLE_ROUTES[target] : '/login');
     }
   }, [navigate]);
 
@@ -89,7 +98,7 @@ export function useAuth() {
   }, [navigate]);
 
   const roles = profile?.roles ?? [];
-  const primaryRole = roles[0] ?? '';
+  const primaryRole = pickPrimaryRole(roles);
 
   return { user, profile, roles, primaryRole, loading, signIn, signOut };
 }

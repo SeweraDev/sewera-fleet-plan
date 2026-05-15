@@ -2,11 +2,13 @@ import { ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { ROLE_ROUTES } from '@/types';
+import type { UserRole } from '@/types';
 import { useNavigate } from 'react-router-dom';
 
 export default function UnauthorizedPage() {
-  const { profile, signOut } = useAuth();
+  const { profile, primaryRole, signOut } = useAuth();
   const navigate = useNavigate();
+  const target = primaryRole ? ROLE_ROUTES[primaryRole as UserRole] : '/login';
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
@@ -15,7 +17,7 @@ export default function UnauthorizedPage() {
       <p className="text-muted-foreground">Nie masz uprawnień do tej strony.</p>
       <div className="flex gap-2">
         {profile && (
-          <Button onClick={() => navigate(ROLE_ROUTES[profile.roles[0]])}>
+          <Button onClick={() => navigate(target)}>
             Mój panel
           </Button>
         )}

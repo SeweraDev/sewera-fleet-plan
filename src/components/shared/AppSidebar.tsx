@@ -59,6 +59,8 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   ],
 };
 
+const ROLE_ORDER: UserRole[] = ['admin', 'zarzad', 'dyspozytor', 'sprzedawca', 'kierowca'];
+
 export function AppSidebar() {
   const { profile, signOut } = useAuth();
   const { state } = useSidebar();
@@ -66,8 +68,19 @@ export function AppSidebar() {
 
   if (!profile) return null;
 
-  const role = profile.roles[0];
-  const items = NAV_BY_ROLE[role] || [];
+  // Multi-role: agreguj nawigacje ze wszystkich rol usera, dedup po url
+  // (pierwszy URL wg ROLE_ORDER wygrywa). Dzieki temu user z wieloma rolami
+  // widzi w sidebarze sumę sekcji.
+  const userRoles = ROLE_ORDER.filter((r) => profile.roles.includes(r));
+  const seen = new Set<string>();
+  const items: NavItem[] = [];
+  for (const r of userRoles) {
+    for (const item of NAV_BY_ROLE[r] || []) {
+      if (seen.has(item.url)) continue;
+      seen.add(item.url);
+      items.push(item);
+    }
+  }
 
   return (
     <Sidebar collapsible="icon">
