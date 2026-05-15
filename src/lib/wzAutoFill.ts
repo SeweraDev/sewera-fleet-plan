@@ -171,9 +171,20 @@ export function domyslnyDzienDostawy(): string {
  *
  * @returns objętość w m³ lub null gdy nie udało się wyliczyć
  */
+/**
+ * Czy pozycja to paleta jako towar (zwrotna, do odkupu)?
+ * Np. "PALETA TERMOBET ODKUP M-39zł P-45zł" — to palety pod inny towar z WZ,
+ * NIE zajmują dodatkowego miejsca na aucie (juz policzone w pozycji glownej).
+ * Sygnal: nazwa zaczyna sie od "PALETA "/"PALETY " (nie zawiera gdziekolwiek).
+ */
+export function isPaletaJakoTowar(p: Pozycja): boolean {
+  return /^(PALETA|PALETY)\s/i.test(p.nazwa_towaru.trim());
+}
+
 /** Frakcja palety dla pozycji — z opisu "p=Xszt" lub "p=Xopak". 0 gdy brak. */
 export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return 0;
+  if (isPaletaJakoTowar(p)) return 0;
   const opis = p.nazwa_dodatkowa || '';
   const pM = opis.match(/\bp\s*=\s*(\d+)\s*(?:szt|opak|m2|m3)?\b/i);
   if (!pM) return 0;
@@ -185,6 +196,8 @@ export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
 export function wyliczObjetoscPozycji(p: Pozycja): number | null {
   // 1. Pomijaj usługi
   if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return null;
+  // 1a. Pomijaj palety jako towar (zwrotne — nie zajmują dodatkowego m³)
+  if (isPaletaJakoTowar(p)) return null;
 
   const opis = p.nazwa_dodatkowa || '';
 
@@ -259,7 +272,7 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
   let nierozpoznane = 0;
   let pominiete = 0;
   for (const p of pozycje) {
-    if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) {
+    if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru) || isPaletaJakoTowar(p)) {
       pominiete += 1;
       continue;
     }

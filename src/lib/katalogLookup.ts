@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
+import { isPaletaJakoTowar } from './wzAutoFill';
 
 /**
  * Lookup pozycji WZ w bazie katalog_towarow.
@@ -151,6 +152,11 @@ export function agregujZKatalogu(
   const dzialyHds = new Set<string>();
 
   for (const p of pozycje) {
+    // Pomijaj palety jako towar (zwrotne) — nawet gdy są w katalog_towarow,
+    // nie zajmują dodatkowego miejsca na aucie (są pod innym towarem z WZ).
+    if (isPaletaJakoTowar(p)) {
+      continue;
+    }
     const m = matches.get(p.lp);
     if (!m) {
       bezBaza++;
