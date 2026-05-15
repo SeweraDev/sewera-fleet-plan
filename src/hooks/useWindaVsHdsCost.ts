@@ -22,6 +22,10 @@ import {
 
 export interface CenaPojazd {
   typ: string;
+  /** Liczba kursow potrzebnych zeby przewiezc caly ladunek (zwykle 1; >1 gdy mniejszy pojazd
+   *  jest pokazany jako alternatywa dla niezmieszczenia w jednym kursie). Koszty wew/zew
+   *  sa juz pomnozone przez liczbe kursow. */
+  liczbaKursow: number;
   kosztWew: { netto: number; brutto: number } | null;
   /** Faktyczny typ wew uzyty do kalkulacji (gdy fallback z innego). */
   uzytTypWew: string | null;
@@ -41,20 +45,33 @@ export interface WindaVsHdsResult {
 
 const EMPTY: WindaVsHdsResult = { loading: false, winda: null, hds: null, geocodeFailed: false };
 
-/** Najmniejsza winda która pomieści masę/m³/palety.
+/** Najmniejsza winda która pomieści masę/m³/palety (z liczba kursow).
  *  UWAGA: Winda MAX 15,8t WYKLUCZONA dla materialow konstrukcyjnych (decyzja 15.05.2026)
- *  — to ciezki van miejski, nie jezdzi na budowy. Dla HDS-materialow (cegly, bloczki)
- *  pokazujemy tylko 1,8t/6,3t (gdy mieszcza w 1 kursie) lub HDS. */
-function wybierzTypWindy(masaKg: number, m3: number, palety: number): string | null {
-  if (masaKg <= 1800 && m3 <= 18 && palety <= 7) return 'Winda 1,8t';
-  if (masaKg <= 6300 && m3 <= 32 && palety <= 13) return 'Winda 6,3t';
+ *  — to ciezki van miejski, nie jezdzi na budowy.
+ *  Gdy ladunek nie mieci sie w 1 kursie 6,3t — pokazujemy 'Winda 6,3t × N kursow'
+ *  (zeby user widzial koszt porownywalny z HDS).
+ */
+function wybierzTypWindy(masaKg: number, m3: number, palety: number): { typ: string; kursy: number } | null {
+  if (masaKg <= 1800 && m3 <= 18 && palety <= 7) return { typ: 'Winda 1,8t', kursy: 1 };
+  if (masaKg <= 6300 && m3 <= 32 && palety <= 13) return { typ: 'Winda 6,3t', kursy: 1 };
+  // Nie mieci sie w 1 kursie 6,3t — ile kursow potrzeba?
+  const kursyMasa = Math.ceil(masaKg / 6300);
+  const kursyPalet = palety > 0 ? Math.ceil(palety / 13) : 1;
+  const kursyM3 = m3 > 0 ? Math.ceil(m3 / 32) : 1;
+  const kursy = Math.max(kursyMasa, kursyPalet, kursyM3);
+  if (kursy >= 2) return { typ: 'Winda 6,3t', kursy };
   return null;
 }
 
-/** Najmniejszy HDS który pomieści masę/palety. */
-function wybierzTypHds(masaKg: number, palety: number): string | null {
-  if (masaKg <= 9000 && palety <= 12) return 'HDS 9,0t';
-  if (masaKg <= 11700 && palety <= 12) return 'HDS 12,0t';
+/** Najmniejszy HDS który pomieści masę/palety (z liczba kursow). */
+function wybierzTypHds(masaKg: number, palety: number): { typ: string; kursy: number } | null {
+  if (masaKg <= 9000 && palety <= 12) return { typ: 'HDS 9,0t', kursy: 1 };
+  if (masaKg <= 11700 && palety <= 12) return { typ: 'HDS 12,0t', kursy: 1 };
+  // Nie mieci sie w 1 kursie HDS 12T — ile kursow?
+  const kursyMasa = Math.ceil(masaKg / 11700);
+  const kursyPalet = palety > 0 ? Math.ceil(palety / 12) : 1;
+  const kursy = Math.max(kursyMasa, kursyPalet);
+  if (kursy >= 2) return { typ: 'HDS 12,0t', kursy };
   return null;
 }
 
@@ -138,20 +155,32 @@ export function useWindaVsHdsCost(
           ...flotaRows.filter(f => f.jest_zewnetrzny).map(f => f.typ),
         ]);
 
-        const calcPojazd = (typSys: string | null): CenaPojazd | null => {
-          if (!typSys) return null;
+        const calcPojazd = (wybor: { typ: string; kursy: number } | null): CenaPojazd | null => {
+          if (!wybor) return null;
+          const typSys = wybor.typ;
+          const kursy = wybor.kursy;
           const typCennikowy = mapTypNaCennikowy(typSys);
           if (!typCennikowy) return null;
           const km = pickKmFromAlternatives(alternatives, typSys, true);
           const bestWew = findBestAvailableType(typCennikowy, wlasneTypy);
           const bestZew = findBestAvailableType(typCennikowy, zewTypySet);
-          const kosztWew = bestWew ? obliczKosztWew(km, bestWew.typ) : null;
-          const kosztyZew = bestZew ? obliczKosztyZewWszystkie(km, bestZew.typ, kod) : [];
+          const wew1 = bestWew ? obliczKosztWew(km, bestWew.typ) : null;
+          const zew1 = bestZew ? obliczKosztyZewWszystkie(km, bestZew.typ, kod) : [];
+          // Pomnoz koszty przez liczbe kursow
+          const kosztWew = wew1
+            ? { netto: wew1.netto * kursy, brutto: wew1.brutto * kursy }
+            : null;
+          const kosztyZew = zew1.map(z => ({
+            ...z,
+            netto: z.netto * kursy,
+            brutto: z.brutto * kursy,
+          }));
           const zewMin = kosztyZew.length > 0 ? kosztyZew[0].netto : null;
           const candidates = [kosztWew?.netto, zewMin].filter((n): n is number => n != null);
           const minNetto = candidates.length ? Math.min(...candidates) : null;
           return {
             typ: typSys,
+            liczbaKursow: kursy,
             kosztWew,
             uzytTypWew: bestWew?.typ ?? null,
             kosztyZew,

@@ -142,7 +142,12 @@ export function TypPojazduStep({
                     <tbody>
                       {kosztyComparison.winda && (
                         <tr>
-                          <td className="text-foreground">{kosztyComparison.winda.typ}</td>
+                          <td className="text-foreground">
+                            {kosztyComparison.winda.typ}
+                            {kosztyComparison.winda.liczbaKursow > 1 && (
+                              <span className="ml-1 text-amber-700 dark:text-amber-400 font-medium">× {kosztyComparison.winda.liczbaKursow} kursy</span>
+                            )}
+                          </td>
                           <td className="text-right text-foreground">
                             {kosztyComparison.winda.kosztWew ? (
                               <>
@@ -167,7 +172,12 @@ export function TypPojazduStep({
                       )}
                       {kosztyComparison.hds && (
                         <tr>
-                          <td className="text-foreground">{kosztyComparison.hds.typ}</td>
+                          <td className="text-foreground">
+                            {kosztyComparison.hds.typ}
+                            {kosztyComparison.hds.liczbaKursow > 1 && (
+                              <span className="ml-1 text-amber-700 dark:text-amber-400 font-medium">× {kosztyComparison.hds.liczbaKursow} kursy</span>
+                            )}
+                          </td>
                           <td className="text-right text-foreground">
                             {kosztyComparison.hds.kosztWew ? (
                               <>
