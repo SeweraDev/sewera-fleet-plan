@@ -1559,17 +1559,18 @@ export function parseWZText(rawText: string): WZImportData {
     const intPartRaw = wagaExplicit[1];
     const decPart = wagaExplicit[2];
 
-    // PDF/OCR czesto skleja dwie sasiednie komorki tabeli (np. "RAZEM: 376" + "Waga netto razem: 9 349,00"
-    // → intPart="376 9 349"). Klasyczny tysięcznik PL: 1-3 cyfry + spacja + 3 cyfry + spacja + 3 cyfry...
-    // Strategia: rozwaz wszystkie suffiksy fragmentow (od konca), ktore tworza poprawny tysięcznik
-    // (kazdy fragment poza pierwszym = dokladnie 3 cyfry). Wybierz NAJWIEKSZY sensowny (< 50t).
+    // PDF/OCR czesto skleja dwie sasiednie komorki tabeli przez NOWE LINIE
+    // (np. "Waga netto razem:\n9\n432,00" gdzie 9=RAZEM_sztuk, 432=waga).
+    // Bierzemy tylko OSTATNIA LINIE przed przecinkiem dziesietnym — to faktyczna waga.
+    // Wewnatrz lini moze byc tysięcznik PL ze spacja (np. "1 933" = 1933 kg).
     //
-    // Przyklady:
-    //   "9 349"       → [349, 9349] → 9349 ✓ (wlasciwa waga z tysięcznikiem)
-    //   "131 699"     → [699] (131699 > 50t) → 699 ✓ (PDF zlepilo "131 RAZEM ilosci" z "699 waga")
-    //   "376 9 349"   → [349, 9349] → 9349 ✓ (PDF zlepilo "376 RAZEM ilosci" z "9 349 waga")
-    //   "1 700"       → [700, 1700] → 1700 ✓ (typowy 1700 kg z tysięcznikiem)
-    const fragments = intPartRaw.trim().split(/\s+/).filter(Boolean);
+    // Przyklady (po wzieciu ostatniej linii):
+    //   "9\n432"      → "432"      → [432] → 432 ✓ (Adamietz: 9 sztuk RAZEM, 432 kg waga)
+    //   "80\n1 933"   → "1 933"    → [933, 1933] → 1933 ✓ (ALMIR tysięcznik PL)
+    //   "9 349"       → "9 349"    → [349, 9349] → 9349 ✓ (tysięcznik PL bez sklejenia)
+    //   "131 699"     → "131 699"  → [699] (131699 > 30t skip) → 699 ✓
+    const lastLine = intPartRaw.split(/\n/).pop()?.trim() || intPartRaw.trim();
+    const fragments = lastLine.split(/\s+/).filter(Boolean);
     const kandydaci: number[] = [];
     for (let k = 1; k <= fragments.length; k++) {
       const slice = fragments.slice(-k);
