@@ -273,6 +273,9 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             wymagaHds={wzList.some(w => w._wymaga_hds)}
             dzialyHds={[...new Set(wzList.flatMap(w => w._dzialy_hds || []))]}
             sumaPalet={wzList.reduce((s, w) => s + (w.ilosc_palet || 0), 0)}
+            adresDostawy={wzList[0]?.adres}
+            sumaMasa={wzList.reduce((s, w) => s + (w.masa_kg || 0), 0)}
+            sumaM3={wzList.reduce((s, w) => s + (w.objetosc_m3 || 0), 0)}
           />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag WZ lub default) */}

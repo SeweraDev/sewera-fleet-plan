@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { TYPY_KLIENTOW } from '@/lib/typy-klientow';
+import { useWindaVsHdsCost } from '@/hooks/useWindaVsHdsCost';
 
 const ERP_TYPES = [
   { kod: 'B', opis: 'Bez windy do 1,2t', typ: 'Dostawczy 1,2t' },
@@ -46,6 +47,12 @@ interface TypPojazduStepProps {
   dzialyHds?: string[];
   /** Suma palet ze wszystkich WZ na zleceniu — banner aktywny tylko gdy >=2. */
   sumaPalet?: number;
+  /** Adres dostawy z pierwszego WZ — do wyliczenia kosztu windy vs HDS. */
+  adresDostawy?: string;
+  /** Suma masy ze wszystkich WZ — do wyboru typu pojazdu (najmniejszy pasujacy). */
+  sumaMasa?: number;
+  /** Suma m3 ze wszystkich WZ. */
+  sumaM3?: number;
 }
 
 export function TypPojazduStep({
@@ -61,6 +68,9 @@ export function TypPojazduStep({
   wymagaHds,
   dzialyHds,
   sumaPalet,
+  adresDostawy,
+  sumaMasa,
+  sumaM3,
 }: TypPojazduStepProps) {
   // Banner HDS: ≥1 pozycja z katalogu wymaga HDS + suma palet >= 2 + klient nie-R.
   // Decyzja 15.05.2026: materialy konstrukcyjne (cegly, dachowki, kostka) nie powinny
@@ -70,6 +80,16 @@ export function TypPojazduStep({
   const wybranoWinde = /winda/i.test(typPojazdu) || typPojazdu === 'Dostawczy 1,2t';
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
   const [tab, setTab] = useState('pojazd');
+
+  // Koszty windy vs HDS dla wybranego oddzialu — tylko gdy banner HDS aktywny
+  const oddzialNazwa = oddzialy.find(o => o.id === oddzialId)?.nazwa;
+  const kosztyComparison = useWindaVsHdsCost(
+    pokazBannerHds ? oddzialNazwa : undefined,
+    pokazBannerHds ? adresDostawy : undefined,
+    sumaMasa ?? 0,
+    sumaM3 ?? 0,
+    sumaPalet ?? 0,
+  );
 
   // Pobierz typy aut zewnętrznych dla wybranego oddziału
   const [zewTypy, setZewTypy] = useState<string[]>([]);
@@ -106,10 +126,61 @@ export function TypPojazduStep({
                 {dzialyHds && dzialyHds.length > 0 && (
                   <> z działu <strong>{dzialyHds.slice(0, 2).map(d => d.split('\\').pop()?.trim()).filter(Boolean).join(', ')}</strong></>
                 )}.
-                {wybranoWinde && (
-                  <> Winda na takim ładunku to dłuższy czas kierowcy (~45 min vs 10 min HDS) i wyższe koszty operacyjne — choć cena dla klienta niższa. <strong>Rozważ HDS poniżej.</strong></>
-                )}
               </div>
+              {/* Tabela kosztów: winda vs HDS dla wybranego oddziału (wew + zew) */}
+              {(kosztyComparison.winda || kosztyComparison.hds) && (
+                <div className="mt-2 rounded-md bg-white/60 dark:bg-black/20 border border-current/10 p-2 text-xs">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-muted-foreground">
+                        <th className="text-left font-medium">Typ</th>
+                        <th className="text-right font-medium">Sewera</th>
+                        <th className="text-right font-medium">Zewn.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kosztyComparison.winda && (
+                        <tr>
+                          <td className="text-foreground">{kosztyComparison.winda.typ}</td>
+                          <td className="text-right text-foreground">
+                            {kosztyComparison.winda.kosztWew
+                              ? `${Math.round(kosztyComparison.winda.kosztWew.netto)} zł`
+                              : '—'}
+                          </td>
+                          <td className="text-right text-foreground">
+                            {kosztyComparison.winda.kosztyZew.length > 0
+                              ? `${Math.round(kosztyComparison.winda.kosztyZew[0].netto)} zł`
+                              : '—'}
+                          </td>
+                        </tr>
+                      )}
+                      {kosztyComparison.hds && (
+                        <tr>
+                          <td className="text-foreground">{kosztyComparison.hds.typ}</td>
+                          <td className="text-right text-foreground">
+                            {kosztyComparison.hds.kosztWew
+                              ? `${Math.round(kosztyComparison.hds.kosztWew.netto)} zł`
+                              : '—'}
+                          </td>
+                          <td className="text-right text-foreground">
+                            {kosztyComparison.hds.kosztyZew.length > 0
+                              ? `${Math.round(kosztyComparison.hds.kosztyZew[0].netto)} zł`
+                              : '—'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                  {kosztyComparison.winda?.minNetto != null && kosztyComparison.hds?.minNetto != null && (
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Różnica: <strong>HDS {kosztyComparison.hds.minNetto > kosztyComparison.winda.minNetto ? '+' : ''}{Math.round(kosztyComparison.hds.minNetto - kosztyComparison.winda.minNetto)} zł</strong> (netto, najtańsza opcja)
+                    </div>
+                  )}
+                </div>
+              )}
+              {kosztyComparison.loading && (
+                <div className="mt-2 text-[11px] text-muted-foreground italic">Wyliczam koszty...</div>
+              )}
             </div>
           </div>
         </div>
