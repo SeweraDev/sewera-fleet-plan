@@ -48,6 +48,10 @@ interface TypPojazduStepProps {
   dzialyHds?: string[];
   /** Suma palet ze wszystkich WZ na zleceniu — banner aktywny tylko gdy >=2. */
   sumaPalet?: number;
+  /** Palety plyt gipsowych — prog HDS > 1 (decyzja 15.05.2026 noc). */
+  paletyGips?: number;
+  /** Palety pozostalych pozycji wymaga_hds=true — prog HDS > 2. */
+  paletyInneHds?: number;
   /** Adres dostawy z pierwszego WZ — do wyliczenia kosztu windy vs HDS. */
   adresDostawy?: string;
   /** Suma masy ze wszystkich WZ — do wyboru typu pojazdu (najmniejszy pasujacy). */
@@ -69,14 +73,19 @@ export function TypPojazduStep({
   wymagaHds,
   dzialyHds,
   sumaPalet,
+  paletyGips,
+  paletyInneHds,
   adresDostawy,
   sumaMasa,
   sumaM3,
 }: TypPojazduStepProps) {
-  // Banner HDS: ≥1 pozycja z katalogu wymaga HDS + suma palet >= 2 + klient nie-R.
-  // Decyzja 15.05.2026: materialy konstrukcyjne (cegly, dachowki, kostka) nie powinny
-  // jechac winda — dluzszy czas i wieksze koszty kierowcy, choc klient placi mniej.
-  const pokazBannerHds = !!wymagaHds && (sumaPalet ?? 0) >= 2 && typKlienta !== 'R';
+  // Banner HDS: wymaga_hds=true + przekroczony prog palet + klient nie-R.
+  // Prog (decyzja 15.05.2026 noc):
+  //   - plyty gipsowe > 1 paleta producenta LUB
+  //   - pozostale HDS-materialy (cegly, bloczki, dachowki) > 2 palet
+  // Dla mniejszych zlecen (1 paleta gipsu + drobnica) HDS to overkill — banner ukryty.
+  const przekraczaProgHds = (paletyGips ?? 0) > 1 || (paletyInneHds ?? 0) > 2;
+  const pokazBannerHds = !!wymagaHds && przekraczaProgHds && typKlienta !== 'R';
   // Wybrany typ to winda? (B/C/D/E = pojazdy z winda, F/G/H/I = HDS)
   const wybranoWinde = /winda/i.test(typPojazdu) || typPojazdu === 'Dostawczy 1,2t';
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
