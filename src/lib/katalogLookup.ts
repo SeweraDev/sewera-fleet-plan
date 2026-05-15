@@ -155,17 +155,14 @@ export function agregujZKatalogu(
     // Pomijaj palety jako towar (zwrotne) — nawet gdy są w katalog_towarow,
     // nie zajmują dodatkowego miejsca na aucie (są pod innym towarem z WZ).
     if (isPaletaJakoTowar(p)) {
-      console.log('[katalog] pomijam paleta-jako-towar:', p.nazwa_towaru, 'kod=', p.kod_towaru);
       continue;
     }
     const m = matches.get(p.lp);
     if (!m) {
       bezBaza++;
-      console.log('[katalog] BRAK MATCHU dla:', p.nazwa_towaru, '| kod_towaru=', p.kod_towaru, '| kod_prod=', p.kod_producenta, '| ean=', p.kod_ean);
       continue;
     }
     zBaza++;
-    console.log('[katalog] MATCH:', p.nazwa_towaru, '→ kod=', m.kod, 'wymaga_hds=', m.wymaga_hds, 'szt_na_palecie=', m.szt_na_palecie, 'dzial=', m.dzial);
 
     if (m.wymaga_hds) {
       hdsCount++;

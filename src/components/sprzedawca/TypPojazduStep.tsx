@@ -66,7 +66,6 @@ export function TypPojazduStep({
   // Decyzja 15.05.2026: materialy konstrukcyjne (cegly, dachowki, kostka) nie powinny
   // jechac winda — dluzszy czas i wieksze koszty kierowcy, choc klient placi mniej.
   const pokazBannerHds = !!wymagaHds && (sumaPalet ?? 0) >= 2 && typKlienta !== 'R';
-  console.log('[bannerHDS] wymagaHds=', wymagaHds, 'sumaPalet=', sumaPalet, 'typKlienta=', typKlienta, '→ pokazBannerHds=', pokazBannerHds, 'dzialyHds=', dzialyHds);
   // Wybrany typ to winda? (B/C/D/E = pojazdy z winda, F/G/H/I = HDS)
   const wybranoWinde = /winda/i.test(typPojazdu) || typPojazdu === 'Dostawczy 1,2t';
   const uniqueTypes = [...new Set(flota.map(f => f.typ))];
