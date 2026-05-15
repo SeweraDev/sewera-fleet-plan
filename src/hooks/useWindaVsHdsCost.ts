@@ -23,7 +23,11 @@ import {
 export interface CenaPojazd {
   typ: string;
   kosztWew: { netto: number; brutto: number } | null;
+  /** Faktyczny typ wew uzyty do kalkulacji (gdy fallback z innego). */
+  uzytTypWew: string | null;
   kosztyZew: Array<{ netto: number; brutto: number; paletyExtra?: number; ladownoscLabel?: string }>;
+  /** Faktyczny typ zew uzyty do kalkulacji (gdy fallback). */
+  uzytTypZew: string | null;
   /** Minimalny koszt netto (z wew + zew) — do porównania winda vs HDS. */
   minNetto: number | null;
 }
@@ -37,11 +41,13 @@ export interface WindaVsHdsResult {
 
 const EMPTY: WindaVsHdsResult = { loading: false, winda: null, hds: null, geocodeFailed: false };
 
-/** Najmniejsza winda która pomieści masę/m³/palety. */
+/** Najmniejsza winda która pomieści masę/m³/palety.
+ *  UWAGA: Winda MAX 15,8t WYKLUCZONA dla materialow konstrukcyjnych (decyzja 15.05.2026)
+ *  — to ciezki van miejski, nie jezdzi na budowy. Dla HDS-materialow (cegly, bloczki)
+ *  pokazujemy tylko 1,8t/6,3t (gdy mieszcza w 1 kursie) lub HDS. */
 function wybierzTypWindy(masaKg: number, m3: number, palety: number): string | null {
   if (masaKg <= 1800 && m3 <= 18 && palety <= 7) return 'Winda 1,8t';
   if (masaKg <= 6300 && m3 <= 32 && palety <= 13) return 'Winda 6,3t';
-  if (masaKg <= 15800 && m3 <= 60 && palety <= 22) return 'Winda MAX 15,8t';
   return null;
 }
 
@@ -144,7 +150,14 @@ export function useWindaVsHdsCost(
           const zewMin = kosztyZew.length > 0 ? kosztyZew[0].netto : null;
           const candidates = [kosztWew?.netto, zewMin].filter((n): n is number => n != null);
           const minNetto = candidates.length ? Math.min(...candidates) : null;
-          return { typ: typSys, kosztWew, kosztyZew, minNetto };
+          return {
+            typ: typSys,
+            kosztWew,
+            uzytTypWew: bestWew?.typ ?? null,
+            kosztyZew,
+            uzytTypZew: bestZew?.typ ?? null,
+            minNetto,
+          };
         };
 
         const winda = calcPojazd(typWindy);

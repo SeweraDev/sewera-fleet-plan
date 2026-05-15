@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { TYPY_KLIENTOW } from '@/lib/typy-klientow';
 import { useWindaVsHdsCost } from '@/hooks/useWindaVsHdsCost';
+import { mapTypNaCennikowy } from '@/lib/stawki-transportowe';
 
 const ERP_TYPES = [
   { kod: 'B', opis: 'Bez windy do 1,2t', typ: 'Dostawczy 1,2t' },
@@ -143,14 +144,24 @@ export function TypPojazduStep({
                         <tr>
                           <td className="text-foreground">{kosztyComparison.winda.typ}</td>
                           <td className="text-right text-foreground">
-                            {kosztyComparison.winda.kosztWew
-                              ? `${Math.round(kosztyComparison.winda.kosztWew.netto)} zł`
-                              : '—'}
+                            {kosztyComparison.winda.kosztWew ? (
+                              <>
+                                {Math.round(kosztyComparison.winda.kosztWew.netto)} zł
+                                {kosztyComparison.winda.uzytTypWew && kosztyComparison.winda.uzytTypWew !== mapTypNaCennikowy(kosztyComparison.winda.typ) && (
+                                  <span className="ml-1 text-[10px] text-muted-foreground">({kosztyComparison.winda.uzytTypWew})</span>
+                                )}
+                              </>
+                            ) : '—'}
                           </td>
                           <td className="text-right text-foreground">
-                            {kosztyComparison.winda.kosztyZew.length > 0
-                              ? `${Math.round(kosztyComparison.winda.kosztyZew[0].netto)} zł`
-                              : '—'}
+                            {kosztyComparison.winda.kosztyZew.length > 0 ? (
+                              <>
+                                {Math.round(kosztyComparison.winda.kosztyZew[0].netto)} zł
+                                {kosztyComparison.winda.uzytTypZew && kosztyComparison.winda.uzytTypZew !== mapTypNaCennikowy(kosztyComparison.winda.typ) && (
+                                  <span className="ml-1 text-[10px] text-muted-foreground">({kosztyComparison.winda.uzytTypZew})</span>
+                                )}
+                              </>
+                            ) : '—'}
                           </td>
                         </tr>
                       )}
@@ -158,14 +169,24 @@ export function TypPojazduStep({
                         <tr>
                           <td className="text-foreground">{kosztyComparison.hds.typ}</td>
                           <td className="text-right text-foreground">
-                            {kosztyComparison.hds.kosztWew
-                              ? `${Math.round(kosztyComparison.hds.kosztWew.netto)} zł`
-                              : '—'}
+                            {kosztyComparison.hds.kosztWew ? (
+                              <>
+                                {Math.round(kosztyComparison.hds.kosztWew.netto)} zł
+                                {kosztyComparison.hds.uzytTypWew && kosztyComparison.hds.uzytTypWew !== mapTypNaCennikowy(kosztyComparison.hds.typ) && (
+                                  <span className="ml-1 text-[10px] text-muted-foreground">({kosztyComparison.hds.uzytTypWew})</span>
+                                )}
+                              </>
+                            ) : '—'}
                           </td>
                           <td className="text-right text-foreground">
-                            {kosztyComparison.hds.kosztyZew.length > 0
-                              ? `${Math.round(kosztyComparison.hds.kosztyZew[0].netto)} zł`
-                              : '—'}
+                            {kosztyComparison.hds.kosztyZew.length > 0 ? (
+                              <>
+                                {Math.round(kosztyComparison.hds.kosztyZew[0].netto)} zł
+                                {kosztyComparison.hds.uzytTypZew && kosztyComparison.hds.uzytTypZew !== mapTypNaCennikowy(kosztyComparison.hds.typ) && (
+                                  <span className="ml-1 text-[10px] text-muted-foreground">({kosztyComparison.hds.uzytTypZew})</span>
+                                )}
+                              </>
+                            ) : '—'}
                           </td>
                         </tr>
                       )}
