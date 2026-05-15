@@ -181,12 +181,18 @@ export function isPaletaJakoTowar(p: Pozycja): boolean {
   return /^(PALETA|PALETY)\s/i.test(p.nazwa_towaru.trim());
 }
 
-/** Frakcja palety dla pozycji — z opisu "p=Xszt" lub "p=Xopak". 0 gdy brak. */
+/** Frakcja palety dla pozycji — z opisu. 0 gdy brak.
+ *  Obsluguje 2 konwencje producentow:
+ *    - "p=32opak" (Isover/Sievert — krotka forma)
+ *    - "paleta=100szt." (Wienerberger/Brukbet — pelna forma)
+ *  Wymaga zeby przed `p`/`paleta` byl start/spacja/nawias — zeby nie lapac
+ *  artefaktow typu "P-45zl" lub "M-MAGAZYN".
+ */
 export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return 0;
   if (isPaletaJakoTowar(p)) return 0;
   const opis = p.nazwa_dodatkowa || '';
-  const pM = opis.match(/\bp\s*=\s*(\d+)\s*(?:szt|opak|m2|m3)?\b/i);
+  const pM = opis.match(/(?:^|[\s(])(?:paleta|p)\s*=\s*(\d+)\s*(?:szt|opak|m2|m3)?/i);
   if (!pM) return 0;
   const perPaleta = parseInt(pM[1], 10);
   if (perPaleta <= 0) return 0;
