@@ -34,23 +34,40 @@ export function isValidKlasyfikacja(kod: string | null | undefined): boolean {
 }
 
 /**
- * Sugeruj klasyfikację (B/C/D/E) na podstawie wagi/objętości/palet — najmniejszy
+ * Sugeruj klasyfikację na podstawie wagi/objętości/palet/HDS — najmniejszy
  * typ pojazdu który pomieści ładunek. Używane po imporcie WZ gdy user nie wybrał
  * jeszcze typu pojazdu (Krok 2 nieukończony), ale chcemy wstępnie zasugerować.
  *
- * Pojemności (TYP_CAPACITY z suggestRoutes.ts):
+ * Pojemności:
  *   B - Dostawczy 1,2t:    1200 kg / 18,5 m³ / 7 palet
  *   C - Winda 1,8t:        1800 kg / 18 m³ / 7 palet
  *   D - Winda 6,3t:        6300 kg / 32 m³ / 13 palet
  *   E - Winda MAX 15,8t:   15800 kg / 60 m³ / 22 palet
+ *   H - HDS 9,0t:          9000 kg / - / 12 palet
+ *   F - HDS 12,0t:         11700 kg / - / 12 palet (przyjete jak 12000 dla sugestii)
  *
- * UWAGA: Sugeruje TYLKO B/C/D/E (kryte vany). HDS (F/H) wymaga decyzji user'a,
- * bo to inny typ pojazdu (platforma + dźwig) — wybierany ręcznie gdy klient potrzebuje.
- * B = bez windy (default najtańszy). Klient potrzebuje windy → user zmieni na C.
+ * Gdy wymagaHds=true (>=1 pozycja w katalog_towarow ma wymaga_hds) — sugerujemy
+ * H/F (HDS) zamiast B/C/D/E. Material konstrukcyjny (cegly, bloczki, dachowki) na
+ * winde to dluzszy czas kierowcy i ryzyko uszkodzenia — HDS to wlasciwy wybor.
  *
- * @returns kod klasyfikacji (B/C/D/E) lub null gdy żaden pojazd nie pomieści
+ * @returns kod klasyfikacji lub null gdy zaden pojazd nie pomiesci
  */
-export function sugerujKlasyfikacjeWg(masa_kg: number, m3: number, palet: number): string | null {
+export function sugerujKlasyfikacjeWg(masa_kg: number, m3: number, palet: number, wymagaHds = false): string | null {
+  // Gdy wymaga HDS — preferuj F/H zamiast windy
+  if (wymagaHds) {
+    const HDS_POJAZDY: [number, number, string][] = [
+      [9000, 12, 'H'],   // HDS sredni
+      [12000, 12, 'F'],  // HDS duzy
+    ];
+    for (const [maxKg, maxPal, kod] of HDS_POJAZDY) {
+      if (masa_kg <= maxKg && palet <= maxPal) {
+        return kod;
+      }
+    }
+    // Przekracza HDS — user dzieli ladunek (lub wybiera 2 kursy)
+    return null;
+  }
+
   // (max_kg, max_m3, max_pal, kod) — posortowane od najmniejszego
   const POJAZDY: [number, number, number, string][] = [
     [1200, 18.5, 7, 'B'],
@@ -63,7 +80,7 @@ export function sugerujKlasyfikacjeWg(masa_kg: number, m3: number, palet: number
       return kod;
     }
   }
-  return null; // przekracza wszystkie — user musi ręcznie wybrać F/H (HDS) lub podzielić
+  return null; // przekracza wszystkie — user musi recznie wybrac F/H (HDS) lub podzielic
 }
 
 /**

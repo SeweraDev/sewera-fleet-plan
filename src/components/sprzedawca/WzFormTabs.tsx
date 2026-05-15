@@ -1890,7 +1890,7 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
     const final = next.map(w => {
       if (autoKlas) return { ...w, klasyfikacja: autoKlas };
       if (w.klasyfikacja) return w;
-      const sugerowana = sugerujKlasyfikacjeWg(w.masa_kg || 0, w.objetosc_m3 || 0, w.ilosc_palet || 0);
+      const sugerowana = sugerujKlasyfikacjeWg(w.masa_kg || 0, w.objetosc_m3 || 0, w.ilosc_palet || 0, w._wymaga_hds || false);
       return sugerowana ? { ...w, klasyfikacja: sugerowana } : w;
     });
     setWzList(final);
