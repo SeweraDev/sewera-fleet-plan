@@ -36,6 +36,7 @@ const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   admin: [
     { title: 'Użytkownicy', url: '/admin', icon: Users },
     { title: 'Statystyki wyceny', url: '/admin/statystyki-wyceny', icon: BarChart3 },
+    { title: 'Katalog towarów', url: '/admin/katalog-towarow', icon: ShoppingCart },
     { title: 'Mapa dostaw', url: '/mapa', icon: Map },
     { title: 'Ustawienia', url: '/admin/ustawienia', icon: Settings },
   ],

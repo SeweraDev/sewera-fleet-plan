@@ -289,3 +289,55 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
   const palet = paletFrac === 0 ? 0 : Math.max(1, fullPalet + (remainder > 0.2 ? 1 : 0));
   return { m3Total, palet, rozpoznane, nierozpoznane, pominiete };
 }
+
+/**
+ * Klasyfikacja ladunku na podstawie pozycji + masy. Zwraca finalne wartosci
+ * m3/palet + flagi luzne_karton/bez_palet do auto-zaznaczenia checkboxow.
+ *
+ * Zasada (15.05.2026):
+ *  - jezeli parser wyliczyl m3/palety z opisow (wym/X,Ym3/p=Xszt) → wartosci wyliczone
+ *  - jezeli parser nic nie wyliczyl I masa <= 100 kg → drobnica (karton/luzne, bez palet)
+ *    (100 kg to ~3-5 kartonow, mozna upchnac na aucie bez palet — typowa dostawa drobnicy)
+ *  - jezeli parser nic nie wyliczyl I masa > 100 kg → 0/0, user uzupelnia recznie
+ *    (zbyt duzo zeby na pewno bylo luzne, ale parser nie ma pewnosci)
+ *
+ * Edge case styropian/welna: opisy zawieraja "wym XxY" lub "X,Ym3" → parser wylicza
+ * m3 → idzie sciezka "wyliczone" niezaleznie od malej wagi (np. 45 kg = 3 m3).
+ */
+export const MASA_PROG_DROBNICA_KG = 100;
+
+export interface KlasyfikacjaLadunku {
+  objetosc_m3: number;
+  ilosc_palet: number;
+  luzne_karton: boolean;
+  bez_palet: boolean;
+}
+
+export function klasyfikujLadunek(
+  pozycje: Pozycja[] | undefined | null,
+  masaKg: number,
+  fallbackM3: number = 0,
+  fallbackPalet: number = 0,
+): KlasyfikacjaLadunku {
+  let m3 = 0;
+  let palet = 0;
+  let rozpoznane = 0;
+
+  if (pozycje && pozycje.length > 0) {
+    const calc = wyliczObjetoscZPozycji(pozycje);
+    rozpoznane = calc.rozpoznane;
+    if (calc.rozpoznane > 0) m3 = Math.round(calc.m3Total * 100) / 100;
+    palet = calc.palet;
+  }
+
+  // Fallback do wartosci z PDF/zamowienia gdy parser nic nie wyliczyl z pozycji
+  if (m3 === 0) m3 = fallbackM3;
+  if (palet === 0) palet = fallbackPalet;
+
+  // Auto-drobnica: zero z parsera + zero z fallback + masa <= 100 kg → luzne karton
+  if (rozpoznane === 0 && m3 === 0 && palet === 0 && masaKg > 0 && masaKg <= MASA_PROG_DROBNICA_KG) {
+    return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true };
+  }
+
+  return { objetosc_m3: m3, ilosc_palet: palet, luzne_karton: false, bez_palet: false };
+}

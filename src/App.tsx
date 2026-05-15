@@ -8,6 +8,7 @@ import LoginPage from "@/pages/LoginPage";
 import UnauthorizedPage from "@/pages/UnauthorizedPage";
 import AdminUzytkownicy from "@/pages/admin/Uzytkownicy";
 import StatystykiWyceny from "@/pages/admin/StatystykiWyceny";
+import KatalogTowarow from "@/pages/admin/KatalogTowarow";
 import ZarzadDashboard from "@/pages/zarzad/Dashboard";
 import DyspozytorDashboard from "@/pages/dyspozytor/Dashboard";
 import SprzedawcaDashboard from "@/pages/sprzedawca/Dashboard";
@@ -44,6 +45,13 @@ const App = () => (
           <Route path="/admin/statystyki-wyceny" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <StatystykiWyceny />
+            </ProtectedRoute>
+          } />
+
+          {/* Katalog towarow (XLSX import, m3, HDS) — tylko admin */}
+          <Route path="/admin/katalog-towarow" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <KatalogTowarow />
             </ProtectedRoute>
           } />
 
