@@ -1422,13 +1422,17 @@ export function parseWZText(rawText: string): WZImportData {
     adres = odbiornikAdres;
   }
 
-  // OCR guard: jeśli złapany adres dostawy nie ma "ul./al./os./pl." ale adres
-  // odbiorcy ma, użyj adresu odbiorcy (w praktyce Adres dostawy == adres Odbiorcy
-  // gdy klient odbiera u siebie, a OCR często rozmazuje sekcję Adres dostawy).
+  // OCR guard: jesli adres dostawy jest banalnie krotki (sama nazwa miasta lub
+  // kod pocztowy bez kontekstu), uzyj adresu odbiorcy jako bezpieczny fallback.
+  // WAZNE: NIE nadpisujemy gdy adres dostawy zawiera nazwe lokalu/firmy/budowy
+  // (np. "TYCHY PSP, ul.") — wtedy lepiej pokazac to userowi, zeby zauwazyl
+  // niepelny adres i uzupelnil recznie. Geocoding zwroci ostrzezenie.
+  // (Decyzja 15.05: priorytet dla informacji z sekcji "Adres dostawy" nad siedziba.)
   if (adres && odbiornikAdres) {
-    const adresHasStreet = /(?:ul|al|os|pl)\.\s/i.test(adres);
-    const odbHasStreet = /(?:ul|al|os|pl)\.\s/i.test(odbiornikAdres);
-    if (!adresHasStreet && odbHasStreet) {
+    const slowa = adres.split(/[,\s]+/).filter(Boolean);
+    const tylkoKodIMiasto = slowa.length <= 2 && /\d{2}-?\d{3}/.test(adres);
+    const tylkoMiasto = slowa.length === 1;
+    if (tylkoKodIMiasto || tylkoMiasto) {
       adres = odbiornikAdres;
     }
   }
@@ -1562,7 +1566,10 @@ export function parseWZText(rawText: string): WZImportData {
       if (!/^\d{1,3}$/.test(slice[0])) continue;
       const candidateStr = slice.join("");
       const v = parseFloat(`${candidateStr}.${decPart}`);
-      if (v > 0 && v < 50000) kandydaci.push(v);
+      // Limit 30000 kg (≈ 30 ton) — pelny TIR z pojedyncza dostawa. Powyzej
+      // to prawie na pewno PDF skleil kolumny (np. "35 700" gdzie 35=suma sztuk
+      // a 700=faktyczna waga). 50000 bylo zbyt liberalne i przepuszczalo bugi.
+      if (v > 0 && v < 30000) kandydaci.push(v);
     }
     // Wybierz najwiekszy sensowny — najlepiej oddaje rzeczywista wage
     const val = kandydaci.length > 0 ? Math.max(...kandydaci) : 0;

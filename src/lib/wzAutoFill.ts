@@ -280,8 +280,12 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
       nierozpoznane += 1;
     }
   }
-  // Ceil sumy frakcji palet — np. 0,5+0,3 = 0,8 → 1 paleta. Składanka z różnych
-  // produktów sumuje się w 1 fizyczną paletę gdy łącznie nie przekracza pojemności.
-  const palet = Math.ceil(paletFrac);
+  // Ceil sumy frakcji palet, ale z progiem dla ostatka: drobny dodatek (< 0,2 palety)
+  // dolicza sie do poprzedniej palety, bo w praktyce na palecie zostaje miejsce dla
+  // 1-2 sztuk z innej pozycji. Przyklad: 33/33 + 2/24 = 1,083 → 1 paleta (nie 2).
+  // Min 1 paleta gdy paletFrac > 0 (cos trzeba przewiezc, choc nie pelna).
+  const fullPalet = Math.floor(paletFrac);
+  const remainder = paletFrac - fullPalet;
+  const palet = paletFrac === 0 ? 0 : Math.max(1, fullPalet + (remainder > 0.2 ? 1 : 0));
   return { m3Total, palet, rozpoznane, nierozpoznane, pominiete };
 }
