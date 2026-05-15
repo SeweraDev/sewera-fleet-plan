@@ -17,6 +17,7 @@ import {
   searchAddress,
   ODDZIAL_COLORS,
   getOddzialTextColor,
+  haversineKm,
 } from '@/lib/oddzialy-geo';
 import type { SearchResult } from '@/lib/oddzialy-geo';
 import {
@@ -98,6 +99,9 @@ interface WynikOddzialu {
   kod: string;
   nazwa: string;
   km: number;
+  /** Linia prosta Haversine oddzial -> adres (km, 1 miejsce po przecinku).
+   *  Pokazywana pod realna km jako odniesienie (np. do rozliczenia kursow). */
+  kmProsta: number;
   /** Lista ofert wew Sewery — kazda z osobna cena per typ. Pusta gdy oddzial nie ma zadnego pasujacego. */
   kosztyWew: KosztWewOferta[];
   /** Lista ofert zewnetrznych - posortowane od najtanszej. Pusta gdy brak. */
@@ -546,6 +550,8 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
         // isOriginal=true → najkrotsza km (zgodnosc ze starym kalkulatorem).
         // Fallback typy w komorce ceny licza km osobno (mediana / mediana×1,05).
         const km = pickKmFromAlternatives(alternatives, typPojazdu, true);
+        // Linia prosta (Haversine) — info pomocnicze do rozliczenia kosztow.
+        const kmProsta = Math.round(haversineKm(dane, coords) * 10) / 10;
 
         const wlasneTypy = flotaWlasna.get(kod) || new Set<string>();
         // Wszystkie dostepne typy z rodziny (oryginalny + fallback chain) — kazdy z osobna cena.
@@ -608,6 +614,7 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
           kod,
           nazwa: KOD_TO_NAZWA[kod] || kod,
           km,
+          kmProsta,
           kosztyWew,
           kosztyZew,
           jestMojOddzial: kod === mojKod,
@@ -1102,7 +1109,10 @@ export function WycenTransportTab({ oddzialNazwa, zrodlo = 'wewnetrzna' }: Wycen
                           )}
                         </td>
                         <td className="text-center p-3 tabular-nums border-r border-gray-400">
-                          {w.km} km
+                          <div>{w.km} km</div>
+                          <div className="text-[11px] text-muted-foreground/70 font-normal mt-0.5">
+                            linia prosta: {w.kmProsta.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km
+                          </div>
                         </td>
                         <td className="text-center p-3 tabular-nums font-bold">
                           {w.kosztyWew.length === 0 ? '—' : (
