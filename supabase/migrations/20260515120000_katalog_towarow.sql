@@ -17,6 +17,13 @@ CREATE TABLE IF NOT EXISTS katalog_towarow (
   dzial text,
   producent text,
   kg_per_szt numeric,
+  -- Liczba sztuk na palecie (np. dachowka 240 szt/paleta, bloczek 60, papa 22).
+  -- Parser WZ uzywa do wyliczenia palet i m3 gdy m3_per_szt nieznane:
+  --   palety = ceil(ilosc_z_WZ / szt_na_palecie), m3 = palety * m3_per_paleta
+  szt_na_palecie integer,
+  -- Objetosc palety (domyslnie 1.1 m3 — standard paletowy). Mozna nadpisac dla
+  -- towarow o niestandardowych paletach (np. mala kostka 1.4, plyta tarasowa 0.9).
+  m3_per_paleta numeric DEFAULT 1.1,
   -- Flaga: towar wymagaja HDS przy dostawie (cegly, bloczki, dachowki, kostka, MFP).
   -- Kolumna HDS z CSV: 'tak' -> true, inaczej false.
   wymaga_hds boolean NOT NULL DEFAULT false,

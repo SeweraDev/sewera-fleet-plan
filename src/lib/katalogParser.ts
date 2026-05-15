@@ -26,6 +26,8 @@ export interface KatalogRow {
   dzial: string | null;
   producent: string | null;
   kg_per_szt: number | null;
+  szt_na_palecie: number | null;
+  m3_per_paleta: number | null;
   wymaga_hds: boolean;
 }
 
@@ -85,6 +87,17 @@ function mapRow(cells: string[]): KatalogRow | null {
   const hdsRaw = (cells[10] || '').trim().toLowerCase();
   const wymaga_hds = hdsRaw === 'tak';
 
+  // Opcjonalne kolumny dla wyliczania palet z liczby sztuk (decyzja 15.05.2026):
+  //   kolumna 11: szt_na_palecie — np. 240 dla dachowki, 60 dla bloczka, 22 dla papy
+  //   kolumna 12: m3_per_paleta — domyslnie 1.1 (standard), nadpisuj tylko dla nietypowych
+  let szt_na_palecie: number | null = null;
+  const sztRaw = (cells[11] || '').trim().replace(',', '.');
+  if (sztRaw) {
+    const v = parseInt(sztRaw, 10);
+    if (isFinite(v) && v > 0) szt_na_palecie = v;
+  }
+  const m3Pal = parseNum(cells[12]);
+
   const m3_podejrzany = m3 != null
     ? isPodejrzanyM3(m3, jm || '', nazwa, nazwa_dodatkowa || '', waga)
     : false;
@@ -101,6 +114,8 @@ function mapRow(cells: string[]): KatalogRow | null {
     dzial,
     producent,
     kg_per_szt: waga,
+    szt_na_palecie,
+    m3_per_paleta: m3Pal,
     wymaga_hds,
   };
 }

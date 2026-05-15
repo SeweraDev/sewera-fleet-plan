@@ -173,11 +173,23 @@ export default function KatalogTowarow() {
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Plik <strong>nadpisuje całą bazę</strong> — bezpieczne dla aktualizacji miesięcznej.
-              Oczekiwane kolumny:
-              <code className="text-xs bg-muted px-1 rounded ml-1">
-                Kod;Nazwa;Nazwa dodatkowa;Kod producenta;Jm.;Objętość;Dział;Producent;Waga netto;EAN;HDS
-              </code>
             </p>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p><strong>Wymagane kolumny:</strong>
+                <code className="text-xs bg-muted px-1 rounded ml-1">
+                  Kod;Nazwa;Nazwa dodatkowa;Kod producenta;Jm.;Objętość;Dział;Producent;Waga netto;EAN;HDS
+                </code>
+              </p>
+              <p><strong>Opcjonalne (dla materiałów na paletach):</strong>
+                <code className="text-xs bg-muted px-1 rounded ml-1">
+                  ;szt_na_palecie;m3_per_paleta
+                </code>
+              </p>
+              <p>
+                Np. dachówka 240 szt/paleta — parser sam wyliczy m³ i palety bez wpisywania m³ per sztuka.
+                m3_per_paleta domyślnie 1,1 (puste = standard).
+              </p>
+            </div>
             <Input
               type="file"
               accept=".csv,.xlsx,.xls"
