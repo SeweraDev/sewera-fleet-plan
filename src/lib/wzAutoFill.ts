@@ -262,8 +262,11 @@ export function wyliczObjetoscPozycji(p: Pozycja): number | null {
   // 3. Grubość z nazwy:
   //    Wariant A: "FASOTERM 150" — liczba na samym koncu nazwy (mm domyslnie)
   //    Wariant B: "RIGIPS PLYTA GKF 12,5mm" — liczba + 'mm' (z dziesietnym)
-  const grubMmm = p.nazwa_towaru.match(/(\d+(?:[,.]\d+)?)\s*mm\b/i);
-  const grubM = p.nazwa_towaru.match(/\b(\d{2,4})\s*$/);
+  //    UWAGA: stripujemy lambda termiczna typu "^=0,037" (welna ma ja jako wspolczynnik)
+  //    zeby regex nie wzial "037" jako grubosc zamiast prawdziwej "75".
+  const nazwaNoLambda = p.nazwa_towaru.replace(/\s*(?:\^|λ|lambda)\s*=\s*\d+[,.]\d+/gi, '').trim();
+  const grubMmm = nazwaNoLambda.match(/(\d+(?:[,.]\d+)?)\s*mm\b/i);
+  const grubM = nazwaNoLambda.match(/\b(\d{2,4})\s*$/);
   let gr: number;
   if (grubMmm) {
     gr = parseFloat(grubMmm[1].replace(',', '.')) / 1000;
