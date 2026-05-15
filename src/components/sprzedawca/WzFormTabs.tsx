@@ -1887,10 +1887,12 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
     //  2. Wartość z parsera/usera już ustawiona na WZ
     //  3. Sugestia na bazie wagi/m³/palet (najmniejszy pojazd który zmiesci ladunek)
     //     — używane gdy Krok 2 jeszcze nie odbyl sie a chcemy zasugerowac wstepnie.
+    console.log('[setWzListFromImport] next=', next.map(w => ({ masa: w.masa_kg, m3: w.objetosc_m3, palet: w.ilosc_palet, _wymaga_hds: w._wymaga_hds, klasyfikacja: w.klasyfikacja })), 'autoKlas=', autoKlas);
     const final = next.map(w => {
       if (autoKlas) return { ...w, klasyfikacja: autoKlas };
       if (w.klasyfikacja) return w;
       const sugerowana = sugerujKlasyfikacjeWg(w.masa_kg || 0, w.objetosc_m3 || 0, w.ilosc_palet || 0, w._wymaga_hds || false);
+      console.log('[setWzListFromImport] sugerowana=', sugerowana, 'dla masa=', w.masa_kg, 'palet=', w.ilosc_palet, '_wymaga_hds=', w._wymaga_hds);
       return sugerowana ? { ...w, klasyfikacja: sugerowana } : w;
     });
     setWzList(final);
