@@ -377,6 +377,10 @@ export interface KlasyfikacjaLadunku {
   wymaga_hds: boolean;
   /** Lista unikalnych dzialow ciezkich z bazy (do wyswietlenia w bannerze). */
   dzialy_hds: string[];
+  /** Palety plyt gipsowych — do progu HDS (>1) w Smart Prefill. */
+  palety_gips: number;
+  /** Palety pozostalych pozycji wymaga_hds — do progu HDS (>2) w Smart Prefill. */
+  palety_inne_hds: number;
 }
 
 /**
@@ -389,6 +393,10 @@ export interface KatalogAgregatInput {
   wymaga_hds: boolean;
   dzialy_hds: string[];
   pozycji_z_baza: number;
+  /** Palety producenta plyt gipsowych — prog HDS > 1 (decyzja 15.05.2026). */
+  palety_gips: number;
+  /** Palety pozostalych pozycji wymaga_hds=true — prog HDS > 2. */
+  palety_inne_hds: number;
 }
 
 export function klasyfikujLadunek(
@@ -403,6 +411,8 @@ export function klasyfikujLadunek(
   let rozpoznane = 0;
   const wymaga_hds = katalog?.wymaga_hds ?? false;
   const dzialy_hds = katalog?.dzialy_hds ?? [];
+  const palety_gips = katalog?.palety_gips ?? 0;
+  const palety_inne_hds = katalog?.palety_inne_hds ?? 0;
 
   // Priorytet 1: baza katalog_towarow (gdy mamy dla wszystkich/wiekszosci pozycji)
   // Decyzja 15.05: baza ma najwyzszy priorytet, bo dane sa precyzyjne i autorytatywne.
@@ -427,7 +437,7 @@ export function klasyfikujLadunek(
 
   // Auto-drobnica: zero ze wszystkich zrodel + masa <= 100 kg → luzne karton
   if (rozpoznane === 0 && m3 === 0 && palet === 0 && masaKg > 0 && masaKg <= MASA_PROG_DROBNICA_KG) {
-    return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true, wymaga_hds, dzialy_hds };
+    return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true, wymaga_hds, dzialy_hds, palety_gips, palety_inne_hds };
   }
 
   // m3 NIE jest wymuszane na palety × 1,1 — agregat (wyliczObjetoscZPozycji /
@@ -435,7 +445,7 @@ export function klasyfikujLadunek(
   // palety × 1,1 → m3 z bazy). Puchaty material (wełna, styropian) wnosi m3
   // fizyczne ale 0 palet — wymuszenie spojnosci by go gubilo.
 
-  return { objetosc_m3: Math.round(m3 * 100) / 100, ilosc_palet: palet, luzne_karton: false, bez_palet: false, wymaga_hds, dzialy_hds };
+  return { objetosc_m3: Math.round(m3 * 100) / 100, ilosc_palet: palet, luzne_karton: false, bez_palet: false, wymaga_hds, dzialy_hds, palety_gips, palety_inne_hds };
 }
 
 /**
@@ -465,6 +475,8 @@ export async function klasyfikujWZAsync(
           wymaga_hds: agr.wymaga_hds,
           dzialy_hds: agr.dzialy_hds,
           pozycji_z_baza: Math.max(agr.pozycji_z_baza, 1), // >=1 zeby klasyfikujLadunek wzial wynik z bazy
+          palety_gips: agr.palety_gips,
+          palety_inne_hds: agr.palety_inne_hds,
         };
       }
     } catch (e) {

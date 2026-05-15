@@ -399,6 +399,8 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         kod_klienta: mapped.kod_klienta || null,
         wymaga_hds: klas.wymaga_hds,
         dzialy_hds: klas.dzialy_hds,
+        palety_gips: klas.palety_gips,
+        palety_inne_hds: klas.palety_inne_hds,
       });
     } catch (err) {
       setError('Błąd odczytu PDF: ' + (err as Error).message);
@@ -434,13 +436,15 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       kod_klienta: mapped.kod_klienta || null,
       wymaga_hds: klas.wymaga_hds,
       dzialy_hds: klas.dzialy_hds,
+      palety_gips: klas.palety_gips,
+      palety_inne_hds: klas.palety_inne_hds,
     });
   }, []);
 
   const handleConfirm = () => {
     if (!preview) return;
     // _pdfFile = oryginalny PDF do archiwum (transient, useCreateZlecenie zarchiwizuje go po INSERT WZ)
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _pdfFile: pdfFile, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _pdfFile: pdfFile, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -731,6 +735,8 @@ function WzPdfBulkTab({
           kod_klienta: mapped.kod_klienta || null,
           wymaga_hds: klas.wymaga_hds,
           dzialy_hds: klas.dzialy_hds,
+          palety_gips: klas.palety_gips,
+          palety_inne_hds: klas.palety_inne_hds,
         },
         error: null,
         docType,
@@ -1360,6 +1366,8 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
       kod_klienta: mapped.kod_klienta || null,
       wymaga_hds: klas.wymaga_hds,
       dzialy_hds: klas.dzialy_hds,
+      palety_gips: klas.palety_gips,
+      palety_inne_hds: klas.palety_inne_hds,
     });
     setStep('preview');
   };
@@ -1367,7 +1375,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const handleConfirm = () => {
     if (!preview) return;
     // _imageBlob = oryginalny obraz do archiwum (transient, useCreateZlecenie po INSERT zarchiwizuje)
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _imageBlob: imageBlob, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _imageBlob: imageBlob, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -1586,6 +1594,10 @@ type ParsePreview = {
   wymaga_hds?: boolean;
   /** Lista dzialow ciezkich z bazy (transient, do bannera Krok 2). */
   dzialy_hds?: string[];
+  /** Palety plyt gipsowych — prog HDS > 1 w Smart Prefill (transient). */
+  palety_gips?: number;
+  /** Palety pozostalych pozycji wymaga_hds=true — prog HDS > 2 (transient). */
+  palety_inne_hds?: number;
 };
 
 const PREVIEW_FIELDS: { key: keyof ParsePreview; label: string; type?: string }[] = [
@@ -1785,13 +1797,15 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
       kod_klienta: mapped.kod_klienta || null,
       wymaga_hds: klas.wymaga_hds,
       dzialy_hds: klas.dzialy_hds,
+      palety_gips: klas.palety_gips,
+      palety_inne_hds: klas.palety_inne_hds,
     });
     setParsing(false);
   };
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -1890,7 +1904,7 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
     const final = next.map(w => {
       if (autoKlas) return { ...w, klasyfikacja: autoKlas };
       if (w.klasyfikacja) return w;
-      const sugerowana = sugerujKlasyfikacjeWg(w.masa_kg || 0, w.objetosc_m3 || 0, w.ilosc_palet || 0, w._wymaga_hds || false);
+      const sugerowana = sugerujKlasyfikacjeWg(w.masa_kg || 0, w.objetosc_m3 || 0, w.ilosc_palet || 0, w._wymaga_hds || false, w._palety_gips || 0, w._palety_inne_hds || 0);
       return sugerowana ? { ...w, klasyfikacja: sugerowana } : w;
     });
     setWzList(final);

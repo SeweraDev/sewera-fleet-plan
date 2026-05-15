@@ -138,6 +138,14 @@ export interface KatalogAgregat {
   pozycji_z_baza: number;
   pozycji_bez_baza: number;
   dzialy_hds: string[]; // unikalna lista dzialow ktore wymagaja HDS (dla bannera)
+  /** Suma palet producenta dla plyt gipsowych (gdy m.dzial zawiera GIPS).
+   *  Liczone jako ceil(ilosc/perPaleta) BEZ × 2 dla dlugich palet — bo prog HDS
+   *  oparty o ilosc fizycznych palet od producenta, nie miejsc na aucie.
+   *  Decyzja 15.05.2026: HDS gdy palety_gips > 1 (czyli >=2 palety producenta). */
+  palety_gips: number;
+  /** Suma palet (miejsc na aucie) dla pozycji wymaga_hds=true NIE-gipsowych.
+   *  Decyzja 15.05.2026: HDS gdy palety_inne_hds > 2. */
+  palety_inne_hds: number;
 }
 
 export function agregujZKatalogu(
@@ -149,6 +157,8 @@ export function agregujZKatalogu(
   let hdsCount = 0;
   let zBaza = 0;
   let bezBaza = 0;
+  let paletyGips = 0;
+  let paletyInneHds = 0;
   const dzialyHds = new Set<string>();
 
   for (const p of pozycje) {
@@ -190,6 +200,18 @@ export function agregujZKatalogu(
     if (m.wymaga_hds) {
       hdsCount++;
       if (m.dzial) dzialyHds.add(m.dzial);
+      // Rozroznienie plyt gipsowych (GIPS w dziale) od pozostalych HDS-materialow.
+      // Plyty gipsowe: liczymy palety PRODUCENTA (ceil bez × 2 dla dlugich), prog > 1.
+      // Pozostale (cegly, bloczki, dachowki): liczymy palety MIEJSC na aucie, prog > 2.
+      const isGips = m.dzial && /GIPS/i.test(m.dzial);
+      const opisP = p.nazwa_dodatkowa || '';
+      const pM = opisP.match(/(?:^|[\s(])(?:paleta|p)\s*=\s*(\d+)/i);
+      if (isGips && pM) {
+        const perPaleta = parseInt(pM[1], 10);
+        if (perPaleta > 0) paletyGips += Math.ceil(p.ilosc / perPaleta);
+      } else if (!isGips) {
+        paletyInneHds += paletyZOpisu;
+      }
     }
 
     // PUCHATY material (wełna, styropian) — m3 fizyczne, 0 palet
@@ -247,5 +269,7 @@ export function agregujZKatalogu(
     pozycji_z_baza: zBaza,
     pozycji_bez_baza: bezBaza,
     dzialy_hds: [...dzialyHds],
+    palety_gips: paletyGips,
+    palety_inne_hds: Math.ceil(paletyInneHds * 10) / 10,
   };
 }

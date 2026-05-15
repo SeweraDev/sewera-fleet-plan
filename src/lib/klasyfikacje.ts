@@ -46,15 +46,28 @@ export function isValidKlasyfikacja(kod: string | null | undefined): boolean {
  *   H - HDS 9,0t:          9000 kg / - / 12 palet
  *   F - HDS 12,0t:         11700 kg / - / 12 palet (przyjete jak 12000 dla sugestii)
  *
- * Gdy wymagaHds=true (>=1 pozycja w katalog_towarow ma wymaga_hds) — sugerujemy
- * H/F (HDS) zamiast B/C/D/E. Material konstrukcyjny (cegly, bloczki, dachowki) na
- * winde to dluzszy czas kierowcy i ryzyko uszkodzenia — HDS to wlasciwy wybor.
+ * Gdy wymagaHds=true (>=1 pozycja w katalog_towarow ma wymaga_hds) ORAZ:
+ *   - paletyGips > 1 (plyty gipsowe > 1 paleta producenta) LUB
+ *   - paletyInneHds > 2 (pozostale HDS-materialy > 2 palety na aucie)
+ * → sugerujemy H/F (HDS) zamiast B/C/D/E.
+ *
+ * Dla mniejszych zlecen (np. 1 paleta plyt gipsowych + welna + klej) HDS to
+ * overkill — wystarczy winda. Decyzja 15.05.2026 noc.
  *
  * @returns kod klasyfikacji lub null gdy zaden pojazd nie pomiesci
  */
-export function sugerujKlasyfikacjeWg(masa_kg: number, m3: number, palet: number, wymagaHds = false): string | null {
-  // Gdy wymaga HDS — preferuj F/H zamiast windy
-  if (wymagaHds) {
+export function sugerujKlasyfikacjeWg(
+  masa_kg: number,
+  m3: number,
+  palet: number,
+  wymagaHds = false,
+  paletyGips = 0,
+  paletyInneHds = 0,
+): string | null {
+  // Prog HDS: plyty gipsowe > 1 paleta producenta LUB inne HDS-materialy > 2 palety
+  const przekraczaProgHds = paletyGips > 1 || paletyInneHds > 2;
+  // Gdy wymaga HDS i przekracza prog — preferuj F/H zamiast windy
+  if (wymagaHds && przekraczaProgHds) {
     const HDS_POJAZDY: [number, number, string][] = [
       [9000, 12, 'H'],   // HDS sredni
       [12000, 12, 'F'],  // HDS duzy

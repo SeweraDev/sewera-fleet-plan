@@ -34,6 +34,10 @@ export interface WzInput {
   _wymaga_hds?: boolean;
   /** Lista dzialow ciezkich z bazy (do wyswietlenia w bannerze, np. "DACHÓWKI, KOSTKA"). */
   _dzialy_hds?: string[];
+  /** Palety plyt gipsowych — prog HDS > 1 w Smart Prefill (decyzja 15.05.2026 noc). */
+  _palety_gips?: number;
+  /** Palety pozostalych pozycji wymaga_hds=true — prog HDS > 2. */
+  _palety_inne_hds?: number;
 }
 
 export interface ZlecenieInput {
