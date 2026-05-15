@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
-import { isPaletaJakoTowar, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, M3_PER_PALETA } from './wzAutoFill';
+import { isPaletaJakoTowar, isPuchatyMaterial, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, M3_PER_PALETA } from './wzAutoFill';
 
 /**
  * Lookup pozycji WZ w bazie katalog_towarow.
@@ -158,15 +158,26 @@ export function agregujZKatalogu(
       continue;
     }
     const paletyZOpisu = wyliczPaletyFrakcjaPozycji(p);
+    const m3FromWym = wyliczObjetoscPozycji(p);
+    const puchaty = isPuchatyMaterial(p);
+    // Dlugie palety (wym>2000mm) leza plasko, nie wystaja wysoko — m3 z wymiarow
+    // (a nie palety × 1,1) odzwierciedla realne miejsce. Sygnal: paletyZOpisu>0 AND m3FromWym>0
+    const opis = p.nazwa_dodatkowa || '';
+    const wym = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
+    const dlugiTowar = wym && Math.max(parseInt(wym[1], 10), parseInt(wym[2], 10)) > 2000;
+
     const m = matches.get(p.lp);
     if (!m) {
       // Pozycja nie ma matchu w katalog_towarow — bierzemy palety/m3 z opisu (regex).
       // Bez tego pozycje od mniej popularnych producentow (np. WIENERBERGER bez Nr ewid.)
       // sa pomijane w sumie, mimo ze opis ma "paleta=Xszt" + "wym XxY".
-      const m3FromWym = wyliczObjetoscPozycji(p);
-      if (paletyZOpisu > 0) {
+      if (puchaty && m3FromWym && m3FromWym > 0) {
+        // Puchaty: m3 fizyczne, 0 palet (lezy na innym towarze)
+        m3Total += m3FromWym;
+      } else if (paletyZOpisu > 0) {
         paletFrac += paletyZOpisu;
-        m3Total += m3FromWym ?? (paletyZOpisu * M3_PER_PALETA);
+        // Dlugi towar → m3 z wymiarow (plyty na plasko), inaczej palety × 1,1
+        m3Total += (dlugiTowar && m3FromWym) ? m3FromWym : (m3FromWym ?? (paletyZOpisu * M3_PER_PALETA));
       } else if (m3FromWym && m3FromWym > 0) {
         m3Total += m3FromWym;
         paletFrac += m3FromWym / M3_PER_PALETA;
@@ -181,15 +192,24 @@ export function agregujZKatalogu(
       if (m.dzial) dzialyHds.add(m.dzial);
     }
 
+    // PUCHATY material (wełna, styropian) — m3 fizyczne, 0 palet
+    if (puchaty) {
+      if (m3FromWym && m3FromWym > 0) {
+        m3Total += m3FromWym;
+      } else if (m.m3_per_szt != null && !m.m3_podejrzany) {
+        m3Total += m.m3_per_szt * p.ilosc;
+      }
+      continue;
+    }
+
     // PRIORYTET PALET: opis pozycji "paleta=Xszt" / "p=Xopak" — info od producenta
     // jest najbardziej autorytatywne (rzeczywiste pakowanie, uwzglednia wage/limity).
-    // m3 zostaje z bazy (dokladniejsze niz palety × 1,1).
-    // Przyklad WZ KK/112/26/05/0012668: POROTHERM 500/100=5 + TERMOBET 224/112=2 = 7 palet
-    // (zamiast 9 z wzoru m3/1,1).
+    // Dlugie palety (wym>2000) leza plasko → m3 z wymiarow (nie palety × 1,1).
+    // Reszta → palety × 1,1 (typowe upakowanie cegiel/bloczkow z powietrzem miedzy).
     if (paletyZOpisu > 0) {
       paletFrac += paletyZOpisu;
-      if (m.m3_per_szt != null && !m.m3_podejrzany) {
-        m3Total += m.m3_per_szt * p.ilosc;
+      if (dlugiTowar && m3FromWym && m3FromWym > 0) {
+        m3Total += m3FromWym;
       } else {
         m3Total += paletyZOpisu * (m.m3_per_paleta ?? M3_PER_PALETA);
       }

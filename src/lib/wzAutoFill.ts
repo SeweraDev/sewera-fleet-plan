@@ -181,6 +181,22 @@ export function isPaletaJakoTowar(p: Pozycja): boolean {
   return /^(PALETA|PALETY)\s/i.test(p.nazwa_towaru.trim());
 }
 
+/**
+ * Czy pozycja to material puchaty (welna, styropian, izolacja)?
+ * Decyzja 15.05.2026: takie materialy NIE zajmuja miejsca paletowego na aucie
+ * (mozna polozyc NA innym towarze, sa miekkie/lekkie). m3 wciaz liczymy z
+ * wymiarow (zajmuja objetosc auta).
+ *
+ * Sygnal: nazwa zawiera 'wełna/welna', 'styrop', 'izolac', 'wata', 'XPS', 'EPS',
+ * lub konkretne nazwy producentow (FASOTERM, AKU-PŁYTA).
+ * UWAGA: 'PŁYTA' jest TYLKO w kontekscie wełny/izolacji (np. AKU-PŁYTA),
+ * nie wszystkie "płyty" sa puchate (plyty gipsowe NIE — to twarde plyty).
+ */
+export function isPuchatyMaterial(p: Pozycja): boolean {
+  const tekst = `${p.nazwa_towaru} ${p.nazwa_dodatkowa || ''}`;
+  return /wełna|welna|styrop|izolac\b|wata\b|\bXPS\b|\bEPS\b|FASOTERM|AKU-PŁYTA|AKU-PLYTA/i.test(tekst);
+}
+
 /** Frakcja palety dla pozycji — z opisu. 0 gdy brak.
  *  Obsluguje 2 konwencje producentow:
  *    - "p=32opak" (Isover/Sievert — krotka forma)
@@ -191,6 +207,8 @@ export function isPaletaJakoTowar(p: Pozycja): boolean {
 export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return 0;
   if (isPaletaJakoTowar(p)) return 0;
+  // Puchaty material (wełna, styropian) NIE zajmuje miejsca paletowego — mozna polozyc na innym
+  if (isPuchatyMaterial(p)) return 0;
   const opis = p.nazwa_dodatkowa || '';
   const pM = opis.match(/(?:^|[\s(])(?:paleta|p)\s*=\s*(\d+)\s*(?:szt|opak|m2|m3)?/i);
   if (!pM) return 0;
@@ -409,16 +427,12 @@ export function klasyfikujLadunek(
     return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true, wymaga_hds, dzialy_hds };
   }
 
-  // Spojnosc m3 z paletami (decyzja 15.05.2026): 1 paleta = 1,1 m3.
-  // Palety sa autorytatywne (info od producenta z opisu lub szt_na_palecie z bazy).
-  // m3 wyliczone z palet daje wartosc zgodna z miejscem zajetym na aucie — istotne
-  // dla wyboru pojazdu (pojemnosc m3 vs ilosc palet). Fizyczna objetosc materialu
-  // moze byc mniejsza/wieksza, ale miejsce paletowe na aucie to zawsze ~1,1 m3.
-  if (palet > 0) {
-    m3 = Math.round(palet * M3_PER_PALETA * 100) / 100;
-  }
+  // m3 NIE jest wymuszane na palety × 1,1 — agregat (wyliczObjetoscZPozycji /
+  // agregujZKatalogu) liczy m3 per pozycja wg priorytetu (fizyczne wymiary →
+  // palety × 1,1 → m3 z bazy). Puchaty material (wełna, styropian) wnosi m3
+  // fizyczne ale 0 palet — wymuszenie spojnosci by go gubilo.
 
-  return { objetosc_m3: m3, ilosc_palet: palet, luzne_karton: false, bez_palet: false, wymaga_hds, dzialy_hds };
+  return { objetosc_m3: Math.round(m3 * 100) / 100, ilosc_palet: palet, luzne_karton: false, bez_palet: false, wymaga_hds, dzialy_hds };
 }
 
 /**
