@@ -387,6 +387,15 @@ export function klasyfikujLadunek(
     return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true, wymaga_hds, dzialy_hds };
   }
 
+  // Spojnosc m3 z paletami (decyzja 15.05.2026): 1 paleta = 1,1 m3.
+  // Palety sa autorytatywne (info od producenta z opisu lub szt_na_palecie z bazy).
+  // m3 wyliczone z palet daje wartosc zgodna z miejscem zajetym na aucie — istotne
+  // dla wyboru pojazdu (pojemnosc m3 vs ilosc palet). Fizyczna objetosc materialu
+  // moze byc mniejsza/wieksza, ale miejsce paletowe na aucie to zawsze ~1,1 m3.
+  if (palet > 0) {
+    m3 = Math.round(palet * M3_PER_PALETA * 100) / 100;
+  }
+
   return { objetosc_m3: m3, ilosc_palet: palet, luzne_karton: false, bez_palet: false, wymaga_hds, dzialy_hds };
 }
 
