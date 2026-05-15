@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
-import { isPaletaJakoTowar } from './wzAutoFill';
+import { isPaletaJakoTowar, wyliczPaletyFrakcjaPozycji, M3_PER_PALETA } from './wzAutoFill';
 
 /**
  * Lookup pozycji WZ w bazie katalog_towarow.
@@ -170,6 +170,22 @@ export function agregujZKatalogu(
     if (m.wymaga_hds) {
       hdsCount++;
       if (m.dzial) dzialyHds.add(m.dzial);
+    }
+
+    // PRIORYTET PALET: opis pozycji "paleta=Xszt" / "p=Xopak" — info od producenta
+    // jest najbardziej autorytatywne (rzeczywiste pakowanie, uwzglednia wage/limity).
+    // m3 zostaje z bazy (dokladniejsze niz palety × 1,1).
+    // Przyklad WZ KK/112/26/05/0012668: POROTHERM 500/100=5 + TERMOBET 224/112=2 = 7 palet
+    // (zamiast 9 z wzoru m3/1,1).
+    const paletyZOpisu = wyliczPaletyFrakcjaPozycji(p);
+    if (paletyZOpisu > 0) {
+      paletFrac += paletyZOpisu;
+      if (m.m3_per_szt != null && !m.m3_podejrzany) {
+        m3Total += m.m3_per_szt * p.ilosc;
+      } else {
+        m3Total += paletyZOpisu * (m.m3_per_paleta ?? M3_PER_PALETA);
+      }
+      continue;
     }
 
     // Priorytet 1: m3 per szt (jesli nie podejrzany)
