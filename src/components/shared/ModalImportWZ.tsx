@@ -1266,20 +1266,34 @@ export function parseWZText(rawText: string): WZImportData {
         if (cleaned.length > 0) adres = cleaned.join(", ");
       }
     }
-    // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout)
+    // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout — Ekonom czesto umieszcza
+    // content nad labelem gdy PDF.js czyta kolumnami: linia "Westerplatte Ruda Śląska" +
+    // pusta "ul." sa W LINIACH 13-14, a label "Adres dostawy" w 15).
     if (!adres && adresIdx >= 0) {
       const addrParts: string[] = [];
       for (let i = adresIdx - 1; i >= Math.max(0, adresIdx - 8); i--) {
         const l = lines[i];
         if (/^(Os\.\s*kontaktowa|Tel\.|^p\.)/i.test(l)) continue;
-        // Rozszerzone markery bloku sprzedawcy (Sewera) — HR BDO to typowy artefakt OCR dla "NR BDO"
+        // Rozszerzone markery bloku sprzedawcy/odbiorcy — HR BDO to typowy artefakt OCR dla "NR BDO"
         if (/NIP:|N[RH]\s*BDO:|SEWERA|ODDZIAŁ|REDYSTRYBUCJA|Ko[śs]ciuszki|Nr\s+ewid/i.test(l)) break;
         if (/\d{2}-\d{3}/.test(l)) { addrParts.unshift(l); continue; }
         if (/ul\.|al\.|os\.|pl\./i.test(l)) { addrParts.unshift(l); continue; }
-        // Nazwa miasta/lokalizacji (np. TYCHY PSP) — zbierz i kontynuuj
-        if (addrParts.length > 0 && /^[A-ZŁŚŻŹĆŃÓĘ\s\-\.]{3,}$/i.test(l.trim())) { addrParts.unshift(l.trim()); continue; }
+        // Nazwa miasta/toponim (mixed case z polskimi literami): "Westerplatte Ruda Śląska",
+        // "TYCHY PSP", "Bielsko-Biała". Akceptujemy gdy: ma litery wielkie i male/polskie
+        // + min 3 znaki + max 60 + brak cyfr w srodku (cyfry = numer dokumentu/nip).
+        if (
+          addrParts.length > 0 &&
+          /^[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż][A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż\s\-\.]{2,58}$/.test(l.trim()) &&
+          !/^\d/.test(l.trim())
+        ) {
+          addrParts.unshift(l.trim());
+          continue;
+        }
       }
-      if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
+      // Odfiltruj samodzielne markery pol "ul." / "al." / "os." / "pl." bez tresci (puste pole
+      // w PDF Ekonom gdy klient nie podal ulicy — np. siedziba w "miejscowość", numer w "ulica").
+      const filtered = addrParts.filter((l) => !/^(?:ul|al|os|pl)\.?\s*$/i.test(l.trim()));
+      if (filtered.length) adres = filtered.join(", ").replace(/,\s*,/g, ",");
     }
     // Priority 3: "Budowa" line as delivery location
     if (!adres && hasBudowa) {
