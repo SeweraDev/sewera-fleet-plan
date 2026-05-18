@@ -45,47 +45,68 @@ export type Database = {
         Row: {
           aktywny: boolean
           created_at: string
+          dl_paki_cm: number | null
+          eps_paczek: number | null
           firma_zew: string | null
           id: string
           jest_zewnetrzny: boolean | null
           kierowca_zew: string | null
           ladownosc_kg: number
           max_palet: number | null
+          miejsc_paletowych: number | null
+          miejsc_paletowych_bez_widel: number | null
           nr_rej: string
           objetosc_m3: number | null
           oddzial_id: number | null
+          szer_paki_cm: number | null
           telefon_zew: string | null
           typ: string
+          wys_paki_cm: number | null
+          xps_paczek: number | null
         }
         Insert: {
           aktywny?: boolean
           created_at?: string
+          dl_paki_cm?: number | null
+          eps_paczek?: number | null
           firma_zew?: string | null
           id?: string
           jest_zewnetrzny?: boolean | null
           kierowca_zew?: string | null
           ladownosc_kg?: number
           max_palet?: number | null
+          miejsc_paletowych?: number | null
+          miejsc_paletowych_bez_widel?: number | null
           nr_rej: string
           objetosc_m3?: number | null
           oddzial_id?: number | null
+          szer_paki_cm?: number | null
           telefon_zew?: string | null
           typ?: string
+          wys_paki_cm?: number | null
+          xps_paczek?: number | null
         }
         Update: {
           aktywny?: boolean
           created_at?: string
+          dl_paki_cm?: number | null
+          eps_paczek?: number | null
           firma_zew?: string | null
           id?: string
           jest_zewnetrzny?: boolean | null
           kierowca_zew?: string | null
           ladownosc_kg?: number
           max_palet?: number | null
+          miejsc_paletowych?: number | null
+          miejsc_paletowych_bez_widel?: number | null
           nr_rej?: string
           objetosc_m3?: number | null
           oddzial_id?: number | null
+          szer_paki_cm?: number | null
           telefon_zew?: string | null
           typ?: string
+          wys_paki_cm?: number | null
+          xps_paczek?: number | null
         }
         Relationships: [
           {
