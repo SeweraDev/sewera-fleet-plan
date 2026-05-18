@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
-import { isPaletaJakoTowar, isPuchatyMaterial, isDlugiLuzny, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, getMaxWymiarMm, M3_PER_PALETA } from './wzAutoFill';
+import { isPaletaJakoTowar, isPuchatyMaterial, isDlugiLuzny, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, getMaxWymiarMm, getWymiaryMm, policzMiejscaPaletowePlyty, M3_PER_PALETA } from './wzAutoFill';
 
 /**
  * Lookup pozycji WZ w bazie katalog_towarow.
@@ -245,16 +245,20 @@ export function agregujZKatalogu(
       continue;
     }
 
+    // Plyta/dluzszy towar — ile miejsc paletowych zajmuje 1 paleta producenta?
+    // Wzor: round(max/800) × round(min/1200). Decyzja 18.05.2026 (zastapilo ×2).
+    const { max: wymMax, min: wymMin } = getWymiaryMm(p);
+    const plyta = wymMax > 1200 || wymMin > 800;
+    const miejscPerPaleta = plyta ? policzMiejscaPaletowePlyty(wymMax, wymMin) : 1;
+
     // Priorytet 1: m3 per szt (jesli nie podejrzany)
     if (m.m3_per_szt != null && !m.m3_podejrzany) {
       const m3Pozycji = m.m3_per_szt * p.ilosc;
       m3Total += m3Pozycji;
       // Frakcja palety: m3_pozycji / m3_per_paleta (domyslnie 1.1).
-      // Dlugi towar (>2000mm) — ceil palet producenta × 2 (jak plyty gipsowe/OSB:
-      // paleta nie miesci sie na euro 1200x800, zajmuje 2 miejsca na podlodze auta).
-      // Decyzja 18.05.2026 (OSB-3 1250x2500 — 17 szt = 1 paleta producenta = 2 miejsca).
+      // Plyta — ceil palet producenta × miejsc_per_paleta (np. OSB 1250x2500 = 3 miejsca).
       const fracPalety = m3Pozycji / (m.m3_per_paleta ?? 1.1);
-      paletFrac += dlugiTowar ? Math.max(1, Math.ceil(fracPalety)) * 2 : fracPalety;
+      paletFrac += plyta ? Math.max(1, Math.ceil(fracPalety)) * miejscPerPaleta : fracPalety;
       continue;
     }
 
@@ -262,8 +266,7 @@ export function agregujZKatalogu(
     if (m.szt_na_palecie != null && m.szt_na_palecie > 0) {
       const frac = p.ilosc / m.szt_na_palecie;
       m3Total += frac * (m.m3_per_paleta ?? 1.1);
-      // Dlugi towar — ceil × 2 (jak Priorytet 1).
-      paletFrac += dlugiTowar ? Math.max(1, Math.ceil(frac)) * 2 : frac;
+      paletFrac += plyta ? Math.max(1, Math.ceil(frac)) * miejscPerPaleta : frac;
     }
     // jezeli oba puste, pozycja nie wnosi do m3/palet — fallback do regex z opisu
     // bedzie w wyliczObjetoscZPozycji() obok agregatu z bazy.

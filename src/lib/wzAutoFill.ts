@@ -203,35 +203,80 @@ export function isPuchatyMaterial(p: Pozycja): boolean {
 }
 
 /**
- * Maksymalny wymiar towaru w mm (do detekcji długiego towaru >2000 mm).
- * Szuka w 3 miejscach (priorytet):
- *   1. opis 3D: "wym wys X × dł Y × szer Z" (nadproża RECTOR)
- *   2. opis 2D: "wym X × Y" (płyty gipsowe, OSB w opisie)
- *   3. nazwa towaru: "XmmxYxZ" / "XxYxZ" / "XxY" (OSB-3 18mmx1250x2500)
+ * Wymiary towaru w mm — zwraca dwa największe wymiary (do detekcji płyt/długich
+ * towarów). Pomija grubość (<100 mm) gdy są ≥2 inne wymiary.
  *
- * Zwraca 0 gdy brak danych. Sesja 18.05.2026.
+ * Szuka w priorytetowej kolejności:
+ *   1. opis 3D: "wym wys X × dł Y × szer Z" (nadproża RECTOR)
+ *   2. opis 2D: "wym X × Y" (płyty gipsowe w opisie)
+ *   3. nazwa towaru: "XmmxYxZ" (OSB-3 18mmx1250x2500) / "XxYxZ" / "XxY"
+ *
+ * Zwraca {max: 0, min: 0} gdy brak danych. Sesja 18.05.2026.
  */
-export function getMaxWymiarMm(p: Pozycja): number {
+export function getWymiaryMm(p: Pozycja): { max: number; min: number } {
   const opis = p.nazwa_dodatkowa || '';
+  const nazwa = p.nazwa_towaru || '';
+  const wymiary: number[] = [];
+
   // 1. Opis 3D z prefixami (wys/dł/szer + polskie litery)
   const op3D = opis.match(
     /wym\s+(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)/i,
   );
-  if (op3D) return Math.max(parseInt(op3D[1], 10), parseInt(op3D[2], 10), parseInt(op3D[3], 10));
-  // 2. Opis 2D
-  const op2D = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
-  if (op2D) return Math.max(parseInt(op2D[1], 10), parseInt(op2D[2], 10));
-  // 3. Nazwa towaru — 3D z grubością mm na początku ("18mmx1250x2500")
-  const nazwa = p.nazwa_towaru || '';
-  const nm3DMm = nazwa.match(/(\d+)\s*mm\s*[x×]\s*(\d+)\s*[x×]\s*(\d+)/i);
-  if (nm3DMm) return Math.max(parseInt(nm3DMm[1], 10), parseInt(nm3DMm[2], 10), parseInt(nm3DMm[3], 10));
-  // 4. Nazwa towaru — 3D bez mm ("1250x2500x18")
-  const nm3D = nazwa.match(/\b(\d{2,5})\s*[x×]\s*(\d{2,5})\s*[x×]\s*(\d{2,5})\b/i);
-  if (nm3D) return Math.max(parseInt(nm3D[1], 10), parseInt(nm3D[2], 10), parseInt(nm3D[3], 10));
-  // 5. Nazwa towaru — 2D ("71x2700")
-  const nm2D = nazwa.match(/\b(\d{2,5})\s*[x×]\s*(\d{2,5})\b/);
-  if (nm2D) return Math.max(parseInt(nm2D[1], 10), parseInt(nm2D[2], 10));
-  return 0;
+  if (op3D) {
+    wymiary.push(parseInt(op3D[1], 10), parseInt(op3D[2], 10), parseInt(op3D[3], 10));
+  } else {
+    // 2. Opis 2D
+    const op2D = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
+    if (op2D) wymiary.push(parseInt(op2D[1], 10), parseInt(op2D[2], 10));
+    // 3. Nazwa towaru — 3D z grubością mm ("18mmx1250x2500")
+    const nm3DMm = nazwa.match(/(\d+)\s*mm\s*[x×]\s*(\d+)\s*[x×]\s*(\d+)/i);
+    if (nm3DMm) {
+      wymiary.push(parseInt(nm3DMm[1], 10), parseInt(nm3DMm[2], 10), parseInt(nm3DMm[3], 10));
+    } else {
+      // 4. Nazwa towaru — 3D bez mm
+      const nm3D = nazwa.match(/\b(\d{2,5})\s*[x×]\s*(\d{2,5})\s*[x×]\s*(\d{2,5})\b/i);
+      if (nm3D) {
+        wymiary.push(parseInt(nm3D[1], 10), parseInt(nm3D[2], 10), parseInt(nm3D[3], 10));
+      } else {
+        // 5. Nazwa towaru — 2D
+        const nm2D = nazwa.match(/\b(\d{2,5})\s*[x×]\s*(\d{2,5})\b/);
+        if (nm2D) wymiary.push(parseInt(nm2D[1], 10), parseInt(nm2D[2], 10));
+      }
+    }
+  }
+
+  if (wymiary.length === 0) return { max: 0, min: 0 };
+  // Pomijaj grubość (<100 mm) gdy są ≥2 inne wymiary (jak "18mm" w OSB).
+  let filtered = wymiary.filter((w) => w >= 100);
+  if (filtered.length < 2) filtered = wymiary;
+  filtered.sort((a, b) => b - a);
+  return { max: filtered[0], min: filtered[1] ?? filtered[0] };
+}
+
+/** Wstecz-kompatybilny: tylko maksymalny wymiar w mm. */
+export function getMaxWymiarMm(p: Pozycja): number {
+  return getWymiaryMm(p).max;
+}
+
+/**
+ * Liczba miejsc paletowych na podłodze auta dla płyty/towaru o danych wymiarach.
+ * Paleta euro = 1200 × 800 mm. Płyta układana wzdłuż osi długiej auta (szerokość
+ * palety 800 wzdłuż jazdy), więc:
+ *   miejsc = round(dłuższy_wymiar / 800) × round(krótszy_wymiar / 1200)
+ *
+ * Przykłady (sesja 18.05.2026):
+ *   OSB 1250×2500 → round(2500/800)=3 × round(1250/1200)=1 = 3 miejsca
+ *   Gips 1200×2600 → round(2600/800)=3 × 1 = 3 miejsca
+ *   Płyta 1200×3000 → round(3000/800)=4 × 1 = 4 miejsca
+ *   Wełna 600×1000 → 1 × 1 = 1 (i tak 0 — puchaty wyklucza wcześniej)
+ *
+ * Zwraca 1 gdy brak wymiarów (default = standardowa paleta).
+ */
+export function policzMiejscaPaletowePlyty(max: number, min: number): number {
+  if (max === 0) return 1;
+  const dl = Math.max(1, Math.round(max / 800));
+  const sz = Math.max(1, Math.round(min / 1200));
+  return dl * sz;
 }
 
 /** Frakcja palety dla pozycji — z opisu. 0 gdy brak.
@@ -253,13 +298,14 @@ export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   if (perPaleta <= 0) return 0;
   const paletyProducenta = p.ilosc / perPaleta;
 
-  // Dlugie towary (plyty gipsowe 1200x2600, OSB 1250x2500, dachowki, etc.) —
-  // wymiary > 2000mm. Pakowane na specjalnej palecie producenta, ktora na aucie
-  // zajmuje 2 standardowe miejsca paletowe (1200x800).
-  // Decyzja 15.05.2026, rozszerzone 18.05 o wymiary z nazwy (OSB-3 18mmx1250x2500).
-  if (getMaxWymiarMm(p) > 2000) {
-    // ceil palet producenta * 2 (zaokraglamy bo dlugi towar nie jest dzielony na frakcje)
-    return Math.max(1, Math.ceil(paletyProducenta)) * 2;
+  // Plyty/dluzsze towary niemieszczace sie na euro-palecie 1200x800 — kazda paleta
+  // producenta zajmuje N miejsc paletowych na podlodze auta wg wzoru
+  // round(max/800) × round(min/1200). Decyzja 18.05.2026 (zastapilo ryczalt ×2).
+  // Przyklady: OSB 1250x2500 = 3 miejsca, plyta 1200x3000 = 4 miejsca.
+  const { max, min } = getWymiaryMm(p);
+  if (max > 1200 || min > 800) {
+    const miejsc = policzMiejscaPaletowePlyty(max, min);
+    return Math.max(1, Math.ceil(paletyProducenta)) * miejsc;
   }
   return paletyProducenta;
 }
