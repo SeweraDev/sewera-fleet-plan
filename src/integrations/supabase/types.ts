@@ -613,11 +613,14 @@ export type Database = {
           klasyfikacja: string | null
           km_prosta_override: number | null
           masa_kg: number
+          max_wymiar_mm: number | null
           nr_zamowienia: string | null
           numer_wz: string | null
           objetosc_m3: number
           odbiorca: string | null
+          paczki_puchatego: number | null
           tel: string | null
+          typ_puchatego: string | null
           uwagi: string | null
           wartosc_netto: number | null
           zlecenie_id: string
@@ -631,11 +634,14 @@ export type Database = {
           klasyfikacja?: string | null
           km_prosta_override?: number | null
           masa_kg?: number
+          max_wymiar_mm?: number | null
           nr_zamowienia?: string | null
           numer_wz?: string | null
           objetosc_m3?: number
           odbiorca?: string | null
+          paczki_puchatego?: number | null
           tel?: string | null
+          typ_puchatego?: string | null
           uwagi?: string | null
           wartosc_netto?: number | null
           zlecenie_id: string
@@ -649,10 +655,14 @@ export type Database = {
           klasyfikacja?: string | null
           km_prosta_override?: number | null
           masa_kg?: number
+          max_wymiar_mm?: number | null
           nr_zamowienia?: string | null
           numer_wz?: string | null
           objetosc_m3?: number
           odbiorca?: string | null
+          paczki_puchatego?: number | null
+          tel?: string | null
+          typ_puchatego?: string | null
           tel?: string | null
           uwagi?: string | null
           wartosc_netto?: number | null

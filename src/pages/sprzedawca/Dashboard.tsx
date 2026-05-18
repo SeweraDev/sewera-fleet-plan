@@ -279,9 +279,9 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             sumaMasa={wzList.reduce((s, w) => s + (w.masa_kg || 0), 0)}
             sumaM3={wzList.reduce((s, w) => s + (w.objetosc_m3 || 0), 0)}
             maxWymiarMm={wzList
-              .flatMap(w => w.pozycje || [])
+              .flatMap(w => w._pozycje || [])
               .reduce((m, p) => Math.max(m, getMaxWymiarMm(p)), 0)}
-            paczkiPuchatego={policzPaczkiPuchatego(wzList.flatMap(w => w.pozycje || []))}
+            paczkiPuchatego={policzPaczkiPuchatego(wzList.flatMap(w => w._pozycje || []))}
           />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag WZ lub default) */}

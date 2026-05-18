@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { wyslijDoDyspozytorów } from '@/lib/powiadomienia';
 import { archiwizujWZ, archiwizujWZObraz } from '@/lib/archiwumWZ';
+import { getMaxWymiarMm, policzPaczkiPuchatego } from '@/lib/wzAutoFill';
+import type { Pozycja } from '@/components/shared/ModalImportWZ';
 
 export interface WzInput {
   numer_wz: string | null;
@@ -38,6 +40,10 @@ export interface WzInput {
   _palety_gips?: number;
   /** Palety pozostalych pozycji wymaga_hds=true — prog HDS > 2. */
   _palety_inne_hds?: number;
+  /** Pozycje z parsera WZ (transient) — używane do wyliczenia max_wymiar_mm
+   *  oraz paczki_puchatego/typ_puchatego przed INSERT. Decyzja 18.05.2026 (B1).
+   *  NIE idzie do DB bezpośrednio — hook oblicza 3 pola walidacyjne. */
+  _pozycje?: Pozycja[];
 }
 
 export interface ZlecenieInput {
@@ -92,20 +98,30 @@ export function useCreateZlecenie(onSuccess?: () => void) {
     }
 
     if (input.wz_list.length > 0) {
-      const wzRows = input.wz_list.map(wz => ({
-        zlecenie_id: zlecenie.id,
-        numer_wz: wz.numer_wz,
-        odbiorca: wz.odbiorca,
-        adres: wz.adres,
-        tel: wz.tel,
-        masa_kg: wz.masa_kg,
-        objetosc_m3: wz.objetosc_m3 || 0,
-        ilosc_palet: wz.ilosc_palet || 0,
-        uwagi: wz.uwagi,
-        nr_zamowienia: wz.nr_zamowienia,
-        klasyfikacja: wz.klasyfikacja || null,
-        wartosc_netto: wz.wartosc_netto,
-      }));
+      const wzRows = input.wz_list.map(wz => {
+        // Walidacja w dyspozytorze (B1, migracja 18.05.2026b) — z pozycji parsera
+        // wyliczamy max wymiar towaru + paczki puchatego materiału, zapisujemy do DB.
+        const pozycje = wz._pozycje || [];
+        const maxWymiarMm = pozycje.reduce((m, p) => Math.max(m, getMaxWymiarMm(p)), 0);
+        const puchaty = policzPaczkiPuchatego(pozycje);
+        return {
+          zlecenie_id: zlecenie.id,
+          numer_wz: wz.numer_wz,
+          odbiorca: wz.odbiorca,
+          adres: wz.adres,
+          tel: wz.tel,
+          masa_kg: wz.masa_kg,
+          objetosc_m3: wz.objetosc_m3 || 0,
+          ilosc_palet: wz.ilosc_palet || 0,
+          uwagi: wz.uwagi,
+          nr_zamowienia: wz.nr_zamowienia,
+          klasyfikacja: wz.klasyfikacja || null,
+          wartosc_netto: wz.wartosc_netto,
+          max_wymiar_mm: maxWymiarMm > 0 ? maxWymiarMm : null,
+          paczki_puchatego: puchaty.paczki > 0 ? puchaty.paczki : null,
+          typ_puchatego: puchaty.typ,
+        };
+      });
 
       const { data: insertedWz, error: err2 } = await supabase
         .from('zlecenia_wz')

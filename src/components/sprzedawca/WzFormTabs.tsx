@@ -401,6 +401,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
         dzialy_hds: klas.dzialy_hds,
         palety_gips: klas.palety_gips,
         palety_inne_hds: klas.palety_inne_hds,
+        pozycje: mapped.pozycje || [],
       });
     } catch (err) {
       setError('Błąd odczytu PDF: ' + (err as Error).message);
@@ -444,7 +445,7 @@ function WzPdfTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const handleConfirm = () => {
     if (!preview) return;
     // _pdfFile = oryginalny PDF do archiwum (transient, useCreateZlecenie zarchiwizuje go po INSERT WZ)
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _pdfFile: pdfFile, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _pdfFile: pdfFile, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds, _pozycje: preview.pozycje };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -1375,7 +1376,7 @@ function WzOcrTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: Wz
   const handleConfirm = () => {
     if (!preview) return;
     // _imageBlob = oryginalny obraz do archiwum (transient, useCreateZlecenie po INSERT zarchiwizuje)
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _imageBlob: imageBlob, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _imageBlob: imageBlob, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds, _pozycje: preview.pozycje };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {
@@ -1805,7 +1806,7 @@ function WzPasteTab({ wzList, setWzList }: { wzList: WzInput[]; setWzList: (wz: 
 
   const handleConfirm = () => {
     if (!preview) return;
-    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds };
+    const newWz: WzInput = { ...preview, klasyfikacja: '', wartosc_netto: null, _kod_klienta: preview.kod_klienta, _wymaga_hds: preview.wymaga_hds, _dzialy_hds: preview.dzialy_hds, _palety_gips: preview.palety_gips, _palety_inne_hds: preview.palety_inne_hds, _pozycje: preview.pozycje };
     if (wzList.length === 1 && !wzList[0].odbiorca && !wzList[0].adres) {
       setWzList([newWz]);
     } else {

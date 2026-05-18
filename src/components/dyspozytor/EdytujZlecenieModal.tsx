@@ -17,6 +17,8 @@ import { geocodeAddress } from '@/lib/oddzialy-geo';
 import { canPrzekazZlecenie } from '@/lib/przekazanieZlecenia';
 import { useOddzialy } from '@/hooks/useOddzialy';
 import { useCostComparison } from '@/hooks/useCostComparison';
+import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
+import { czyAutoZmiesciTowar } from '@/lib/walidacjaPojazdu';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -72,6 +74,10 @@ interface WzData {
   klasyfikacja: string;
   wartosc_netto: number | null;
   archiwum_path: string | null;
+  // Walidacja w dyspozytorze (migracja 20260518b) — z parsera przy tworzeniu.
+  max_wymiar_mm: number | null;
+  paczki_puchatego: number | null;
+  typ_puchatego: 'XPS' | 'EPS' | 'WELNA' | 'MIX' | null;
 }
 
 export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Props) {
@@ -126,6 +132,70 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   const showSavings = !!cmp.savings && cmp.savings > 0 && !!cmp.cheapest;
   const fmtPLN = (v: number): string => v.toFixed(2).replace('.', ',') + ' zł';
 
+  // Walidacja wymiarów pojazdu (B1, migracja 20260518b) — max wymiar towaru i paczki
+  // puchatego z bazy (zapisane przy tworzeniu zlecenia z parsera).
+  const maxWymiarMm = wzList.reduce((m, w) => Math.max(m, w.max_wymiar_mm ?? 0), 0);
+  const paczkiPuchatego = (() => {
+    const xps = wzList.filter((w) => w.typ_puchatego === 'XPS').reduce((s, w) => s + (w.paczki_puchatego ?? 0), 0);
+    const eps = wzList.filter((w) => w.typ_puchatego === 'EPS').reduce((s, w) => s + (w.paczki_puchatego ?? 0), 0);
+    const welna = wzList.filter((w) => w.typ_puchatego === 'WELNA').reduce((s, w) => s + (w.paczki_puchatego ?? 0), 0);
+    const mix = wzList.filter((w) => w.typ_puchatego === 'MIX').reduce((s, w) => s + (w.paczki_puchatego ?? 0), 0);
+    const total = xps + eps + welna + mix;
+    if (total === 0) return { paczki: 0, typ: null as 'XPS' | 'EPS' | 'WELNA' | 'MIX' | null };
+    const counts = [xps, eps, welna, mix].filter((x) => x > 0).length;
+    if (counts > 1 || mix > 0) return { paczki: total, typ: 'MIX' as const };
+    if (xps > 0) return { paczki: total, typ: 'XPS' as const };
+    if (eps > 0) return { paczki: total, typ: 'EPS' as const };
+    return { paczki: total, typ: 'WELNA' as const };
+  })();
+  const { flota: flotaOddzialu } = useFlotaOddzialu(zlecenie?.oddzial_id ?? null);
+  // Ostrzeżenie dla wybranego typu pojazdu: paka za krótka albo limit styropianu przekroczony.
+  const ostrzezeniaPojazdu = (() => {
+    if (!typPojazdu || typPojazdu === 'brak') return [];
+    const autaTypu = flotaOddzialu.filter((a) => a.typ === typPojazdu);
+    if (autaTypu.length === 0) return [];
+    const out: string[] = [];
+    // Paka
+    if (maxWymiarMm > 0) {
+      const ktoresZmiesci = autaTypu.some((a) => {
+        if (a.dl_paki_cm == null) return true;
+        return czyAutoZmiesciTowar(
+          { nr_rej: a.nr_rej, typ: typPojazdu, ladownosc_kg: a.ladownosc_kg, dl_paki_cm: a.dl_paki_cm, szer_paki_cm: null, wys_paki_cm: null, miejsc_paletowych: null, xps_paczek: null, eps_paczek: null },
+          maxWymiarMm,
+        ).ok;
+      });
+      if (!ktoresZmiesci) {
+        const max = autaTypu.reduce((m, a) => Math.max(m, a.dl_paki_cm ?? 0), 0);
+        out.push(`Paka ${(max / 100).toFixed(1)}m < towar ${(maxWymiarMm / 1000).toFixed(1)}m`);
+      }
+    }
+    // Styropian/wełna
+    if (paczkiPuchatego.paczki > 0 && paczkiPuchatego.typ) {
+      const lim = (a: typeof autaTypu[number]): number | null => {
+        const xps = a.xps_paczek ?? null;
+        const eps = a.eps_paczek ?? null;
+        if (xps == null && eps == null) return null;
+        switch (paczkiPuchatego.typ) {
+          case 'XPS': return xps;
+          case 'EPS': return eps;
+          case 'WELNA':
+          case 'MIX': return xps != null && eps != null ? Math.min(xps, eps) : (xps ?? eps);
+          default: return null;
+        }
+      };
+      const ktoresZmiesci = autaTypu.some((a) => {
+        const l = lim(a);
+        return l == null || paczkiPuchatego.paczki <= l;
+      });
+      if (!ktoresZmiesci) {
+        const maxLim = autaTypu.reduce((m, a) => Math.max(m, lim(a) ?? 0), 0);
+        const wariant = paczkiPuchatego.typ === 'WELNA' ? 'wełna' : paczkiPuchatego.typ.toLowerCase();
+        out.push(`Limit ${wariant} ${maxLim} pacz. < ${paczkiPuchatego.paczki} pacz. w WZ`);
+      }
+    }
+    return out;
+  })();
+
   // Pojemność pojazdu z kursu
   const [capacity, setCapacity] = useState<{ kg: number; m3: number; pal: number }>({ kg: 0, m3: 0, pal: 0 });
   const [otherLoad, setOtherLoad] = useState<{ kg: number; m3: number; pal: number }>({ kg: 0, m3: 0, pal: 0 });
@@ -136,7 +206,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
     Promise.all([
       supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, typ_pojazdu, nadawca_id, oddzial_id').eq('id', zlecenieId).single(),
-      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja, wartosc_netto, archiwum_path').eq('zlecenie_id', zlecenieId),
+      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja, wartosc_netto, archiwum_path, max_wymiar_mm, paczki_puchatego, typ_puchatego').eq('zlecenie_id', zlecenieId),
     ]).then(async ([zlRes, wzRes]) => {
       const zl = zlRes.data;
       if (zl) {
@@ -152,7 +222,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           setNadawcaNazwa('—');
         }
       }
-      const wzData = (wzRes.data || []).map((w: any) => ({
+      const wzData: WzData[] = (wzRes.data || []).map((w: any) => ({
         id: w.id,
         odbiorca: w.odbiorca || '',
         adres: w.adres || '',
@@ -166,6 +236,9 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         klasyfikacja: w.klasyfikacja || '',
         wartosc_netto: w.wartosc_netto != null ? Number(w.wartosc_netto) : null,
         archiwum_path: w.archiwum_path || null,
+        max_wymiar_mm: w.max_wymiar_mm ?? null,
+        paczki_puchatego: w.paczki_puchatego ?? null,
+        typ_puchatego: w.typ_puchatego ?? null,
       }));
       setWzList(wzData);
       originalWzRef.current = wzData.map(w => ({ ...w }));
@@ -266,7 +339,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
     setWzList(prev => prev.map((w, i) => i === idx ? { ...w, [field]: value } : w));
   };
 
-  const handleImportWz = useCallback((data: WZImportData[]) => {
+  const handleImportWz = useCallback(async (data: WZImportData[]) => {
     if (data.length > 0) {
       const d = data[0];
       // Wypełnij pierwszy WZ importowanymi danymi
@@ -279,6 +352,15 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         if (d.ilosc_palet) updated.ilosc_palet = d.ilosc_palet;
         if (d.objetosc_m3) updated.objetosc_m3 = d.objetosc_m3;
         if (d.uwagi) updated.uwagi = d.uwagi;
+        // Walidacja w dyspozytorze: licz max wymiar + paczki puchatego z importowanych pozycji
+        if (d.pozycje && d.pozycje.length > 0) {
+          const { getMaxWymiarMm, policzPaczkiPuchatego } = await import('@/lib/wzAutoFill');
+          const maxW = d.pozycje.reduce((m, p) => Math.max(m, getMaxWymiarMm(p)), 0);
+          const pp = policzPaczkiPuchatego(d.pozycje);
+          updated.max_wymiar_mm = maxW > 0 ? maxW : null;
+          updated.paczki_puchatego = pp.paczki > 0 ? pp.paczki : null;
+          updated.typ_puchatego = pp.typ;
+        }
         setWzList(prev => [updated, ...prev.slice(1)]);
       }
     }
@@ -342,6 +424,10 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           uwagi: w.uwagi || null,
           klasyfikacja: w.klasyfikacja || null,
           wartosc_netto: w.wartosc_netto,
+          // Walidacja w dyspozytorze — odśwież jeśli import dorzucił nowe dane
+          max_wymiar_mm: w.max_wymiar_mm,
+          paczki_puchatego: w.paczki_puchatego,
+          typ_puchatego: w.typ_puchatego,
         })
         .eq('id', w.id);
     }
@@ -468,6 +554,16 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                       {TYPY_POJAZDOW.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  {ostrzezeniaPojazdu.length > 0 && (
+                    <div className="mt-1 rounded border border-amber-400 bg-amber-50 dark:bg-amber-950/20 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-400 space-y-0.5">
+                      {ostrzezeniaPojazdu.map((o, i) => (
+                        <div key={i} className="flex items-start gap-1">
+                          <span>⚠️</span>
+                          <span>{o}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
