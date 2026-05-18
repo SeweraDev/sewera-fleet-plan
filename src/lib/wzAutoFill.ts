@@ -232,6 +232,35 @@ export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   return paletyProducenta;
 }
 
+/**
+ * Czy pozycja to "długi luźny" — element konstrukcyjny pakowany w wiązki/luzem,
+ * NIE na euro-paletę (nadproża, belki, słupy, rury, profile, blachy długie).
+ *
+ * Sygnał: opis ma 3D `wym X×Y×Z` z którymkolwiek wymiarem > 2000 mm
+ * (nie zmieści się na palecie 1,2×0,8 m) ORAZ brak `p=`/`paleta=` w opisie
+ * (gdyby producent pakował na palecie, podałby `p=`).
+ *
+ * Przykład: RECTOR Nadproże, "wym wys 71 x dł 2700 x szer 115 (wiązka=25szt)"
+ *  → 2700 mm > 2000 mm, brak `p=`/`paleta=` → długi luźny → na podłodze auta.
+ *
+ * Sesja 18.05.2026.
+ */
+export function isDlugiLuzny(p: Pozycja): boolean {
+  if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return false;
+  if (isPaletaJakoTowar(p)) return false;
+  if (isPuchatyMaterial(p)) return false;
+  const opis = p.nazwa_dodatkowa || '';
+  // Paleta producenta — wtedy NIE długi luźny.
+  if (/(?:^|[\s(])(?:paleta|p)\s*=\s*\d+/i.test(opis)) return false;
+  // 3D wymiary z prefixami: [^\s0-9x×]+ obsługuje polskie litery (dł/szer/gr).
+  const wym3D = opis.match(
+    /wym\s+(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)/i,
+  );
+  if (!wym3D) return false;
+  const maxMm = Math.max(parseInt(wym3D[1], 10), parseInt(wym3D[2], 10), parseInt(wym3D[3], 10));
+  return maxMm > 2000;
+}
+
 export function wyliczObjetoscPozycji(p: Pozycja): number | null {
   // 1. Pomijaj usługi
   if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return null;
@@ -334,20 +363,25 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
   rozpoznane: number;
   nierozpoznane: number;
   pominiete: number; // usługi
+  /** True gdy >=1 pozycja to "długi luźny" (3D z wymiarem >2000 mm bez palety
+   *  producenta) — sygnał do auto-zaznaczenia "Bez palet" w formularzu. */
+  dlugi_luzny: boolean;
 } {
   if (!pozycje || pozycje.length === 0) {
-    return { m3Total: 0, palet: 0, rozpoznane: 0, nierozpoznane: 0, pominiete: 0 };
+    return { m3Total: 0, palet: 0, rozpoznane: 0, nierozpoznane: 0, pominiete: 0, dlugi_luzny: false };
   }
   let m3Total = 0;
   let paletFrac = 0;
   let rozpoznane = 0;
   let nierozpoznane = 0;
   let pominiete = 0;
+  let dlugi_luzny = false;
   for (const p of pozycje) {
     if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru) || isPaletaJakoTowar(p)) {
       pominiete += 1;
       continue;
     }
+    if (isDlugiLuzny(p)) dlugi_luzny = true;
     const m3FromWym = wyliczObjetoscPozycji(p);
     const paletyForThis = wyliczPaletyFrakcjaPozycji(p);
     paletFrac += paletyForThis;
@@ -372,7 +406,7 @@ export function wyliczObjetoscZPozycji(pozycje: Pozycja[] | undefined | null): {
   const fullPalet = Math.floor(paletFrac);
   const remainder = paletFrac - fullPalet;
   const palet = paletFrac === 0 ? 0 : Math.max(1, fullPalet + (remainder > 0.2 ? 1 : 0));
-  return { m3Total, palet, rozpoznane, nierozpoznane, pominiete };
+  return { m3Total, palet, rozpoznane, nierozpoznane, pominiete, dlugi_luzny };
 }
 
 /**
@@ -432,10 +466,17 @@ export function klasyfikujLadunek(
   let m3 = 0;
   let palet = 0;
   let rozpoznane = 0;
+  let dlugi_luzny = false;
   const wymaga_hds = katalog?.wymaga_hds ?? false;
   const dzialy_hds = katalog?.dzialy_hds ?? [];
   const palety_gips = katalog?.palety_gips ?? 0;
   const palety_inne_hds = katalog?.palety_inne_hds ?? 0;
+
+  // Sygnał "długi luźny" liczymy ZAWSZE z pozycji (niezależnie od priorytetu m³/palet),
+  // bo katalog_towarow nie ma takiej flagi — to czysta heurystyka opisu (3D + >2000 mm).
+  if (pozycje && pozycje.length > 0) {
+    dlugi_luzny = pozycje.some(isDlugiLuzny);
+  }
 
   // Priorytet 1: baza katalog_towarow (gdy mamy dla wszystkich/wiekszosci pozycji)
   // Decyzja 15.05: baza ma najwyzszy priorytet, bo dane sa precyzyjne i autorytatywne.
@@ -463,12 +504,17 @@ export function klasyfikujLadunek(
     return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true, wymaga_hds, dzialy_hds, palety_gips, palety_inne_hds };
   }
 
+  // Auto-bez-palet: długi luźny towar (3D z wymiarem >2000 mm, bez palety producenta)
+  // i palet finalnie = 0 → towar jedzie luzem/wiązkami na podłodze auta.
+  // Decyzja 18.05.2026 (nadproża RECTOR, belki, słupy).
+  const bez_palet = dlugi_luzny && palet === 0;
+
   // m3 NIE jest wymuszane na palety × 1,1 — agregat (wyliczObjetoscZPozycji /
   // agregujZKatalogu) liczy m3 per pozycja wg priorytetu (fizyczne wymiary →
   // palety × 1,1 → m3 z bazy). Puchaty material (wełna, styropian) wnosi m3
   // fizyczne ale 0 palet — wymuszenie spojnosci by go gubilo.
 
-  return { objetosc_m3: Math.round(m3 * 100) / 100, ilosc_palet: palet, luzne_karton: false, bez_palet: false, wymaga_hds, dzialy_hds, palety_gips, palety_inne_hds };
+  return { objetosc_m3: Math.round(m3 * 100) / 100, ilosc_palet: palet, luzne_karton: false, bez_palet, wymaga_hds, dzialy_hds, palety_gips, palety_inne_hds };
 }
 
 /**
