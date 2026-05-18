@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
-import { isPaletaJakoTowar, isPuchatyMaterial, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, M3_PER_PALETA } from './wzAutoFill';
+import { isPaletaJakoTowar, isPuchatyMaterial, isDlugiLuzny, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, M3_PER_PALETA } from './wzAutoFill';
 
 /**
  * Lookup pozycji WZ w bazie katalog_towarow.
@@ -176,6 +176,8 @@ export function agregujZKatalogu(
     const wym = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
     const dlugiTowar = wym && Math.max(parseInt(wym[1], 10), parseInt(wym[2], 10)) > 2000;
 
+    const dlugiLuzny = isDlugiLuzny(p);
+
     const m = matches.get(p.lp);
     if (!m) {
       // Pozycja nie ma matchu w katalog_towarow — bierzemy palety/m3 z opisu (regex).
@@ -183,6 +185,10 @@ export function agregujZKatalogu(
       // sa pomijane w sumie, mimo ze opis ma "paleta=Xszt" + "wym XxY".
       if (puchaty && m3FromWym && m3FromWym > 0) {
         // Puchaty: m3 fizyczne, 0 palet (lezy na innym towarze)
+        m3Total += m3FromWym;
+      } else if (dlugiLuzny && m3FromWym && m3FromWym > 0) {
+        // Dlugi luzny (nadproza, belki >2000mm bez palety producenta): m3 fizyczne,
+        // 0 palet (towar luzem/wiazkami na podlodze auta). Decyzja 18.05.2026.
         m3Total += m3FromWym;
       } else if (paletyZOpisu > 0) {
         paletFrac += paletyZOpisu;
