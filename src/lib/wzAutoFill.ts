@@ -259,6 +259,46 @@ export function getMaxWymiarMm(p: Pozycja): number {
 }
 
 /**
+ * Sumuje paczki materiałów puchatych z WZ + wykrywa wariant (XPS / EPS / WELNA).
+ * Używane do walidacji "auto pomieści tyle paczek styropianu" (kolumny
+ * xps_paczek / eps_paczek w `flota`, migracja 18.05.2026).
+ *
+ * Wariant:
+ *   - XPS: ≥1 pozycja puchata z 'XPS' w nazwie
+ *   - EPS: ≥1 pozycja puchata z 'EPS' w nazwie
+ *   - WELNA: pozycje puchate bez XPS/EPS (wełna, FASOTERM, AKU-PŁYTA)
+ *   - MIX: ≥2 z powyższych w jednym WZ (rzadkie)
+ *   - null: brak puchatego
+ *
+ * paczki = suma `ilosc` wszystkich pozycji puchatych (JM zwykle OPA).
+ */
+export function policzPaczkiPuchatego(pozycje: Pozycja[] | undefined | null): {
+  paczki: number;
+  typ: 'XPS' | 'EPS' | 'WELNA' | 'MIX' | null;
+} {
+  if (!pozycje || pozycje.length === 0) return { paczki: 0, typ: null };
+  let xps = 0;
+  let eps = 0;
+  let welna = 0;
+  for (const p of pozycje) {
+    if (!isPuchatyMaterial(p)) continue;
+    const ilosc = p.ilosc || 0;
+    if (ilosc <= 0) continue;
+    const nazwa = p.nazwa_towaru || '';
+    if (/\bXPS\b/i.test(nazwa)) xps += ilosc;
+    else if (/\bEPS\b/i.test(nazwa)) eps += ilosc;
+    else welna += ilosc;
+  }
+  const total = xps + eps + welna;
+  if (total === 0) return { paczki: 0, typ: null };
+  const nonZero = [xps, eps, welna].filter((x) => x > 0).length;
+  if (nonZero > 1) return { paczki: Math.round(total), typ: 'MIX' };
+  if (xps > 0) return { paczki: Math.round(total), typ: 'XPS' };
+  if (eps > 0) return { paczki: Math.round(total), typ: 'EPS' };
+  return { paczki: Math.round(total), typ: 'WELNA' };
+}
+
+/**
  * Liczba miejsc paletowych na podłodze auta dla płyty/towaru o danych wymiarach.
  * Paleta euro = 1200 × 800 mm. Płyta układana wzdłuż osi długiej auta (szerokość
  * palety 800 wzdłuż jazdy), więc:

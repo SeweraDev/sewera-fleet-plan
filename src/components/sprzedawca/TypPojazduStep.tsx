@@ -63,6 +63,9 @@ interface TypPojazduStepProps {
   /** Najdłuższy wymiar towaru w mm (max ze wszystkich pozycji WZ).
    *  Używany do ostrzeżenia "za krótka paka" przy wyborze typu pojazdu. */
   maxWymiarMm?: number;
+  /** Suma paczek puchatego materiału (styropian/wełna) + wykryty wariant.
+   *  Używany do ostrzeżenia "limit paczek przekroczony" per typ pojazdu. */
+  paczkiPuchatego?: { paczki: number; typ: 'XPS' | 'EPS' | 'WELNA' | 'MIX' | null };
 }
 
 export function TypPojazduStep({
@@ -84,6 +87,7 @@ export function TypPojazduStep({
   sumaMasa,
   sumaM3,
   maxWymiarMm,
+  paczkiPuchatego,
 }: TypPojazduStepProps) {
   // Dla każdego typu pojazdu — sprawdź czy choć jedno auto z floty zmieści towar
   // o długości maxWymiarMm. Jeśli żadne, wyświetlamy ostrzeżenie "za krótka paka"
@@ -104,6 +108,38 @@ export function TypPojazduStep({
     // Znajdź najdłuższą pakę tego typu — żeby pokazać o ile za krótka
     const najdluzsza = autaTypu.reduce((m, a) => Math.max(m, (a.dl_paki_cm ?? 0)), 0);
     return `Paka ${(najdluzsza / 100).toFixed(1)}m < towar ${(maxWymiarMm / 1000).toFixed(1)}m`;
+  };
+
+  // Ostrzeżenie "limit paczek styropianu/wełny przekroczony" per typ pojazdu.
+  // Limit zależy od wariantu puchatego: XPS → xps_paczek, EPS → eps_paczek,
+  // WELNA/MIX → min(xps,eps) (bezpieczniej, nie znamy dokładnego limitu wełny).
+  const ostrzezeniePaczek = (typ: string): string | null => {
+    if (!paczkiPuchatego || paczkiPuchatego.paczki <= 0 || !paczkiPuchatego.typ) return null;
+    const autaTypu = flota.filter((f) => f.typ === typ);
+    if (autaTypu.length === 0) return null;
+    const limitDlaAuta = (a: typeof autaTypu[number]): number | null => {
+      const xps = a.xps_paczek ?? null;
+      const eps = a.eps_paczek ?? null;
+      if (xps == null && eps == null) return null; // brak danych — nie blokuj
+      switch (paczkiPuchatego.typ) {
+        case 'XPS': return xps;
+        case 'EPS': return eps;
+        case 'WELNA':
+        case 'MIX':
+          if (xps != null && eps != null) return Math.min(xps, eps);
+          return xps ?? eps;
+        default: return null;
+      }
+    };
+    const ktoresZmiesci = autaTypu.some((a) => {
+      const lim = limitDlaAuta(a);
+      if (lim == null) return true; // brak danych = przepuszczamy
+      return paczkiPuchatego.paczki <= lim;
+    });
+    if (ktoresZmiesci) return null;
+    const maxLim = autaTypu.reduce((m, a) => Math.max(m, limitDlaAuta(a) ?? 0), 0);
+    const wariant = paczkiPuchatego.typ === 'WELNA' ? 'wełna' : paczkiPuchatego.typ.toLowerCase();
+    return `Limit ${wariant} ${maxLim} pacz. < ${paczkiPuchatego.paczki} pacz. w WZ`;
   };
   // Banner HDS: wymaga_hds=true + przekroczony prog palet + klient nie-R.
   // Prog (decyzja 15.05.2026 noc):
@@ -312,7 +348,8 @@ export function TypPojazduStep({
                 </button>
 
                 {uniqueTypes.map(typ => {
-                  const ostrz = ostrzezeniePaki(typ);
+                  const ostrzezenia = [ostrzezeniePaki(typ), ostrzezeniePaczek(typ)].filter(Boolean) as string[];
+                  const maOstrz = ostrzezenia.length > 0;
                   return (
                     <button
                       key={typ}
@@ -322,21 +359,21 @@ export function TypPojazduStep({
                         'rounded-lg border-2 px-4 py-3 text-left text-sm font-medium transition-colors',
                         typPojazdu === typ
                           ? 'border-primary bg-primary/10 text-primary'
-                          : ostrz
+                          : maOstrz
                             ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/20 hover:border-amber-500'
                             : 'border-border hover:border-muted-foreground/50'
                       )}
-                      title={ostrz ?? undefined}
+                      title={maOstrz ? ostrzezenia.join('\n') : undefined}
                     >
                       <div className="flex items-center justify-between gap-1">
                         <span>{typ}</span>
-                        {ostrz && <span className="text-amber-600 dark:text-amber-400 text-base">⚠️</span>}
+                        {maOstrz && <span className="text-amber-600 dark:text-amber-400 text-base">⚠️</span>}
                       </div>
-                      {ostrz && (
-                        <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal mt-1 leading-tight">
-                          {ostrz}
+                      {ostrzezenia.map((o, i) => (
+                        <div key={i} className="text-[10px] text-amber-700 dark:text-amber-400 font-normal mt-1 leading-tight">
+                          {o}
                         </div>
-                      )}
+                      ))}
                     </button>
                   );
                 })}

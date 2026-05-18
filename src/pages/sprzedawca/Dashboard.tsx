@@ -11,7 +11,7 @@ import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { toast } from 'sonner';
 import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
-import { wyciagnijDateZUwag, wyciagnijGodzineZUwag, domyslnyDzienDostawy, getMaxWymiarMm } from '@/lib/wzAutoFill';
+import { wyciagnijDateZUwag, wyciagnijGodzineZUwag, domyslnyDzienDostawy, getMaxWymiarMm, policzPaczkiPuchatego } from '@/lib/wzAutoFill';
 import { detektujTypKlienta } from '@/lib/detekcjaTypuKlienta';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
 import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
@@ -281,6 +281,7 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             maxWymiarMm={wzList
               .flatMap(w => w.pozycje || [])
               .reduce((m, p) => Math.max(m, getMaxWymiarMm(p)), 0)}
+            paczkiPuchatego={policzPaczkiPuchatego(wzList.flatMap(w => w.pozycje || []))}
           />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag WZ lub default) */}
