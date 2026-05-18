@@ -831,6 +831,12 @@ export function parseWZText(rawText: string): WZImportData {
     console.log("Lines:", lines);
     console.log("→ aby skopiować raw text, wpisz w konsoli: copy(window.__lastWZ.lines.join('\\n'))");
     console.groupEnd();
+    // Fallback gdy window.__lastWZ niedostepne w F12 (Lovable iframe/bundling) — wypisz
+    // wszystkie linie jako jeden string z numerami (kopiowalne bez rozwijania tablicy).
+    console.log(
+      "[parseWZText] all lines (numbered):\n" +
+        lines.map((l, i) => `${String(i).padStart(3, "0")}: ${l}`).join("\n"),
+    );
   }
 
   // 1. nr_wz — match WZ, WZS, or PZ prefixed document numbers
