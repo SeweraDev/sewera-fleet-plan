@@ -184,8 +184,14 @@ export function agregujZKatalogu(
       // Pozycja nie ma matchu w katalog_towarow — bierzemy palety/m3 z opisu (regex).
       // Bez tego pozycje od mniej popularnych producentow (np. WIENERBERGER bez Nr ewid.)
       // sa pomijane w sumie, mimo ze opis ma "paleta=Xszt" + "wym XxY".
-      if (puchaty && m3FromWym && m3FromWym > 0) {
-        // Puchaty: m3 fizyczne, 0 palet (lezy na innym towarze)
+      if (puchaty && paletyZOpisu > 0) {
+        // Puchaty w pelnej palecie producenta (decyzja 18.05.2026 wariant B):
+        // wiazka idzie na auto bez rozcinania, zajmuje miejsca paletowe (wyliczPaletyFrakcjaPozycji
+        // juz uwzglednia policzMiejscaPaletowePlyty). m3 z wymiarow (rolki/welna lezy plasko).
+        paletFrac += paletyZOpisu;
+        m3Total += (m3FromWym && m3FromWym > 0) ? m3FromWym : paletyZOpisu * M3_PER_PALETA;
+      } else if (puchaty && m3FromWym && m3FromWym > 0) {
+        // Puchaty drobnica (niepelna paleta, brak p=): m3 fizyczne, 0 palet (lezy na innym)
         m3Total += m3FromWym;
       } else if (dlugiLuzny && m3FromWym && m3FromWym > 0) {
         // Dlugi luzny (nadproza, belki >2000mm bez palety producenta): m3 fizyczne,
@@ -221,8 +227,21 @@ export function agregujZKatalogu(
       }
     }
 
-    // PUCHATY material (wełna, styropian) — m3 fizyczne, 0 palet
+    // PUCHATY material (wełna, styropian)
     if (puchaty) {
+      // Pelna paleta producenta (decyzja 18.05.2026 wariant B) — zajmuje miejsca paletowe
+      if (paletyZOpisu > 0) {
+        paletFrac += paletyZOpisu;
+        if (m3FromWym && m3FromWym > 0) {
+          m3Total += m3FromWym;
+        } else if (m.m3_per_szt != null && !m.m3_podejrzany) {
+          m3Total += m.m3_per_szt * p.ilosc;
+        } else {
+          m3Total += paletyZOpisu * (m.m3_per_paleta ?? M3_PER_PALETA);
+        }
+        continue;
+      }
+      // Drobnica puchatego (niepelna paleta) — m3 fizyczne, 0 palet (na innym towarze)
       if (m3FromWym && m3FromWym > 0) {
         m3Total += m3FromWym;
       } else if (m.m3_per_szt != null && !m.m3_podejrzany) {
