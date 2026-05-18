@@ -330,9 +330,20 @@ export function policzMiejscaPaletowePlyty(max: number, min: number): number {
 export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   if (/USŁUGA|TRANSPORT|MONTAŻ|DOSTAWA|ROBOCIZNA/i.test(p.nazwa_towaru)) return 0;
   if (isPaletaJakoTowar(p)) return 0;
-  // Puchaty material (wełna, styropian) NIE zajmuje miejsca paletowego — mozna polozyc na innym
-  if (isPuchatyMaterial(p)) return 0;
   const opis = p.nazwa_dodatkowa || '';
+  // Puchaty material w PEŁNEJ palecie producenta — wiazka idzie na auto bez rozcinania,
+  // wiec zajmuje miejsce paletowe na podlodze (Decyzja 18.05.2026, wariant B).
+  // Niepelna paleta (np. 5 opak z p=24opak) → drobnica, kladziemy na innym towarze (0).
+  if (isPuchatyMaterial(p)) {
+    const pM = opis.match(/(?:^|[\s(])(?:paleta|p)\s*=\s*(\d+)\s*(?:szt|opak|m2|m3)?/i);
+    if (!pM) return 0;
+    const perPaleta = parseInt(pM[1], 10);
+    if (perPaleta <= 0 || p.ilosc < perPaleta) return 0;
+    const paletProducenta = Math.floor(p.ilosc / perPaleta);
+    const { max, min } = getWymiaryMm(p);
+    const miejsc = (max > 1200 || min > 800) ? policzMiejscaPaletowePlyty(max, min) : 1;
+    return paletProducenta * miejsc;
+  }
   const pM = opis.match(/(?:^|[\s(])(?:paleta|p)\s*=\s*(\d+)\s*(?:szt|opak|m2|m3)?/i);
   if (!pM) return 0;
   const perPaleta = parseInt(pM[1], 10);

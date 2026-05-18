@@ -1238,19 +1238,27 @@ export function parseWZText(rawText: string): WZImportData {
             // osoba do kontaktu (i tak pojawi sie w polu telefon przez combineKontaktTel).
             // Heurystyka 1: wzorzec "Imie Nazwisko" (2-3 slowa, kazde z duzej + male litery).
             // "PANORAMA PARK" / "GALERIA X" przejdzie (caps), "Aleksander Nowicki" odpada.
-            const isPersonName2or3 = /^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,}(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,}){1,2}$/.test(l);
+            // Dokladnie 2 slowa zeby nie lapac toponimow 3-slowowych ("Westerplatte Ruda Śląska").
+            const isPersonName2 = /^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,}\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]{2,}$/.test(l);
             // Heurystyka 2: ta sama wartosc pojawia sie w sekcji "Os. kontaktowa:" pozniej.
             // Lapie tez przypadki ALL-CAPS imion ktore Heurystyka 1 by przepuscila.
             const lWords = l.split(/\s+/).filter(w => w.length > 2);
             const isInOsKontaktowa = lWords.length >= 2 && lines.slice(i + 1, Math.min(i + 8, lines.length)).some(
               (other) => /Os\.\s*kontaktowa[:\s]/i.test(other) && lWords.every(w => other.toLowerCase().includes(w.toLowerCase()))
             );
-            if (isPersonName2or3 || isInOsKontaktowa) continue;
+            if (isPersonName2 || isInOsKontaktowa) continue;
             preBuffer.push(l);
           }
         }
       }
       if (addrParts.length) adres = addrParts.join(", ").replace(/,\s*,/g, ",");
+      // Fallback: brak rdzenia (ul./kod) ale preBuffer ma toponim/miasto — np. WZ z "Adres dostawy"
+      // gdzie user wpisal sama nazwe ulicy bez prefixu "ul." (np. "Westerplatte Ruda Śląska" + pusta "ul.").
+      // Skoro sekcja "Adres dostawy" istnieje, user zadeklarowal tam adres dostawy.
+      if (!adres && preBuffer.length > 0) {
+        const cleaned = preBuffer.filter((l) => !/^(?:ul|al|os|pl)\.?\s*$/i.test(l.trim()));
+        if (cleaned.length > 0) adres = cleaned.join(", ");
+      }
     }
     // Priority 2: lines BEFORE "Adres dostawy" (PDF column layout)
     if (!adres && adresIdx >= 0) {
