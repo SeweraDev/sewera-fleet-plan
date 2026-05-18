@@ -467,15 +467,18 @@ export function klasyfikujLadunek(
   let palet = 0;
   let rozpoznane = 0;
   let dlugi_luzny = false;
+  let ma_puchaty = false;
   const wymaga_hds = katalog?.wymaga_hds ?? false;
   const dzialy_hds = katalog?.dzialy_hds ?? [];
   const palety_gips = katalog?.palety_gips ?? 0;
   const palety_inne_hds = katalog?.palety_inne_hds ?? 0;
 
-  // Sygnał "długi luźny" liczymy ZAWSZE z pozycji (niezależnie od priorytetu m³/palet),
-  // bo katalog_towarow nie ma takiej flagi — to czysta heurystyka opisu (3D + >2000 mm).
+  // Sygnały "długi luźny" i "puchaty" liczymy ZAWSZE z pozycji (niezależnie od priorytetu
+  // m³/palet), bo katalog_towarow nie ma takich flag — to czyste heurystyki opisu/nazwy.
+  // Oba sygnały służą do auto-zaznaczenia "Bez palet" (towar bez euro-palety).
   if (pozycje && pozycje.length > 0) {
     dlugi_luzny = pozycje.some(isDlugiLuzny);
+    ma_puchaty = pozycje.some(isPuchatyMaterial);
   }
 
   // Priorytet 1: baza katalog_towarow (gdy mamy dla wszystkich/wiekszosci pozycji)
@@ -504,10 +507,11 @@ export function klasyfikujLadunek(
     return { objetosc_m3: 0, ilosc_palet: 0, luzne_karton: true, bez_palet: true, wymaga_hds, dzialy_hds, palety_gips, palety_inne_hds };
   }
 
-  // Auto-bez-palet: długi luźny towar (3D z wymiarem >2000 mm, bez palety producenta)
-  // i palet finalnie = 0 → towar jedzie luzem/wiązkami na podłodze auta.
-  // Decyzja 18.05.2026 (nadproża RECTOR, belki, słupy).
-  const bez_palet = dlugi_luzny && palet === 0;
+  // Auto-bez-palet: gdy palet finalnie = 0 I towar nie wymaga euro-palety:
+  //  - długi luźny (3D >2000 mm, bez palety producenta) — nadproża, belki, słupy
+  //  - puchaty materiał (wełna, styropian, izolacje) — kładziemy na innym towarze
+  // Decyzja 18.05.2026.
+  const bez_palet = palet === 0 && (dlugi_luzny || ma_puchaty);
 
   // m3 NIE jest wymuszane na palety × 1,1 — agregat (wyliczObjetoscZPozycji /
   // agregujZKatalogu) liczy m3 per pozycja wg priorytetu (fizyczne wymiary →
