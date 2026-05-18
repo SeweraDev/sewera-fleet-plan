@@ -11,7 +11,7 @@ import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { useCreateZlecenie, type WzInput } from '@/hooks/useCreateZlecenie';
 import { toast } from 'sonner';
 import { wyciagnijOddzialZNumeru, NAZWA_TO_KOD } from '@/lib/oddzialy-geo';
-import { wyciagnijDateZUwag, wyciagnijGodzineZUwag, domyslnyDzienDostawy } from '@/lib/wzAutoFill';
+import { wyciagnijDateZUwag, wyciagnijGodzineZUwag, domyslnyDzienDostawy, getMaxWymiarMm } from '@/lib/wzAutoFill';
 import { detektujTypKlienta } from '@/lib/detekcjaTypuKlienta';
 import { TypPojazduStep } from '@/components/sprzedawca/TypPojazduStep';
 import { CzasDostawyStep } from '@/components/sprzedawca/CzasDostawyStep';
@@ -278,6 +278,9 @@ function NoweZlecenieForm({ onSuccess }: { onSuccess: () => void }) {
             adresDostawy={wzList[0]?.adres}
             sumaMasa={wzList.reduce((s, w) => s + (w.masa_kg || 0), 0)}
             sumaM3={wzList.reduce((s, w) => s + (w.objetosc_m3 || 0), 0)}
+            maxWymiarMm={wzList
+              .flatMap(w => w.pozycje || [])
+              .reduce((m, p) => Math.max(m, getMaxWymiarMm(p)), 0)}
           />
         )}
         {/* Krok 3: Dzień + godzina (pre-wypełniony z uwag WZ lub default) */}

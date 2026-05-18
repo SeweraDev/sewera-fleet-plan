@@ -12,6 +12,13 @@ export interface Pojazd {
   aktywny: boolean;
   jest_zewnetrzny?: boolean;
   nr_rej_raw?: string;
+  // Wymiary paki + limity z migracji 18.05.2026 — NULL dla zewnętrznych i HDS-ów.
+  dl_paki_cm?: number | null;
+  szer_paki_cm?: number | null;
+  wys_paki_cm?: number | null;
+  miejsc_paletowych?: number | null;
+  xps_paczek?: number | null;
+  eps_paczek?: number | null;
 }
 
 // KAT i R współdzielą flotę (ten sam adres, te same pojazdy)
@@ -45,7 +52,7 @@ export function useFlotaOddzialu(oddzialId: number | null) {
     const [resOwn, resZew] = await Promise.all([
       supabase
         .from('flota')
-        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet, oddzial_id, aktywny')
+        .select('id, nr_rej, typ, ladownosc_kg, objetosc_m3, max_palet, oddzial_id, aktywny, dl_paki_cm, szer_paki_cm, wys_paki_cm, miejsc_paletowych, xps_paczek, eps_paczek')
         .in('oddzial_id', ids)
         .eq('aktywny', true)
         .order('typ')
@@ -59,11 +66,18 @@ export function useFlotaOddzialu(oddzialId: number | null) {
         .order('nr_rej'),
     ]);
 
+    const numOrNull = (v: unknown): number | null => v != null ? Number(v) : null;
     const own = (resOwn.data || []).map(d => ({
       ...d,
       ladownosc_kg: Number(d.ladownosc_kg),
-      objetosc_m3: d.objetosc_m3 != null ? Number(d.objetosc_m3) : null,
-      max_palet: (d as any).max_palet != null ? Number((d as any).max_palet) : null,
+      objetosc_m3: numOrNull(d.objetosc_m3),
+      max_palet: numOrNull((d as any).max_palet),
+      dl_paki_cm: numOrNull((d as any).dl_paki_cm),
+      szer_paki_cm: numOrNull((d as any).szer_paki_cm),
+      wys_paki_cm: numOrNull((d as any).wys_paki_cm),
+      miejsc_paletowych: numOrNull((d as any).miejsc_paletowych),
+      xps_paczek: numOrNull((d as any).xps_paczek),
+      eps_paczek: numOrNull((d as any).eps_paczek),
       jest_zewnetrzny: false,
       nr_rej_raw: d.nr_rej,
     }));

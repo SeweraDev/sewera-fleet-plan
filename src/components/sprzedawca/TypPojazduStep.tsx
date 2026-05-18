@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TYPY_KLIENTOW } from '@/lib/typy-klientow';
 import { useWindaVsHdsCost } from '@/hooks/useWindaVsHdsCost';
 import { mapTypNaCennikowy } from '@/lib/stawki-transportowe';
+import { czyAutoZmiesciTowar, type PojazdWymiary } from '@/lib/walidacjaPojazdu';
 
 const ERP_TYPES = [
   { kod: 'B', opis: 'Bez windy do 1,2t', typ: 'Dostawczy 1,2t' },
@@ -30,7 +31,8 @@ interface TypPojazduStepProps {
   setTypKlienta: (v: string) => void;
   oddzialy: { id: number; nazwa: string }[];
   loadingOddzialy: boolean;
-  flota: { typ: string }[];
+  /** Pojazdy oddziału — z wymiarami paki (dl_paki_cm) do walidacji długiego towaru. */
+  flota: Array<{ typ: string } & Partial<PojazdWymiary>>;
   loadingFlota: boolean;
   onNext: () => void;
   /** Opcjonalny callback wstecz — używany gdy ten krok nie jest pierwszy
@@ -58,6 +60,9 @@ interface TypPojazduStepProps {
   sumaMasa?: number;
   /** Suma m3 ze wszystkich WZ. */
   sumaM3?: number;
+  /** Najdłuższy wymiar towaru w mm (max ze wszystkich pozycji WZ).
+   *  Używany do ostrzeżenia "za krótka paka" przy wyborze typu pojazdu. */
+  maxWymiarMm?: number;
 }
 
 export function TypPojazduStep({
@@ -78,7 +83,28 @@ export function TypPojazduStep({
   adresDostawy,
   sumaMasa,
   sumaM3,
+  maxWymiarMm,
 }: TypPojazduStepProps) {
+  // Dla każdego typu pojazdu — sprawdź czy choć jedno auto z floty zmieści towar
+  // o długości maxWymiarMm. Jeśli żadne, wyświetlamy ostrzeżenie "za krótka paka"
+  // przy tym typie. Decyzja 18.05.2026 (po migracji wymiarów paki).
+  const ostrzezeniePaki = (typ: string): string | null => {
+    if (!maxWymiarMm || maxWymiarMm <= 0) return null;
+    const autaTypu = flota.filter((f) => f.typ === typ);
+    if (autaTypu.length === 0) return null;
+    // Auto z NULL dł_paki = brak danych — uznajemy że mogłoby zmieścić (nie blokujemy)
+    const ktoresZmiesci = autaTypu.some((a) => {
+      if (a.dl_paki_cm == null) return true;
+      return czyAutoZmiesciTowar(
+        { nr_rej: '', typ, ladownosc_kg: 0, dl_paki_cm: a.dl_paki_cm, szer_paki_cm: null, wys_paki_cm: null, miejsc_paletowych: null, xps_paczek: null, eps_paczek: null },
+        maxWymiarMm,
+      ).ok;
+    });
+    if (ktoresZmiesci) return null;
+    // Znajdź najdłuższą pakę tego typu — żeby pokazać o ile za krótka
+    const najdluzsza = autaTypu.reduce((m, a) => Math.max(m, (a.dl_paki_cm ?? 0)), 0);
+    return `Paka ${(najdluzsza / 100).toFixed(1)}m < towar ${(maxWymiarMm / 1000).toFixed(1)}m`;
+  };
   // Banner HDS: wymaga_hds=true + przekroczony prog palet + klient nie-R.
   // Prog (decyzja 15.05.2026 noc):
   //   - plyty gipsowe > 1 paleta producenta LUB
@@ -285,21 +311,35 @@ export function TypPojazduStep({
                   </div>
                 </button>
 
-                {uniqueTypes.map(typ => (
-                  <button
-                    key={typ}
-                    type="button"
-                    onClick={() => setTypPojazdu(typ)}
-                    className={cn(
-                      'rounded-lg border-2 px-4 py-3 text-left text-sm font-medium transition-colors',
-                      typPojazdu === typ
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border hover:border-muted-foreground/50'
-                    )}
-                  >
-                    {typ}
-                  </button>
-                ))}
+                {uniqueTypes.map(typ => {
+                  const ostrz = ostrzezeniePaki(typ);
+                  return (
+                    <button
+                      key={typ}
+                      type="button"
+                      onClick={() => setTypPojazdu(typ)}
+                      className={cn(
+                        'rounded-lg border-2 px-4 py-3 text-left text-sm font-medium transition-colors',
+                        typPojazdu === typ
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : ostrz
+                            ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/20 hover:border-amber-500'
+                            : 'border-border hover:border-muted-foreground/50'
+                      )}
+                      title={ostrz ?? undefined}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span>{typ}</span>
+                        {ostrz && <span className="text-amber-600 dark:text-amber-400 text-base">⚠️</span>}
+                      </div>
+                      {ostrz && (
+                        <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal mt-1 leading-tight">
+                          {ostrz}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
 
                 {zewTypy.length > 0 ? (
                   zewTypy.map(typ => (
