@@ -156,18 +156,20 @@ export function domyslnyDzienDostawy(): string {
 /**
  * Wylicza objętość (m³) dla pojedynczej pozycji towarowej z WZ.
  *
- * Algorytm (sesja 13.05.2026):
+ * Algorytm (sesja 13.05.2026, rozszerzenie 3D 18.05.2026):
  *  1. Pomija usługi (USŁUGA / TRANSPORT / MONTAŻ / DOSTAWA / ROBOCIZNA)
- *  2. Z nazwy_dodatkowej: "wym 600x1000" → wymiary płyty (mm)
- *  3. Z nazwy_towaru: ostatnia liczba (np. "150" w "FASOTERM 150") → grubość (mm)
- *  4. Z nazwy_dodatkowej: "opak=1,2m2" → powierzchnia opakowania (m²)
- *  5. Sztuk per opak = powierzchnia_opak / powierzchnia_plyty (gdy JM=OPA)
- *  6. m³ per opak = sztuk_per_opak × powierzchnia_plyty × grubość
+ *  2a. Format 3D "wym wys X × dł Y × szer Z" (długie elementy: nadproża/belki) →
+ *      m³ = X × Y × Z × ilość (bez grubości z nazwy)
+ *  2.  Z nazwy_dodatkowej: "wym 600x1000" → wymiary płyty (mm)
+ *  3.  Z nazwy_towaru: ostatnia liczba (np. "150" w "FASOTERM 150") → grubość (mm)
+ *  4.  Z nazwy_dodatkowej: "opak=1,2m2" → powierzchnia opakowania (m²)
+ *  5.  Sztuk per opak = powierzchnia_opak / powierzchnia_plyty (gdy JM=OPA)
+ *  6.  m³ per opak = sztuk_per_opak × powierzchnia_plyty × grubość
  *
- * Przykład: ISOVER FASOTERM 150, wym 600x1000, opak=1,2m2, JM=OPA, ilość=166
- *  → płyta 0,6m × 1,0m × 0,15m = 0,09 m³/szt
- *  → 1,2 m² / 0,6 m² = 2 szt/opak
+ * Przykład 2D: ISOVER FASOTERM 150, wym 600x1000, opak=1,2m2, JM=OPA, ilość=166
  *  → 0,18 m³/opak × 166 = 29,88 m³
+ * Przykład 3D: RECTOR Nadproże, wym wys 71 x dł 2700 x szer 115, JM=SZT, ilość=8
+ *  → 0,071 × 2,7 × 0,115 × 8 = 0,18 m³
  *
  * @returns objętość w m³ lub null gdy nie udało się wyliczyć
  */
@@ -249,6 +251,25 @@ export function wyliczObjetoscPozycji(p: Pozycja): number | null {
       if (m3PerOpak >= 0.001 && m3PerOpak <= 5) {
         return m3PerOpak * p.ilosc;
       }
+    }
+  }
+
+  // 2a. Format 3D: "wym wys 71 x dł 2700 x szer 115" (długie elementy strunobetonowe:
+  //     nadproża RECTOR, belki, słupy). Każda wartość w mm; opcjonalne prefiksy między
+  //     `wym` a liczbami (wys/dł/szer/gr) lub między x a liczbą. Daje pełną m³ bez
+  //     potrzeby brania grubości z nazwy — wynik = a × b × c × ilość.
+  //     Bezpieczne dla 2D + opak= (regex wymaga TRZECH liczb rozdzielonych x).
+  const wym3D = opis.match(
+    /wym\s+(?:\w+\s+)?(\d+)\s*[x×]\s*(?:\w+\s+)?(\d+)\s*[x×]\s*(?:\w+\s+)?(\d+)/i,
+  );
+  if (wym3D) {
+    const a = parseInt(wym3D[1], 10) / 1000;
+    const b = parseInt(wym3D[2], 10) / 1000;
+    const c = parseInt(wym3D[3], 10) / 1000;
+    // Sanity: każdy wymiar 0,001 m – 5 m (1 mm – 5000 mm)
+    if (a >= 0.001 && a <= 5 && b >= 0.001 && b <= 5 && c >= 0.001 && c <= 5) {
+      const m3Total = a * b * c * p.ilosc;
+      return m3Total > 0 ? m3Total : null;
     }
   }
 
