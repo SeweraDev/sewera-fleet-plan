@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
-import { isPaletaJakoTowar, isPuchatyMaterial, isDlugiLuzny, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, M3_PER_PALETA } from './wzAutoFill';
+import { isPaletaJakoTowar, isPuchatyMaterial, isDlugiLuzny, wyliczPaletyFrakcjaPozycji, wyliczObjetoscPozycji, getMaxWymiarMm, M3_PER_PALETA } from './wzAutoFill';
 
 /**
  * Lookup pozycji WZ w bazie katalog_towarow.
@@ -170,11 +170,12 @@ export function agregujZKatalogu(
     const paletyZOpisu = wyliczPaletyFrakcjaPozycji(p);
     const m3FromWym = wyliczObjetoscPozycji(p);
     const puchaty = isPuchatyMaterial(p);
-    // Dlugie palety (wym>2000mm) leza plasko, nie wystaja wysoko — m3 z wymiarow
-    // (a nie palety × 1,1) odzwierciedla realne miejsce. Sygnal: paletyZOpisu>0 AND m3FromWym>0
-    const opis = p.nazwa_dodatkowa || '';
-    const wym = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
-    const dlugiTowar = wym && Math.max(parseInt(wym[1], 10), parseInt(wym[2], 10)) > 2000;
+    // Dlugi towar (wym>2000mm): plyty gipsowe 1200x2600, OSB 1250x2500. Leza plasko,
+    // nie wystaja wysoko — m3 z wymiarow (a nie palety × 1,1) odzwierciedla realne miejsce.
+    // Ponadto zajmuja 2 standardowe miejsca paletowe na aucie (nie miesci sie na euro 1200x800).
+    // Rozszerzenie 18.05.2026: getMaxWymiarMm szuka tez w nazwie towaru (OSB "18mmx1250x2500").
+    const maxWymiarMm = getMaxWymiarMm(p);
+    const dlugiTowar = maxWymiarMm > 2000;
 
     const dlugiLuzny = isDlugiLuzny(p);
 
@@ -248,16 +249,21 @@ export function agregujZKatalogu(
     if (m.m3_per_szt != null && !m.m3_podejrzany) {
       const m3Pozycji = m.m3_per_szt * p.ilosc;
       m3Total += m3Pozycji;
-      // Frakcja palety: m3_pozycji / m3_per_paleta (domyslnie 1.1)
-      paletFrac += m3Pozycji / (m.m3_per_paleta ?? 1.1);
+      // Frakcja palety: m3_pozycji / m3_per_paleta (domyslnie 1.1).
+      // Dlugi towar (>2000mm) — ceil palet producenta × 2 (jak plyty gipsowe/OSB:
+      // paleta nie miesci sie na euro 1200x800, zajmuje 2 miejsca na podlodze auta).
+      // Decyzja 18.05.2026 (OSB-3 1250x2500 — 17 szt = 1 paleta producenta = 2 miejsca).
+      const fracPalety = m3Pozycji / (m.m3_per_paleta ?? 1.1);
+      paletFrac += dlugiTowar ? Math.max(1, Math.ceil(fracPalety)) * 2 : fracPalety;
       continue;
     }
 
     // Priorytet 2: szt_na_palecie z bazy
     if (m.szt_na_palecie != null && m.szt_na_palecie > 0) {
       const frac = p.ilosc / m.szt_na_palecie;
-      paletFrac += frac;
       m3Total += frac * (m.m3_per_paleta ?? 1.1);
+      // Dlugi towar — ceil × 2 (jak Priorytet 1).
+      paletFrac += dlugiTowar ? Math.max(1, Math.ceil(frac)) * 2 : frac;
     }
     // jezeli oba puste, pozycja nie wnosi do m3/palet — fallback do regex z opisu
     // bedzie w wyliczObjetoscZPozycji() obok agregatu z bazy.

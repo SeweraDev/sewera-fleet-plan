@@ -189,14 +189,49 @@ export function isPaletaJakoTowar(p: Pozycja): boolean {
  * (mozna polozyc NA innym towarze, sa miekkie/lekkie). m3 wciaz liczymy z
  * wymiarow (zajmuja objetosc auta).
  *
- * Sygnal: nazwa zawiera 'wełna/welna', 'styrop', 'izolac', 'wata', 'XPS', 'EPS',
- * lub konkretne nazwy producentow (FASOTERM, AKU-PŁYTA).
- * UWAGA: 'PŁYTA' jest TYLKO w kontekscie wełny/izolacji (np. AKU-PŁYTA),
- * nie wszystkie "płyty" sa puchate (plyty gipsowe NIE — to twarde plyty).
+ * Sygnal: NAZWA TOWARU zawiera 'wełna/welna', 'styrop', 'izolac', 'wata', 'XPS',
+ * 'EPS', lub konkretne nazwy producentow (FASOTERM, AKU-PŁYTA).
+ *
+ * UWAGA 1: 'PŁYTA' jest TYLKO w kontekscie wełny/izolacji (np. AKU-PŁYTA),
+ *   nie wszystkie "płyty" sa puchate (plyty gipsowe/OSB NIE — twarde plyty).
+ * UWAGA 2: szukamy TYLKO w nazwa_towaru, NIE w nazwa_dodatkowa (decyzja 18.05.2026).
+ *   Inaczej "TYTAN PIANOKLEJ DO STYROPIANU" złapane fałszywie jako puchaty —
+ *   to puszka kleju z opisem zastosowania, nie izolacja.
  */
 export function isPuchatyMaterial(p: Pozycja): boolean {
-  const tekst = `${p.nazwa_towaru} ${p.nazwa_dodatkowa || ''}`;
-  return /wełna|welna|styrop|izolac\b|wata\b|\bXPS\b|\bEPS\b|FASOTERM|AKU-PŁYTA|AKU-PLYTA/i.test(tekst);
+  return /wełna|welna|styrop|izolac\b|wata\b|\bXPS\b|\bEPS\b|FASOTERM|AKU-PŁYTA|AKU-PLYTA/i.test(p.nazwa_towaru);
+}
+
+/**
+ * Maksymalny wymiar towaru w mm (do detekcji długiego towaru >2000 mm).
+ * Szuka w 3 miejscach (priorytet):
+ *   1. opis 3D: "wym wys X × dł Y × szer Z" (nadproża RECTOR)
+ *   2. opis 2D: "wym X × Y" (płyty gipsowe, OSB w opisie)
+ *   3. nazwa towaru: "XmmxYxZ" / "XxYxZ" / "XxY" (OSB-3 18mmx1250x2500)
+ *
+ * Zwraca 0 gdy brak danych. Sesja 18.05.2026.
+ */
+export function getMaxWymiarMm(p: Pozycja): number {
+  const opis = p.nazwa_dodatkowa || '';
+  // 1. Opis 3D z prefixami (wys/dł/szer + polskie litery)
+  const op3D = opis.match(
+    /wym\s+(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)/i,
+  );
+  if (op3D) return Math.max(parseInt(op3D[1], 10), parseInt(op3D[2], 10), parseInt(op3D[3], 10));
+  // 2. Opis 2D
+  const op2D = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
+  if (op2D) return Math.max(parseInt(op2D[1], 10), parseInt(op2D[2], 10));
+  // 3. Nazwa towaru — 3D z grubością mm na początku ("18mmx1250x2500")
+  const nazwa = p.nazwa_towaru || '';
+  const nm3DMm = nazwa.match(/(\d+)\s*mm\s*[x×]\s*(\d+)\s*[x×]\s*(\d+)/i);
+  if (nm3DMm) return Math.max(parseInt(nm3DMm[1], 10), parseInt(nm3DMm[2], 10), parseInt(nm3DMm[3], 10));
+  // 4. Nazwa towaru — 3D bez mm ("1250x2500x18")
+  const nm3D = nazwa.match(/\b(\d{2,5})\s*[x×]\s*(\d{2,5})\s*[x×]\s*(\d{2,5})\b/i);
+  if (nm3D) return Math.max(parseInt(nm3D[1], 10), parseInt(nm3D[2], 10), parseInt(nm3D[3], 10));
+  // 5. Nazwa towaru — 2D ("71x2700")
+  const nm2D = nazwa.match(/\b(\d{2,5})\s*[x×]\s*(\d{2,5})\b/);
+  if (nm2D) return Math.max(parseInt(nm2D[1], 10), parseInt(nm2D[2], 10));
+  return 0;
 }
 
 /** Frakcja palety dla pozycji — z opisu. 0 gdy brak.
@@ -218,16 +253,13 @@ export function wyliczPaletyFrakcjaPozycji(p: Pozycja): number {
   if (perPaleta <= 0) return 0;
   const paletyProducenta = p.ilosc / perPaleta;
 
-  // Dlugie towary (plyty gipsowe 1200x2600, dachowki, etc.) — wymiary > 2000mm.
-  // Pakowane na specjalnej palecie producenta (np. 1200x2600), ktora na aucie
-  // zajmuje 2 standardowe miejsca paletowe (1200x800). Decyzja 15.05.2026.
-  const wym = opis.match(/wym\s*(\d+)\s*[x×]\s*(\d+)/i);
-  if (wym) {
-    const max = Math.max(parseInt(wym[1], 10), parseInt(wym[2], 10));
-    if (max > 2000) {
-      // ceil palet producenta * 2 (zaokraglamy bo dlugi towar nie jest dzielony na frakcje)
-      return Math.max(1, Math.ceil(paletyProducenta)) * 2;
-    }
+  // Dlugie towary (plyty gipsowe 1200x2600, OSB 1250x2500, dachowki, etc.) —
+  // wymiary > 2000mm. Pakowane na specjalnej palecie producenta, ktora na aucie
+  // zajmuje 2 standardowe miejsca paletowe (1200x800).
+  // Decyzja 15.05.2026, rozszerzone 18.05 o wymiary z nazwy (OSB-3 18mmx1250x2500).
+  if (getMaxWymiarMm(p) > 2000) {
+    // ceil palet producenta * 2 (zaokraglamy bo dlugi towar nie jest dzielony na frakcje)
+    return Math.max(1, Math.ceil(paletyProducenta)) * 2;
   }
   return paletyProducenta;
 }
