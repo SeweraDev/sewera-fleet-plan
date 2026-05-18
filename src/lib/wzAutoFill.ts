@@ -259,8 +259,10 @@ export function wyliczObjetoscPozycji(p: Pozycja): number | null {
   //     `wym` a liczbami (wys/dł/szer/gr) lub między x a liczbą. Daje pełną m³ bez
   //     potrzeby brania grubości z nazwy — wynik = a × b × c × ilość.
   //     Bezpieczne dla 2D + opak= (regex wymaga TRZECH liczb rozdzielonych x).
+  //     UWAGA: prefix matchuje `[^\s0-9x×]+` (nie `\w+`), bo polskie `ł`/`ą`/itp.
+  //     nie są częścią \w w JS — bez flagi /u "dł" by się rozjechało po `d`.
   const wym3D = opis.match(
-    /wym\s+(?:\w+\s+)?(\d+)\s*[x×]\s*(?:\w+\s+)?(\d+)\s*[x×]\s*(?:\w+\s+)?(\d+)/i,
+    /wym\s+(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)\s*[x×]\s*(?:[^\s0-9x×]+\s+)?(\d+)/i,
   );
   if (wym3D) {
     const a = parseInt(wym3D[1], 10) / 1000;
