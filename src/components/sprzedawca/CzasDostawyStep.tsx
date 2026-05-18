@@ -110,7 +110,7 @@ export function CzasDostawyStep({
         <Label>Preferowana godzina{godzinaAutoSet && <span className="ml-2 text-[11px] text-orange-700 dark:text-orange-400 font-normal">🟠 auto z uwag WZ — sprawdź</span>}</Label>
         <div className="flex flex-col gap-2 mt-2">
           {TIME_OPTIONS.map(opt => {
-            const isSelected = godzina === opt;
+            const isSelected = (godzina || '').toLowerCase() === opt.toLowerCase();
             const highlightAuto = godzinaAutoSet && isSelected;
             return (
               <button

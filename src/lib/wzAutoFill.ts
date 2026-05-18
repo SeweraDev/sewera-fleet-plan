@@ -135,15 +135,16 @@ export function wyciagnijGodzineZUwag(uwagi: string | null | undefined): string 
 
 /**
  * Domyślna sugerowana data dostawy gdy brak w uwagach:
- *   - przed 14:00 → jutro
- *   - po 14:00   → pojutrze (bo dyspozytorzy zwykle nie zdążą zaplanować na jutro)
+ *   - przed 12:00 → ten sam dzień (dzisiaj)
+ *   - od 12:00   → kolejny dzień roboczy
  *
- * Pomija weekendy: gdy jutro/pojutrze wypada w sobotę/niedzielę → przesuwa na poniedziałek.
+ * Pomija weekendy: gdy wynik wypada w sobotę/niedzielę → przesuwa na poniedziałek.
+ * Gdy dziś jest weekend i jest przed 12:00 → też przesuwa do najbliższego dnia roboczego.
  * Zwraca format ISO "YYYY-MM-DD".
  */
 export function domyslnyDzienDostawy(): string {
   const now = new Date();
-  const offset = now.getHours() >= 14 ? 2 : 1;
+  const offset = now.getHours() >= 12 ? 1 : 0;
   const d = new Date(now);
   d.setDate(d.getDate() + offset);
   // Pomijaj soboty (6) i niedziele (0)
