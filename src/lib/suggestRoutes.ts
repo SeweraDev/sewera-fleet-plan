@@ -17,6 +17,44 @@ const SORTED_TYPES = Object.entries(TYP_CAPACITY)
   .filter(([k]) => !['HDS 8,9t', 'HDS 9,1t', 'HDS 11,7t', 'HDS 12T'].includes(k))
   .sort((a, b) => a[1].kg - b[1].kg);
 
+/**
+ * Sugeruje najmniejszy typ pojazdu który zmieści dany ładunek.
+ * Używany jako domyślny typ porównania kosztów gdy user nie wybrał (bez_preferencji/zewnetrzny).
+ *
+ * Logika:
+ * - `wymaga_hds=true` → HDS 9,0t (najmniejszy HDS)
+ * - inaczej najmniejszy typ gdzie kg/m3/pal mieszczą ładunek (UWAGA: HDS-y mają m3=0 więc nie
+ *   pasują dla ładunków objętościowych — pomijane gdy m3 > 0)
+ * - fallback gdy wszystko za małe: Winda MAX 15,8t (największy non-HDS)
+ * - pusty ładunek (kg=0, m3=0, pal=0) → Dostawczy 1,2t (najczęstszy)
+ */
+export function sugerujTypZLadunku(
+  kg: number,
+  m3: number,
+  pal: number,
+  wymagaHds: boolean = false,
+): string {
+  // HDS — gdy oznaczony w katalogu jako wymaga_hds
+  if (wymagaHds) return 'HDS 9,0t';
+
+  // Pusty ładunek — domyślny van
+  if ((kg || 0) <= 0 && (m3 || 0) <= 0 && (pal || 0) <= 0) {
+    return 'Dostawczy 1,2t';
+  }
+
+  // Szukaj najmniejszego pasującego (pomijamy HDS-y bo mają m3=0 = nie nadają się do objętościowych)
+  for (const [typ, cap] of SORTED_TYPES) {
+    if (typ.startsWith('HDS')) continue;
+    const kgOk = (kg || 0) <= cap.kg;
+    const m3Ok = cap.m3 === 0 || (m3 || 0) <= cap.m3;
+    const palOk = (pal || 0) <= cap.pal;
+    if (kgOk && m3Ok && palOk) return typ;
+  }
+
+  // Nic nie pasuje — fallback największy van
+  return 'Winda MAX 15,8t';
+}
+
 export interface RouteSuggestion {
   type: 'overweight' | 'merge' | 'no_type';
   severity: 'warning' | 'info';
