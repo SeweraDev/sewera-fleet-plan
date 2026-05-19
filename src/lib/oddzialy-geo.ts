@@ -512,6 +512,24 @@ const SEWERA_SUGGESTIONS: SearchResult[] = Object.entries(ODDZIAL_COORDS)
     source: 'sewera' as const,
   }));
 
+// Photon czasami zwraca angielskie nazwy polskich miast (Warsaw, Krakow, Lodz, Gdansk).
+// Mapowanie z powrotem na polskie. Inne miasta i dzielnice zostawiamy bez zmian.
+const NAZWY_PL: Record<string, string> = {
+  Warsaw: 'Warszawa',
+  Cracow: 'Kraków',
+  Krakow: 'Kraków',
+  Lodz: 'Łódź',
+  Poznan: 'Poznań',
+  Wroclaw: 'Wrocław',
+  Gdansk: 'Gdańsk',
+  Poland: 'Polska',
+};
+
+function polonizujMiasto(s: string | undefined | null): string | undefined {
+  if (!s) return undefined;
+  return NAZWY_PL[s] || s;
+}
+
 export async function searchAddress(query: string): Promise<SearchResult[]> {
   if (!query || query.length < 3) return [];
 
@@ -544,6 +562,9 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
       if (lat < 49.0 || lat > 54.9 || lng < 14.1 || lng > 24.2) continue;
 
       const props = f.properties || {};
+      const city = polonizujMiasto(props.city);
+      const district = polonizujMiasto(props.district);
+      const county = polonizujMiasto(props.county);
       const parts: string[] = [];
       if (props.name) parts.push(props.name);
       if (props.street) {
@@ -551,8 +572,8 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
         if (props.housenumber) street += ' ' + props.housenumber;
         if (!parts.includes(street)) parts.push(street);
       }
-      if (props.city) parts.push(props.city);
-      else if (props.county) parts.push(props.county);
+      if (city) parts.push(city);
+      else if (county) parts.push(county);
 
       const name = parts.join(', ') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       // Nie duplikuj oddziałów Sewera
@@ -562,8 +583,8 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
       // (rozne dzielnice tego samego miasta to czesty problem przy 'Orla Bialego' w DG itp.)
       const subParts: string[] = [];
       if (props.postcode) subParts.push(props.postcode);
-      if (props.city) subParts.push(props.city);
-      if (props.district && props.district !== props.city) subParts.push(props.district);
+      if (city) subParts.push(city);
+      if (district && district !== city) subParts.push(district);
 
       photonResults.push({
         name,
@@ -571,7 +592,7 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
         lng,
         hasHouseNumber: !!props.housenumber,
         postcode: props.postcode,
-        district: props.district,
+        district,
         subtitle: subParts.join(', ') || undefined,
         source: 'photon',
       });
