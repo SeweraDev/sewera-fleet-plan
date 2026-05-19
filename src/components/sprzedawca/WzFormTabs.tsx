@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
-import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong, sugerujKlasyfikacjeWg } from '@/lib/klasyfikacje';
+import { KLASYFIKACJE, klasyfikacjaZTypu, formatKlasyfikacjaLong, sugerujKlasyfikacjeWg, getMinKlasyfikacjaKlienta, bumpDoMinimumKlasyfikacji } from '@/lib/klasyfikacje';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { SnipLiveOverlay } from '@/components/shared/SnipLiveOverlay';
 import { wyliczObjetoscZPozycji, klasyfikujWZAsync } from '@/lib/wzAutoFill';
@@ -1968,18 +1969,30 @@ export function WzFormTabs({ wzList, setWzList, error, submitting, onBack, onSub
   // na pustym ekranie uploadu OCR/PDF — widzi od razu że dane zostały zapisane.
   // Plus notyfikacja parent (Dashboard) o numerach dokumentu — żeby mógł
   // wykryć oddział wystawiający i zaproponować zmianę gdy różny od wybranego.
-  const setWzListFromImport = useCallback((next: WzInput[]) => {
+  const setWzListFromImport = useCallback(async (next: WzInput[]) => {
     // Klasyfikacja transportu — kolejność priorytetów:
     //  1. autoKlas (z typu pojazdu wybranego w Kroku 2) — najsilniejszy, user explicit wskazał
     //  2. Wartość z parsera/usera już ustawiona na WZ
     //  3. Sugestia na bazie wagi/m³/palet (najmniejszy pojazd który zmiesci ladunek)
-    //     — używane gdy Krok 2 jeszcze nie odbyl sie a chcemy zasugerowac wstepnie.
-    const final = next.map(w => {
+    //  4. Bump do min_klasyfikacja klienta z bazy (np. STANEX-BUD zawsze D)
+    const finalSync = next.map(w => {
       if (autoKlas) return { ...w, klasyfikacja: autoKlas };
       if (w.klasyfikacja) return w;
       const sugerowana = sugerujKlasyfikacjeWg(w.masa_kg || 0, w.objetosc_m3 || 0, w.ilosc_palet || 0, w._wymaga_hds || false, w._palety_gips || 0, w._palety_inne_hds || 0);
       return sugerowana ? { ...w, klasyfikacja: sugerowana } : w;
     });
+    // Bump do minimum klienta — równolegle dla każdego WZ z _kod_klienta
+    const final = await Promise.all(finalSync.map(async (w) => {
+      if (!w._kod_klienta) return w;
+      const min = await getMinKlasyfikacjaKlienta(w._kod_klienta, supabase);
+      if (!min) return w;
+      const bumped = bumpDoMinimumKlasyfikacji(w.klasyfikacja, min);
+      if (bumped && bumped !== w.klasyfikacja) {
+        toast.info(`📌 Klient ${w.odbiorca} ma wymóg klasyfikacji ≥ ${min} — ustawiono ${bumped}`);
+        return { ...w, klasyfikacja: bumped };
+      }
+      return w;
+    }));
     setWzList(final);
     setActiveTab('reczne');
     toast.success('✅ WZ dodane do listy — sprawdź w zakładce Ręcznie');

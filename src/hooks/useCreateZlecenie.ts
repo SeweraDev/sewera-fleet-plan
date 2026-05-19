@@ -6,7 +6,7 @@ import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { wyslijDoDyspozytorów } from '@/lib/powiadomienia';
 import { archiwizujWZ, archiwizujWZObraz } from '@/lib/archiwumWZ';
 import { getMaxWymiarMm, policzPaczkiPuchatego } from '@/lib/wzAutoFill';
-import { wyrownajKlasyfikacjeZlecenia } from '@/lib/klasyfikacje';
+import { wyrownajKlasyfikacjeZlecenia, getMinKlasyfikacjaKlienta, bumpDoMinimumKlasyfikacji } from '@/lib/klasyfikacje';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
 
 export interface WzInput {
@@ -99,7 +99,20 @@ export function useCreateZlecenie(onSuccess?: () => void) {
     }
 
     if (input.wz_list.length > 0) {
-      const wzRows = input.wz_list.map(wz => {
+      // Safety net: bump klasyfikacji do min_klasyfikacja klienta z bazy
+      // (np. STANEX-BUD zawsze min 'D' — chroni przed ręcznym obniżeniem przez sprzedawcę).
+      const wzWithMinKlas = await Promise.all(input.wz_list.map(async (wz) => {
+        if (!wz._kod_klienta) return wz;
+        const min = await getMinKlasyfikacjaKlienta(wz._kod_klienta, supabase);
+        if (!min) return wz;
+        const bumped = bumpDoMinimumKlasyfikacji(wz.klasyfikacja, min);
+        if (bumped && bumped !== wz.klasyfikacja) {
+          return { ...wz, klasyfikacja: bumped };
+        }
+        return wz;
+      }));
+
+      const wzRows = wzWithMinKlas.map(wz => {
         // Walidacja w dyspozytorze (B1, migracja 18.05.2026b) — z pozycji parsera
         // wyliczamy max wymiar towaru + paczki puchatego materiału, zapisujemy do DB.
         const pozycje = wz._pozycje || [];

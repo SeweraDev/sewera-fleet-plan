@@ -134,6 +134,57 @@ export function klasyfikacjaZTypu(typPojazdu: string | null | undefined): string
   return k?.kod || null;
 }
 
+// ─── Reguła minimum klasyfikacji per klient ───
+//
+// Niektórzy klienci wymagają zawsze konkretnego typu auta niezależnie od wagi/objętości.
+// Przykład: STANEX-BUD (kod 11000452) — zawsze auto z windą (D), nawet dla 800 kg.
+// Reguła trzymana w tabeli `klienci_redystrybucja.min_klasyfikacja` (TEXT NULL — B/C/D/E/F/H).
+//
+// "Minimum" = system może bumpować WYŻEJ (gdy ładunek wymaga większego auta), ale
+// nigdy NIŻEJ. Jeśli auto-detekcja proponuje 'B' a klient ma min 'D' → bumpujemy do 'D'.
+// Jeśli auto-detekcja proponuje 'E' a klient ma min 'D' → zostaje 'E'.
+//
+// HDS (F/H) i Winda (B/C/D/E) traktowane jako 2 osobne hierarchie — bump działa tylko
+// w obrębie tej samej rodziny. Np. min='D' nie wpłynie na klasyfikację 'H' (HDS).
+
+/** Pobiera min_klasyfikacja klienta z bazy. Zwraca null gdy klient bez reguły lub błąd. */
+export async function getMinKlasyfikacjaKlienta(
+  kodKlienta: string | null | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+): Promise<string | null> {
+  if (!kodKlienta) return null;
+  const kod = String(kodKlienta).trim();
+  if (kod.length === 0) return null;
+  try {
+    const { data } = await supabase
+      .from('klienci_redystrybucja')
+      .select('min_klasyfikacja')
+      .eq('kod_kontrahenta', kod)
+      .maybeSingle();
+    return data?.min_klasyfikacja || null;
+  } catch (err) {
+    console.warn('[getMinKlasyfikacjaKlienta] query failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Bumpuje klasyfikację do minimum klienta (w obrębie tej samej rodziny: winda/HDS).
+ * Gdy obecna >= min → zwraca obecną. Gdy < min → zwraca min.
+ * Cross-family (winda vs HDS) → bez zmian (różne usługi).
+ */
+export function bumpDoMinimumKlasyfikacji(obecna: string | null | undefined, min: string | null | undefined): string | null {
+  if (!min) return obecna || null;
+  if (!obecna) return min;
+  const obecnaHds = ['F', 'H'].includes(obecna);
+  const minHds = ['F', 'H'].includes(min);
+  // Cross-family: nie ruszamy (HDS zostaje HDS, winda zostaje winda)
+  if (obecnaHds !== minHds) return obecna;
+  const hier = obecnaHds ? HIER_HDS : HIER_WINDA;
+  return (hier[obecna] ?? 0) >= (hier[min] ?? 0) ? obecna : min;
+}
+
 // ─── Wyrównywanie klasyfikacji w obrębie tego samego klienta+adresu+dnia+oddziału ───
 //
 // Reguła biznesowa: gdy 2+ WZ tego samego klienta jadą pod ten sam adres tego samego
