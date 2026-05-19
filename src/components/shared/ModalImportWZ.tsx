@@ -1255,8 +1255,18 @@ export function parseWZText(rawText: string): WZImportData {
       // Fallback: brak rdzenia (ul./kod) ale preBuffer ma toponim/miasto — np. WZ z "Adres dostawy"
       // gdzie user wpisal sama nazwe ulicy bez prefixu "ul." (np. "Westerplatte Ruda Śląska" + pusta "ul.").
       // Skoro sekcja "Adres dostawy" istnieje, user zadeklarowal tam adres dostawy.
+      //
+      // UWAGA: odrzucamy linie wygladajace na smieci dokumentowe (Ekonom column layout —
+      // gdy label "Adres dostawy" jest w linii z label'ami lewej kolumny, a content prawej
+      // jest PRZED ta linia. PDF z 19.05 WZ RE/112/26/05/0002570: linia po labelu to
+      // "[Nr zam: R5/RE/20" — to nie adres, to numer zamówienia z lewej kolumny).
+      // Po filtrze fallback nic nie da → leci Priority 2 (skan wstecz) który zlapie
+      // prawy content (Duda Andrzej, ul. Wyszyńskiego 49, 41-940 Piekary Śląskie).
       if (!adres && preBuffer.length > 0) {
-        const cleaned = preBuffer.filter((l) => !/^(?:ul|al|os|pl)\.?\s*$/i.test(l.trim()));
+        const SMIECI_DOK = /\[|Nr\s+zam|Wydano|dok\.|Forma\s+płatn|Termin\s+zapł|Magazyn\s+wyd/i;
+        const cleaned = preBuffer
+          .filter((l) => !/^(?:ul|al|os|pl)\.?\s*$/i.test(l.trim()))
+          .filter((l) => !SMIECI_DOK.test(l));
         if (cleaned.length > 0) adres = cleaned.join(", ");
       }
     }
