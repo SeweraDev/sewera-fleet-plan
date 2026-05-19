@@ -133,3 +133,151 @@ export function klasyfikacjaZTypu(typPojazdu: string | null | undefined): string
   const k = KLASYFIKACJE.find((x) => x.typCennikowy === cennikowy);
   return k?.kod || null;
 }
+
+// ─── Wyrównywanie klasyfikacji w obrębie tego samego klienta+adresu+dnia+oddziału ───
+//
+// Reguła biznesowa: gdy 2+ WZ tego samego klienta jadą pod ten sam adres tego samego
+// dnia z tego samego oddziału — wszystkie WZ muszą mieć tę samą klasyfikację (najwyższą
+// w grupie). Powód: klient nie może rozbijać dostawy na małe WZ żeby finalnie pojechało
+// auto większe a klient zapłacił za małe.
+//
+// Grupy traktowane OSOBNO:
+//   - winda (B/C/D/E) — wyrównanie między tymi klasami
+//   - HDS (H/F) — wyrównanie między tymi klasami
+// Jeśli adres ma 1× HDS + 1× winda → dwie osobne sprawy, nie mieszamy.
+//
+// Wywoływane po INSERT/UPDATE WZ. Match klient+adres po prostym normalize
+// (lowercase + trim) — A z 19.05.2026.
+
+const HIER_WINDA: Record<string, number> = { B: 1, C: 2, D: 3, E: 4 };
+const HIER_HDS: Record<string, number> = { H: 1, F: 2 };
+
+function normKey(s: string | null | undefined): string {
+  return (s || '').trim().toLowerCase();
+}
+
+function maxKlasyfikacja(klasy: string[], hierarchia: Record<string, number>): string | null {
+  if (klasy.length === 0) return null;
+  let best = klasy[0];
+  for (const k of klasy.slice(1)) {
+    if ((hierarchia[k] ?? 0) > (hierarchia[best] ?? 0)) best = k;
+  }
+  return best;
+}
+
+export interface WyrownanieKlasResult {
+  /** Ile WZ zostało zmienione w tej grupie. */
+  zmienione: number;
+  /** Reprezentatywna nazwa klienta z grupy (pierwszy WZ). */
+  klient: string;
+  /** Reprezentatywny adres z grupy. */
+  adres: string;
+  /** Klasa do której wyrównano. */
+  klasaPo: string;
+  /** "winda" lub "hds" — informacyjnie. */
+  grupa: 'winda' | 'hds';
+}
+
+/**
+ * Wyrównuje klasyfikację WZ w obrębie grupy (klient + adres + dzień + oddział)
+ * do najwyższej w grupie. Wywoływane po INSERT/UPDATE WZ.
+ *
+ * Skanuje WSZYSTKIE zlecenia (nie tylko obecne) z tego dnia/oddziału, żeby wyrównać
+ * cross-order (zlecenie A miało B, dodano zlecenie B z D → oba lecą do D).
+ *
+ * @returns lista zmian per grupa — pusta gdy nic nie wymagało wyrównania
+ */
+export async function wyrownajKlasyfikacjeZlecenia(
+  zlecenieId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+): Promise<WyrownanieKlasResult[]> {
+  // 1. Pobierz kontekst zlecenia (dzień + oddział + status)
+  const { data: zlecenie, error: e1 } = await supabase
+    .from('zlecenia')
+    .select('id, dzien, oddzial_id, status')
+    .eq('id', zlecenieId)
+    .single();
+  if (e1 || !zlecenie) return [];
+  if (zlecenie.status === 'anulowane') return [];
+
+  // 2. Pobierz WZ tego zlecenia (kluczyki do grupowania)
+  const { data: ourWz, error: e2 } = await supabase
+    .from('zlecenia_wz')
+    .select('id, odbiorca, adres, klasyfikacja')
+    .eq('zlecenie_id', zlecenieId);
+  if (e2 || !ourWz || ourWz.length === 0) return [];
+
+  // 3. Zbierz unikalne klucze (klient+adres) z tego zlecenia
+  const klucze = new Set<string>();
+  for (const w of ourWz) {
+    if (!w.klasyfikacja || !w.odbiorca || !w.adres) continue;
+    klucze.add(`${normKey(w.odbiorca)}|${normKey(w.adres)}`);
+  }
+  if (klucze.size === 0) return [];
+
+  // 4. Pobierz id wszystkich zleceń z tego dnia+oddziału (nieanulowane)
+  const { data: zleceniaList, error: e3 } = await supabase
+    .from('zlecenia')
+    .select('id')
+    .eq('dzien', zlecenie.dzien)
+    .eq('oddzial_id', zlecenie.oddzial_id)
+    .neq('status', 'anulowane');
+  if (e3 || !zleceniaList || zleceniaList.length === 0) return [];
+
+  const zlecenieIds = zleceniaList.map((z: { id: string }) => z.id);
+
+  // 5. Pobierz wszystkie WZ z tych zleceń (z klasyfikacją)
+  const { data: allWz, error: e4 } = await supabase
+    .from('zlecenia_wz')
+    .select('id, odbiorca, adres, klasyfikacja')
+    .in('zlecenie_id', zlecenieIds)
+    .not('klasyfikacja', 'is', null);
+  if (e4 || !allWz) return [];
+
+  // 6. Dla każdego klucza znajdź grupę, podziel HDS/Winda, wyrównaj do MAX
+  const wyniki: WyrownanieKlasResult[] = [];
+
+  for (const klucz of klucze) {
+    const [klientN, adresN] = klucz.split('|');
+    const grupa = (allWz as Array<{ id: string; odbiorca: string; adres: string; klasyfikacja: string }>)
+      .filter(w => normKey(w.odbiorca) === klientN && normKey(w.adres) === adresN);
+
+    if (grupa.length < 2) continue;
+
+    const koszyki: Array<{ list: typeof grupa; hier: Record<string, number>; label: 'winda' | 'hds' }> = [
+      { list: grupa.filter(w => ['B', 'C', 'D', 'E'].includes(w.klasyfikacja)), hier: HIER_WINDA, label: 'winda' },
+      { list: grupa.filter(w => ['H', 'F'].includes(w.klasyfikacja)), hier: HIER_HDS, label: 'hds' },
+    ];
+
+    for (const k of koszyki) {
+      if (k.list.length < 2) continue;
+      const klasy = k.list.map(w => w.klasyfikacja);
+      const maxK = maxKlasyfikacja(klasy, k.hier);
+      if (!maxK) continue;
+
+      const toUpdate = k.list.filter(w => w.klasyfikacja !== maxK);
+      if (toUpdate.length === 0) continue;
+
+      const ids = toUpdate.map(w => w.id);
+      const { error: eUpd } = await supabase
+        .from('zlecenia_wz')
+        .update({ klasyfikacja: maxK })
+        .in('id', ids);
+      if (eUpd) {
+        console.warn('[wyrownajKlasyfikacje] update failed:', eUpd.message);
+        continue;
+      }
+
+      wyniki.push({
+        zmienione: ids.length,
+        klient: k.list[0].odbiorca,
+        adres: k.list[0].adres,
+        klasaPo: maxK,
+        grupa: k.label,
+      });
+    }
+  }
+
+  return wyniki;
+}
