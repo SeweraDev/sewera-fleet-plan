@@ -12,7 +12,7 @@ import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImpor
 import { PodgladWZDialog } from '@/components/shared/PodgladWZDialog';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
-import { KLASYFIKACJE } from '@/lib/klasyfikacje';
+import { KLASYFIKACJE, wyrownajKlasyfikacjeZlecenia } from '@/lib/klasyfikacje';
 import { geocodeAddress } from '@/lib/oddzialy-geo';
 import { canPrzekazZlecenie } from '@/lib/przekazanieZlecenia';
 import { useOddzialy } from '@/hooks/useOddzialy';
@@ -475,6 +475,23 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         } catch (e) {
           console.warn('Nie udalo sie utworzyc zlecenia z reszta', e);
         }
+      }
+    }
+
+    // Wyrównanie klasyfikacji w obrębie klient+adres+dzień+oddział
+    // (reguła biznesowa, patrz lib/klasyfikacje.ts).
+    // Toast tylko gdy coś się zmieniło — nie zaśmiecamy zwykłych zapisów.
+    if (!zlErr) {
+      try {
+        const zmiany = await wyrownajKlasyfikacjeZlecenia(zlecenieId, supabase);
+        for (const z of zmiany) {
+          toast({
+            title: 'Wyrównano klasyfikację',
+            description: `${z.zmienione} WZ pod ${z.klient}, ${z.adres} → ${z.klasaPo}`,
+          });
+        }
+      } catch (e) {
+        console.warn('[wyrownajKlasyfikacje] błąd po UPDATE:', e);
       }
     }
 

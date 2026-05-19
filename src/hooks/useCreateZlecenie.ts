@@ -6,6 +6,7 @@ import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { wyslijDoDyspozytorów } from '@/lib/powiadomienia';
 import { archiwizujWZ, archiwizujWZObraz } from '@/lib/archiwumWZ';
 import { getMaxWymiarMm, policzPaczkiPuchatego } from '@/lib/wzAutoFill';
+import { wyrownajKlasyfikacjeZlecenia } from '@/lib/klasyfikacje';
 import type { Pozycja } from '@/components/shared/ModalImportWZ';
 
 export interface WzInput {
@@ -165,6 +166,19 @@ export function useCreateZlecenie(onSuccess?: () => void) {
     }
 
     toast.success(forceVerify ? '⚠️ Zlecenie złożone do weryfikacji' : '✅ Zlecenie złożone');
+
+    // Wyrównanie klasyfikacji w obrębie klient+adres+dzień+oddział (reguła biznesowa,
+    // patrz lib/klasyfikacje.ts). Toast tylko gdy faktycznie coś się zmieniło.
+    try {
+      const zmiany = await wyrownajKlasyfikacjeZlecenia(zlecenie.id, supabase);
+      for (const z of zmiany) {
+        toast.info(
+          `Wyrównano klasyfikację: ${z.zmienione} WZ pod ${z.klient}, ${z.adres} → ${z.klasaPo}`,
+        );
+      }
+    } catch (e) {
+      console.warn('[wyrownajKlasyfikacje] błąd po INSERT:', e);
+    }
 
     // Powiadom dyspozytorów oddziału
     const sumaKg = input.wz_list.reduce((s, w) => s + (w.masa_kg || 0), 0);
