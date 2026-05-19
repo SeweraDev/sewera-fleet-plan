@@ -540,8 +540,8 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
     const photonResults: SearchResult[] = [];
     for (const f of data.features) {
       const [lng, lat] = f.geometry.coordinates;
-      // Bounding box Śląsk
-      if (lat < 49.0 || lat > 52.0 || lng < 17.0 || lng > 21.0) continue;
+      // Bounding box Polska (cały kraj — Sewera czasem wyceniała trasy poza Śląsk)
+      if (lat < 49.0 || lat > 54.9 || lng < 14.1 || lng > 24.2) continue;
 
       const props = f.properties || {};
       const parts: string[] = [];
