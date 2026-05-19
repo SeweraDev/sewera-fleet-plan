@@ -1,19 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppLayout } from '@/components/shared/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Search, MapPin, Activity } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, Search, MapPin, Activity, CalendarDays } from 'lucide-react';
 
 /**
  * Statystyki wyceny — dostepne tylko dla admina.
  * Czyta z tabeli wyszukiwania_log (RLS: SELECT admin only).
  *
+ * Niedziele sa zawsze wylaczone z agregatow (Sewera nie pracuje w niedziele).
+ *
  * Sekcje:
- *  - 3 karty podsumowania: wczoraj / 7 dni / 30 dni + dynamika vs poprzedni okres
- *  - TOP wyszukiwane frazy (ile razy, ile sukcesow vs problemow)
- *  - Wyceny z problemem (nameMatch=false) — co ludzie wpisuja a system nie znajduje
+ *  - 3 karty raportow: dzienny / tygodniowy / miesieczny + dynamika vs poprzedni okres
+ *  - Zakres dat dla sekcji ponizej (TOP frazy / Problemy / Oddzialy)
+ *  - TOP wyszukiwane frazy
+ *  - Wyceny z problemem
  *  - Najaktywniejsze oddzialy
  */
 
@@ -65,15 +69,48 @@ const KOD_TO_NAZWA: Record<string, string> = {
   OS: 'Oświęcim',
 };
 
+// Niedziela = dzien tygodnia 0 (JS)
+function isNiedziela(d: Date): boolean {
+  return d.getDay() === 0;
+}
+
+function toInputDate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function fromInputDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 export default function StatystykiWyceny() {
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Zakres dat dla sekcji "TOP frazy / Problemy / Oddzialy"
+  // Default: ostatnie 30 dni
+  const dzisRano = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const defaultOd = useMemo(() => {
+    const d = new Date(dzisRano);
+    d.setDate(d.getDate() - 30);
+    return d;
+  }, [dzisRano]);
+
+  const [zakresOd, setZakresOd] = useState<string>(toInputDate(defaultOd));
+  const [zakresDo, setZakresDo] = useState<string>(toInputDate(dzisRano));
+
   useEffect(() => {
     (async () => {
       setLoading(true);
-      // Pobieramy 90 ostatnich dni — wystarczy do statystyk wczoraj/7d/30d + porownania
+      // Pobieramy 90 ostatnich dni — wystarczy do statystyk dzien/tydzien/miesiac + porownania
       const od = new Date();
       od.setDate(od.getDate() - 90);
       const { data, error } = await supabase
@@ -113,19 +150,11 @@ export default function StatystykiWyceny() {
     );
   }
 
-  // Agregaty per okres
-  const now = new Date();
-  const wczoraj = new Date(now);
-  wczoraj.setDate(wczoraj.getDate() - 1);
-  wczoraj.setHours(0, 0, 0, 0);
-  const dzisRano = new Date(now);
-  dzisRano.setHours(0, 0, 0, 0);
-  const przedwczoraj = new Date(wczoraj);
-  przedwczoraj.setDate(przedwczoraj.getDate() - 1);
-
+  // Agregaty per okres — z pominieciem niedziel
   const okresStats = (od: Date, doData: Date): OkresStats => {
     const inOkres = logs.filter(l => {
       const d = new Date(l.created_at);
+      if (isNiedziela(d)) return false;
       return d >= od && d < doData;
     });
     return {
@@ -137,41 +166,56 @@ export default function StatystykiWyceny() {
     };
   };
 
-  // Wczoraj (00:00-23:59) + przedwczoraj do porownania
-  const statsWczoraj = okresStats(wczoraj, dzisRano);
-  const statsPrzedwczoraj = okresStats(przedwczoraj, wczoraj);
+  // RAPORT DZIENNY: wczoraj (00:00-23:59) vs przedwczoraj.
+  // Jesli wczoraj/przedwczoraj wypada niedziela, agregat bedzie po prostu 0
+  // (logi z niedziel sa wylaczone), wiec porownanie nadal dziala.
+  const wczoraj = new Date(dzisRano);
+  wczoraj.setDate(wczoraj.getDate() - 1);
+  const przedwczoraj = new Date(wczoraj);
+  przedwczoraj.setDate(przedwczoraj.getDate() - 1);
+  const statsDzien = okresStats(wczoraj, dzisRano);
+  const statsPoprzedniDzien = okresStats(przedwczoraj, wczoraj);
 
-  // Ostatnie 7 dni + poprzednie 7 do porownania
+  // RAPORT TYGODNIOWY: ostatnie 7 dni vs poprzednie 7 dni
   const tydzienOd = new Date(dzisRano);
   tydzienOd.setDate(tydzienOd.getDate() - 7);
   const poprzedniTydzienOd = new Date(tydzienOd);
   poprzedniTydzienOd.setDate(poprzedniTydzienOd.getDate() - 7);
-  const stats7d = okresStats(tydzienOd, dzisRano);
+  const statsTydzien = okresStats(tydzienOd, dzisRano);
   const statsPoprzedniTydzien = okresStats(poprzedniTydzienOd, tydzienOd);
 
-  // Ostatnie 30 dni + poprzednie 30 do porownania
+  // RAPORT MIESIECZNY: ostatnie 30 dni vs poprzednie 30 dni
   const miesiacOd = new Date(dzisRano);
   miesiacOd.setDate(miesiacOd.getDate() - 30);
   const poprzedniMiesiacOd = new Date(miesiacOd);
   poprzedniMiesiacOd.setDate(poprzedniMiesiacOd.getDate() - 30);
-  const stats30d = okresStats(miesiacOd, dzisRano);
+  const statsMiesiac = okresStats(miesiacOd, dzisRano);
   const statsPoprzedniMiesiac = okresStats(poprzedniMiesiacOd, miesiacOd);
 
-  // TOP frazy (z ostatnich 30 dni) — grupuj po znormalizowanej frazie
-  const fraza30dMap = new Map<string, TopFraza>();
-  for (const l of logs) {
+  // Sekcje filtrowane zakresem dat (z UI) — niedziele pominiete
+  const zakresOdDate = fromInputDate(zakresOd);
+  const zakresDoDate = new Date(fromInputDate(zakresDo));
+  zakresDoDate.setDate(zakresDoDate.getDate() + 1); // inclusive: do konca dnia "do"
+
+  const logsZakresu = logs.filter(l => {
     const d = new Date(l.created_at);
-    if (d < miesiacOd) continue;
+    if (isNiedziela(d)) return false;
+    return d >= zakresOdDate && d < zakresDoDate;
+  });
+
+  // TOP frazy w wybranym zakresie — grupuj po znormalizowanej frazie
+  const frazaMap = new Map<string, TopFraza>();
+  for (const l of logsZakresu) {
     const key = (l.query || '').trim().toLowerCase();
     if (!key) continue;
-    const existing = fraza30dMap.get(key);
+    const existing = frazaMap.get(key);
     if (existing) {
       existing.liczba++;
       if (l.wynik_km != null && l.wynik_km > 0) existing.sukcesy++;
       if (l.name_match === false) existing.problemy++;
       if (l.created_at > existing.ostatnio) existing.ostatnio = l.created_at;
     } else {
-      fraza30dMap.set(key, {
+      frazaMap.set(key, {
         query: l.query,
         liczba: 1,
         sukcesy: l.wynik_km != null && l.wynik_km > 0 ? 1 : 0,
@@ -180,27 +224,28 @@ export default function StatystykiWyceny() {
       });
     }
   }
-  const topFrazy = [...fraza30dMap.values()].sort((a, b) => b.liczba - a.liczba).slice(0, 15);
+  const topFrazy = [...frazaMap.values()].sort((a, b) => b.liczba - a.liczba).slice(0, 15);
 
-  // Wyceny z problemem (ostatnie 30 dni, nameMatch=false) — pokazujemy jak pisali
-  const problemowe30d = logs
-    .filter(l => {
-      const d = new Date(l.created_at);
-      return d >= miesiacOd && l.name_match === false;
-    })
-    .slice(0, 20);
+  // Wyceny z problemem w wybranym zakresie
+  const problemoweZakresu = logsZakresu.filter(l => l.name_match === false).slice(0, 20);
 
-  // TOP oddzialy (z ostatnich 30 dni)
+  // TOP oddzialy w wybranym zakresie
   const oddzialMap = new Map<string, number>();
-  for (const l of logs) {
-    const d = new Date(l.created_at);
-    if (d < miesiacOd) continue;
+  for (const l of logsZakresu) {
     const k = l.oddzial_kod || '?';
     oddzialMap.set(k, (oddzialMap.get(k) || 0) + 1);
   }
   const topOddzialy: TopOddzial[] = [...oddzialMap.entries()]
     .map(([kod, liczba]) => ({ kod, liczba }))
     .sort((a, b) => b.liczba - a.liczba);
+
+  // Presety zakresu
+  function ustawPreset(dni: number) {
+    const od = new Date(dzisRano);
+    od.setDate(od.getDate() - dni);
+    setZakresOd(toInputDate(od));
+    setZakresDo(toInputDate(dzisRano));
+  }
 
   return (
     <AppLayout>
@@ -211,23 +256,85 @@ export default function StatystykiWyceny() {
             Statystyki wyceny transportu
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Tylko admin · dane z tabeli wyszukiwania_log · ostatnie 90 dni
+            Tylko admin · dane z tabeli wyszukiwania_log · niedziele pominięte
           </p>
         </div>
 
-        {/* Karty podsumowania */}
+        {/* Karty raportow */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <SummaryCard title="Wczoraj" stats={statsWczoraj} prev={statsPrzedwczoraj} prevLabel="vs. przedwczoraj" />
-          <SummaryCard title="Ostatnie 7 dni" stats={stats7d} prev={statsPoprzedniTydzien} prevLabel="vs. poprzedni tydzień" />
-          <SummaryCard title="Ostatnie 30 dni" stats={stats30d} prev={statsPoprzedniMiesiac} prevLabel="vs. poprzedni miesiąc" />
+          <SummaryCard
+            title="Raport dzienny"
+            subtitle="Wczoraj"
+            stats={statsDzien}
+            prev={statsPoprzedniDzien}
+            prevLabel="vs. dzień wcześniej"
+          />
+          <SummaryCard
+            title="Raport tygodniowy"
+            subtitle="Ostatnie 7 dni"
+            stats={statsTydzien}
+            prev={statsPoprzedniTydzien}
+            prevLabel="vs. poprzedni tydzień"
+          />
+          <SummaryCard
+            title="Raport miesięczny"
+            subtitle="Ostatnie 30 dni"
+            stats={statsMiesiac}
+            prev={statsPoprzedniMiesiac}
+            prevLabel="vs. poprzedni miesiąc"
+          />
         </div>
+
+        {/* Zakres dat */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Zakres dat dla sekcji poniżej
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-muted-foreground">Od</label>
+                <input
+                  type="date"
+                  value={zakresOd}
+                  max={zakresDo}
+                  onChange={e => setZakresOd(e.target.value)}
+                  className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-muted-foreground">Do</label>
+                <input
+                  type="date"
+                  value={zakresDo}
+                  min={zakresOd}
+                  max={toInputDate(dzisRano)}
+                  onChange={e => setZakresDo(e.target.value)}
+                  className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <Button variant="outline" size="sm" onClick={() => ustawPreset(1)}>Wczoraj</Button>
+                <Button variant="outline" size="sm" onClick={() => ustawPreset(7)}>7 dni</Button>
+                <Button variant="outline" size="sm" onClick={() => ustawPreset(30)}>30 dni</Button>
+                <Button variant="outline" size="sm" onClick={() => ustawPreset(90)}>90 dni</Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              W zakresie: <span className="font-medium">{logsZakresu.length}</span> wycen (bez niedziel)
+            </p>
+          </CardContent>
+        </Card>
 
         {/* TOP frazy */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Search className="h-4 w-4" />
-              Najczęściej wyszukiwane (ostatnie 30 dni)
+              Najczęściej wyszukiwane
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -285,9 +392,9 @@ export default function StatystykiWyceny() {
             </p>
           </CardHeader>
           <CardContent>
-            {problemowe30d.length === 0 ? (
+            {problemoweZakresu.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                ✅ Brak problemów w ostatnich 30 dniach.
+                ✅ Brak problemów w wybranym zakresie.
               </p>
             ) : (
               <Table>
@@ -300,7 +407,7 @@ export default function StatystykiWyceny() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {problemowe30d.map(l => (
+                  {problemoweZakresu.map(l => (
                     <TableRow key={l.id}>
                       <TableCell className="font-medium">"{l.query}"</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
@@ -327,7 +434,7 @@ export default function StatystykiWyceny() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <MapPin className="h-4 w-4" />
-              Najaktywniejsze oddziały (ostatnie 30 dni)
+              Najaktywniejsze oddziały
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -374,11 +481,13 @@ export default function StatystykiWyceny() {
 
 function SummaryCard({
   title,
+  subtitle,
   stats,
   prev,
   prevLabel,
 }: {
   title: string;
+  subtitle?: string;
   stats: OkresStats;
   prev: OkresStats;
   prevLabel: string;
@@ -392,6 +501,7 @@ function SummaryCard({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        {subtitle && <p className="text-xs text-muted-foreground/80">{subtitle}</p>}
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="flex items-baseline gap-2">
