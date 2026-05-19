@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSprawdzDostepnosc, pctColor, pctBg, type VehicleOccupancy } from '@/hooks/useSprawdzDostepnosc';
 import { useCostComparison } from '@/hooks/useCostComparison';
 import { ODDZIAL_COORDS, ODDZIAL_COLORS, getOddzialTextColor } from '@/lib/oddzialy-geo';
+import { sugerujTypZLadunku } from '@/lib/suggestRoutes';
 import type { WzInput } from '@/hooks/useCreateZlecenie';
 
 /** Lista typów pojazdów dla dropdownu porównania kosztów (lokalnie w bannerze). */
@@ -132,13 +133,17 @@ export function DostepnoscStep({
 
   // Porównanie kosztów: bierzemy adres z PIERWSZEJ WZ-tki (zwykle wszystkie WZ jednego zlecenia
   // mają ten sam adres dostawy). Banner pokazuje się ZAWSZE (gdy mamy adres + obecny oddział),
-  // a typ domyślny gdy user nie wybrał = "Dostawczy 1,2t" (najczęstszy).
+  // a typ domyślny gdy user nie wybrał — dobierany automatycznie wg ładunku (kg/m3/pal/hds)
+  // przez sugerujTypZLadunku (najmniejszy pasujący). Zapobiega pokazywaniu fałszywie taniej
+  // ceny dla 1,2t gdy ładunek przekracza pojemność.
   const adresDostawy = wzList[0]?.adres || '';
+  const wymagaHds = wzList.some(w => w._wymaga_hds);
+  const sugerowanyTyp = sugerujTypZLadunku(totalKg, totalM3, totalPalet, wymagaHds);
   const [cmpTypOverride, setCmpTypOverride] = useState<string>('');
   const effectiveCmpTyp = cmpTypOverride
     || (typPojazdu && typPojazdu !== 'bez_preferencji' && typPojazdu !== 'zewnetrzny'
       ? typPojazdu
-      : 'Dostawczy 1,2t');
+      : sugerowanyTyp);
   const cmp = useCostComparison(oddzialNazwa, effectiveCmpTyp, adresDostawy);
 
   // Mini-mapa: container ref + instance ref
@@ -295,8 +300,10 @@ export function DostepnoscStep({
                 {TYPY_POJAZDOW_CMP.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
-            {noTypeSelected && (
-              <span className="text-[10px] text-muted-foreground italic">(brak wyboru typu — domyślnie Dostawczy 1,2t)</span>
+            {noTypeSelected && !cmpTypOverride && (
+              <span className="text-[10px] text-muted-foreground italic">
+                (brak wyboru typu — dobrano {sugerowanyTyp} wg ładunku {totalKg} kg{totalPalet > 0 ? `, ${totalPalet} pal` : ''})
+              </span>
             )}
           </div>
 
