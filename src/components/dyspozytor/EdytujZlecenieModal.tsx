@@ -19,6 +19,7 @@ import { useOddzialy } from '@/hooks/useOddzialy';
 import { useCostComparison } from '@/hooks/useCostComparison';
 import { useFlotaOddzialu } from '@/hooks/useFlotaOddzialu';
 import { czyAutoZmiesciTowar } from '@/lib/walidacjaPojazdu';
+import { sugerujTypZLadunku } from '@/lib/suggestRoutes';
 
 const STATUSY = [
   { value: 'robocza', label: 'Robocza' },
@@ -117,14 +118,21 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
   // INFORMACYJNY, a wybór "Zleć mimo wszystko" zapisuje pominiętą oszczędność do bazy
   // (`zlecenia.pominieta_oszczednosc_pln`) → raport dla zarządu.
   //
-  // Domyślny typ do porównania: "Dostawczy 1,2t" gdy zlecenie nie ma typu ("brak").
+  // Domyślny typ do porównania: gdy zlecenie nie ma typu ("brak") dobieramy automatycznie
+  // przez sugerujTypZLadunku wg sumy kg/m3/pal i klasyfikacji (F/H → HDS). Zapobiega
+  // pokazywaniu fałszywie taniej ceny dla 1,2t gdy ładunek przekracza pojemność.
   // User może lokalnie zmienić typ w dropdownie wewnątrz bannera — re-przelicza,
   // ale NIE zapisuje do zlecenia (typ właściwy zostawia dyspozytor osobno).
   const oddzialNazwa = wszystkieOddzialy.find(o => o.id === zlecenie?.oddzial_id)?.nazwa || '';
   const adresDostawy = wzList[0]?.adres || '';
+  const cmpLoadKg = wzList.reduce((s, w) => s + (Number(w.masa_kg) || 0), 0);
+  const cmpLoadM3 = wzList.reduce((s, w) => s + (Number(w.objetosc_m3) || 0), 0);
+  const cmpLoadPal = wzList.reduce((s, w) => s + (Number(w.ilosc_palet) || 0), 0);
+  const cmpWymagaHds = wzList.some(w => w.klasyfikacja === 'F' || w.klasyfikacja === 'H');
+  const sugerowanyTyp = sugerujTypZLadunku(cmpLoadKg, cmpLoadM3, cmpLoadPal, cmpWymagaHds);
   const [cmpTypOverride, setCmpTypOverride] = useState<string>('');
   const effectiveCmpTyp = cmpTypOverride
-    || (typPojazdu && typPojazdu !== 'brak' ? typPojazdu : 'Dostawczy 1,2t');
+    || (typPojazdu && typPojazdu !== 'brak' ? typPojazdu : sugerowanyTyp);
   const cmp = useCostComparison(oddzialNazwa, effectiveCmpTyp, adresDostawy);
   // Banner widoczny gdy mamy obecny oddział + adres (niezaleznie od savings)
   const hasComparison = !!cmp.current && !cmp.loading;
@@ -600,8 +608,10 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
                         {TYPY_POJAZDOW.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {!typPojazdu || typPojazdu === 'brak' ? (
-                      <span className="text-[10px] text-muted-foreground italic">(zlecenie nie ma typu — domyślnie Dostawczy 1,2t)</span>
+                    {(!typPojazdu || typPojazdu === 'brak') && !cmpTypOverride ? (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        (zlecenie nie ma typu — dobrano {sugerowanyTyp} wg ładunku {Math.round(cmpLoadKg)} kg{cmpLoadPal > 0 ? `, ${cmpLoadPal} pal` : ''})
+                      </span>
                     ) : null}
                   </div>
 
