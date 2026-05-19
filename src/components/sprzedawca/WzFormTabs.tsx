@@ -87,15 +87,59 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
   // Sprawdź czy formularz wyświetla dane "z importu" (heurystyka: pierwszy WZ ma odbiorcę = pewnie po imporcie)
   const isPreFilled = wzList.length > 0 && !!wzList[0].odbiorca;
 
+  // Walidacja adresu (geocoding) — per WZ. Status pokazujemy obok pola Adres jako
+  // ikonkę + zmiana koloru ramki (zielony = ok, żółty = approximate, czerwony = fail).
+  // Daje user'owi natychmiastowy feedback że system "zna" adres przed wysłaniem zlecenia.
+  type AdresStatus = 'idle' | 'checking' | 'ok' | 'approximate' | 'fail';
+  const [adresStatusMap, setAdresStatusMap] = useState<Record<number, AdresStatus>>({});
+
+  const sprawdzAdres = useCallback(async (idx: number, adres: string) => {
+    if (!adres || adres.trim().length < 5) {
+      setAdresStatusMap(prev => ({ ...prev, [idx]: 'idle' }));
+      return;
+    }
+    setAdresStatusMap(prev => ({ ...prev, [idx]: 'checking' }));
+    const { geocodeAddressWithFallback } = await import('@/lib/oddzialy-geo');
+    const r = await geocodeAddressWithFallback(adres);
+    setAdresStatusMap(prev => ({
+      ...prev,
+      [idx]: !r ? 'fail' : r.exact ? 'ok' : 'approximate',
+    }));
+  }, []);
+
+  // Auto-sprawdzanie adresów po imporcie (gdy lista się zmienia z preFilled).
+  // Sprawdza tylko te WZ które jeszcze nie mają statusu — nie powtarza co render.
+  useEffect(() => {
+    if (!isPreFilled) return;
+    wzList.forEach((wz, idx) => {
+      if (wz.adres && adresStatusMap[idx] === undefined) {
+        sprawdzAdres(idx, wz.adres);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wzList.length, isPreFilled]);
+
   const updateWz = (idx: number, field: keyof WzInput, value: string | number | boolean) => {
     const copy = [...wzList];
     (copy[idx] as any)[field] = value;
     setWzList(copy);
     markTouched(idx, field);
+    // Reset statusu adresu po edycji (user musi blur'ować żeby ponowne sprawdzić)
+    if (field === 'adres') {
+      setAdresStatusMap(prev => ({ ...prev, [idx]: 'idle' }));
+    }
   };
 
-  // Pomocnik: zwraca klasę CSS dla pola — pomarańczowy jeśli pre-fill i nie-dotknięty
+  // Pomocnik: zwraca klasę CSS dla pola — pomarańczowy jeśli pre-fill i nie-dotknięty.
+  // Dla pola "adres" status geocodingu nadpisuje pomarańczowy: ok=zielony, fail=czerwony,
+  // approximate=żółty. Idle/checking → standardowa logika (pomarańczowy gdy pre-fill).
   const fieldClass = (idx: number, field: string, hasValue: boolean): string => {
+    if (field === 'adres') {
+      const st = adresStatusMap[idx];
+      if (st === 'ok') return 'border-green-500 bg-green-50 dark:bg-green-950/20 focus-visible:ring-green-500';
+      if (st === 'fail') return 'border-red-500 bg-red-50 dark:bg-red-950/20 focus-visible:ring-red-500';
+      if (st === 'approximate') return 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 focus-visible:ring-yellow-500';
+    }
     if (!isPreFilled || !hasValue || touched.has(`${idx}:${field}`)) return '';
     return 'border-orange-400 bg-orange-50 dark:bg-orange-950/20 focus-visible:ring-orange-400';
   };
@@ -124,7 +168,35 @@ function WzManualForm({ wzList, setWzList, autoKlasyfikacja }: { wzList: WzInput
             <div><Label className="text-xs">Nr WZ</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'numer_wz', !!wz.numer_wz))} value={wz.numer_wz || ''} onChange={e => updateWz(idx, 'numer_wz', e.target.value)} /></div>
             <div><Label className="text-xs">Nr zamówienia</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'nr_zamowienia', !!wz.nr_zamowienia))} value={wz.nr_zamowienia || ''} onChange={e => updateWz(idx, 'nr_zamowienia', e.target.value)} /></div>
             <div><Label className="text-xs">Odbiorca *</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'odbiorca', !!wz.odbiorca))} value={wz.odbiorca} onChange={e => updateWz(idx, 'odbiorca', e.target.value)} /></div>
-            <div><Label className="text-xs">Adres *</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'adres', !!wz.adres))} value={wz.adres} onChange={e => updateWz(idx, 'adres', e.target.value)} /></div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs">Adres *</Label>
+                <span className="text-xs leading-none" title={
+                  adresStatusMap[idx] === 'ok' ? 'Adres rozpoznany przez system' :
+                  adresStatusMap[idx] === 'checking' ? 'Sprawdzanie...' :
+                  adresStatusMap[idx] === 'fail' ? 'Adres nie znaleziony — popraw ulicę/kod/miasto' :
+                  adresStatusMap[idx] === 'approximate' ? 'Znaleziono tylko miasto — popraw ulicę' :
+                  ''
+                }>
+                  {adresStatusMap[idx] === 'ok' ? '✅' :
+                   adresStatusMap[idx] === 'checking' ? '⏳' :
+                   adresStatusMap[idx] === 'fail' ? '❌' :
+                   adresStatusMap[idx] === 'approximate' ? '⚠️' : ''}
+                </span>
+              </div>
+              <Input
+                className={cn('h-8 text-sm', fieldClass(idx, 'adres', !!wz.adres))}
+                value={wz.adres}
+                onChange={e => updateWz(idx, 'adres', e.target.value)}
+                onBlur={() => sprawdzAdres(idx, wz.adres)}
+              />
+              {adresStatusMap[idx] === 'fail' && (
+                <p className="text-[11px] text-red-600 mt-0.5">❌ Adres nie znaleziony — popraw ulicę/kod/miasto</p>
+              )}
+              {adresStatusMap[idx] === 'approximate' && (
+                <p className="text-[11px] text-yellow-700 mt-0.5">⚠️ Znaleziono tylko miasto — popraw ulicę dla dokładnych km</p>
+              )}
+            </div>
             <div><Label className="text-xs">Telefon</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'tel', !!wz.tel))} value={wz.tel || ''} onChange={e => updateWz(idx, 'tel', e.target.value)} /></div>
             <div><Label className="text-xs">Masa (kg) *</Label><Input className={cn('h-8 text-sm', fieldClass(idx, 'masa_kg', !!wz.masa_kg))} type="number" value={wz.masa_kg || ''} onChange={e => updateWz(idx, 'masa_kg', Number(e.target.value))} /></div>
             <div>
