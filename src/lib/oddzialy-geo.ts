@@ -356,7 +356,7 @@ function isValidLatLng(lat: number, lng: number): boolean {
 // Zwraca null gdy Photon nie znalazl niczego lub blad sieci.
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
-    const res = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&limit=1`);
+    const res = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&limit=1&lang=pl`);
     if (!res.ok) return null;
     const data = await res.json();
     const f = data.features?.[0];
@@ -391,7 +391,7 @@ export async function geocodeAddressDetailed(adres: string): Promise<GeocodeDeta
     const q = encodeURIComponent(queryBase + ' Poland');
     // Limit=5 — szukamy najlepszego wsrod 5 kandydatow (przy limit=1 Photon czesto
     // zwracal centroid ulicy zamiast konkretnego numeru). Patrz pickBestPhotonFeature.
-    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=5`);
+    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=5&lang=pl`);
     if (!res.ok) {
       console.warn(`[geocode] Photon HTTP ${res.status}`);
       return null;
@@ -532,7 +532,7 @@ export async function searchAddress(query: string): Promise<SearchResult[]> {
   const q = encodeURIComponent(cleaned + ' Poland');
 
   try {
-    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=5`);
+    const res = await fetch(`https://photon.komoot.io/api/?q=${q}&limit=5&lang=pl`);
     if (!res.ok) return seweraResults;
     const data = await res.json();
     if (!data.features) return seweraResults;
