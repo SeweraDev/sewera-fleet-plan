@@ -134,6 +134,9 @@ export function useCreateZlecenie(onSuccess?: () => void) {
           max_wymiar_mm: maxWymiarMm > 0 ? maxWymiarMm : null,
           paczki_puchatego: puchaty.paczki > 0 ? puchaty.paczki : null,
           typ_puchatego: puchaty.typ,
+          // Kod klienta z PDF (Nr ewid.) — używany przez bump min_klasyfikacja
+          // przy edycji dyspozytora (gdy WZ już w bazie, nie ma _kod_klienta w pamięci).
+          kod_kontrahenta: wz._kod_klienta || null,
         };
       });
 

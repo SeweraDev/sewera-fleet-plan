@@ -12,7 +12,7 @@ import { ModalImportWZ, type WZImportData } from '@/components/shared/ModalImpor
 import { PodgladWZDialog } from '@/components/shared/PodgladWZDialog';
 import { generateNumerZlecenia } from '@/lib/generateNumerZlecenia';
 import { PrzekazDoOddzialuModal } from '@/components/dyspozytor/PrzekazDoOddzialuModal';
-import { KLASYFIKACJE, wyrownajKlasyfikacjeZlecenia } from '@/lib/klasyfikacje';
+import { KLASYFIKACJE, wyrownajKlasyfikacjeZlecenia, getMinKlasyfikacjaKlienta, bumpDoMinimumKlasyfikacji } from '@/lib/klasyfikacje';
 import { geocodeAddress } from '@/lib/oddzialy-geo';
 import { canPrzekazZlecenie } from '@/lib/przekazanieZlecenia';
 import { useOddzialy } from '@/hooks/useOddzialy';
@@ -79,6 +79,8 @@ interface WzData {
   max_wymiar_mm: number | null;
   paczki_puchatego: number | null;
   typ_puchatego: 'XPS' | 'EPS' | 'WELNA' | 'MIX' | null;
+  // Kod klienta R z PDF (Nr ewid.) — używany do sprawdzenia min_klasyfikacja przy zapisie.
+  kod_kontrahenta: string | null;
 }
 
 export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Props) {
@@ -214,7 +216,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
 
     Promise.all([
       supabase.from('zlecenia').select('numer, status, dzien, preferowana_godzina, typ_pojazdu, nadawca_id, oddzial_id').eq('id', zlecenieId).single(),
-      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja, wartosc_netto, archiwum_path, max_wymiar_mm, paczki_puchatego, typ_puchatego').eq('zlecenie_id', zlecenieId),
+      supabase.from('zlecenia_wz').select('id, odbiorca, adres, tel, masa_kg, objetosc_m3, ilosc_palet, uwagi, numer_wz, nr_zamowienia, klasyfikacja, wartosc_netto, archiwum_path, max_wymiar_mm, paczki_puchatego, typ_puchatego, kod_kontrahenta').eq('zlecenie_id', zlecenieId),
     ]).then(async ([zlRes, wzRes]) => {
       const zl = zlRes.data;
       if (zl) {
@@ -247,6 +249,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
         max_wymiar_mm: w.max_wymiar_mm ?? null,
         paczki_puchatego: w.paczki_puchatego ?? null,
         typ_puchatego: w.typ_puchatego ?? null,
+        kod_kontrahenta: w.kod_kontrahenta ?? null,
       }));
       setWzList(wzData);
       originalWzRef.current = wzData.map(w => ({ ...w }));
@@ -418,8 +421,22 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
       .update(updatePayload as any)
       .eq('id', zlecenieId);
 
-    // Zapisz wszystkie WZ
+    // Zapisz wszystkie WZ — z pre-bumpem do min_klasyfikacja klienta (jeśli kod znany).
+    // Chroni przed ręcznym obniżeniem klasy przez dyspozytora dla klientów z regułą
+    // (np. STANEX-BUD 11000452 zawsze min D).
     for (const w of wzList) {
+      let finalKlas = w.klasyfikacja || null;
+      if (w.kod_kontrahenta) {
+        const min = await getMinKlasyfikacjaKlienta(w.kod_kontrahenta, supabase);
+        const bumped = bumpDoMinimumKlasyfikacji(finalKlas, min);
+        if (bumped && bumped !== finalKlas) {
+          finalKlas = bumped;
+          toast({
+            title: 'Klasyfikacja podniesiona',
+            description: `${w.odbiorca}: klient ma wymóg ≥ ${min} → ustawiono ${bumped}`,
+          });
+        }
+      }
       await supabase
         .from('zlecenia_wz')
         .update({
@@ -430,7 +447,7 @@ export function EdytujZlecenieModal({ zlecenieId, open, onClose, onSaved }: Prop
           objetosc_m3: w.objetosc_m3 || 0,
           ilosc_palet: w.ilosc_palet || 0,
           uwagi: w.uwagi || null,
-          klasyfikacja: w.klasyfikacja || null,
+          klasyfikacja: finalKlas,
           wartosc_netto: w.wartosc_netto,
           // Walidacja w dyspozytorze — odśwież jeśli import dorzucił nowe dane
           max_wymiar_mm: w.max_wymiar_mm,
